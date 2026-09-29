@@ -24,7 +24,7 @@ run/            実際に動かすフォルダ（setup.ps1 が作る。Git 管�
 
 ## セットアップ（Windows 11）
 
-1. [Temurin](https://adoptium.net/) の JDK 21 以上をインストールする
+1. [Temurin](https://adoptium.net/) の JDK 25 以上をインストールする（Minecraft 26.x と Velocity 4.x が Java 25 を要求する。プラグインのビルドだけなら JDK 21 でもよい）
 2. このリポジトリを clone する
 3. プラグインをビルドする
    ```powershell
@@ -36,7 +36,7 @@ run/            実際に動かすフォルダ（setup.ps1 が作る。Git 管�
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
    ```
-   Minecraft のバージョンは、Fabric API と FabricProxy-Lite が対応している最新のリリース版が自動で選ばれる。固定したいときは `-McVersion 1.21.8` のように指定する。
+   Minecraft のバージョンは、Fabric API と FabricProxy-Lite が対応している最新のリリース版が自動で選ばれる。固定したいときは `-McVersion 26.3` のように指定する。
 5. `run\proxy\plugins\network-core\config.json` の `admins` に自分の UUID を入れる（初回起動後に作られる）
 6. `scripts\start-network.bat` で起動する。止めるときはそのウィンドウで `end` と打つ（全鯖を保存してから止まる）
 

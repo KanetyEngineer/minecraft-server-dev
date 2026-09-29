@@ -24,7 +24,10 @@ $Servers = @("lobby", "s1", "c1", "dev")
 $Headers = @{ "User-Agent" = "KanetyEngineer/minecraft-server-dev (setup.ps1)" }
 
 function Get-Json([string]$Url) {
-    Invoke-RestMethod -Uri $Url -Headers $Headers
+    # PowerShell 5.1 の Invoke-RestMethod は JSON 配列を1つのオブジェクトとして流すので、
+    # 変数に受けてから return で要素ごとに展開する（直接パイプすると Where-Object が効かない）
+    $result = Invoke-RestMethod -Uri $Url -Headers $Headers
+    return $result
 }
 
 function Save-File([string]$Url, [string]$Path) {
@@ -39,8 +42,15 @@ function Copy-IfMissing([string]$From, [string]$To) {
 }
 
 # --- Java ---
+# Minecraft 26.x と Velocity 4.x は Java 25 以上が必要
 if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
-    throw "java が見つかりません。Temurin (https://adoptium.net/) の JDK 21 以上を入れてから再実行してください。"
+    throw "java が見つかりません。Temurin (https://adoptium.net/) の JDK 25 以上を入れてから再実行してください。"
+}
+$javaVersionLine = (& cmd /c "java -version 2>&1" | Select-Object -First 1) -as [string]
+if ($javaVersionLine -match '"(\d+)') {
+    if ([int]$Matches[1] -lt 25) {
+        throw "java のバージョンが古いです ($javaVersionLine)。Temurin の JDK 25 以上を入れ、PATH の先頭にしてから再実行してください。"
+    }
 }
 
 # --- EULA ---
@@ -101,7 +111,11 @@ $secret = ([IO.File]::ReadAllText($secretFile)).Trim()
 Write-Host "Velocity をダウンロードしています..."
 try {
     $velocityVersions = Get-Json "https://fill.papermc.io/v3/projects/velocity/versions"
-    $velocityVersion = $velocityVersions.versions[0].version.id
+    # SNAPSHOT やサポート切れを避け、サポート中の正式版で一番新しいものを使う
+    $velocityVersion = ($velocityVersions.versions | Where-Object {
+        $_.version.id -notlike "*-SNAPSHOT" -and $_.version.support.status -eq "SUPPORTED"
+    } | Select-Object -First 1).version.id
+    if (-not $velocityVersion) { $velocityVersion = $velocityVersions.versions[0].version.id }
     $build = Get-Json "https://fill.papermc.io/v3/projects/velocity/versions/$velocityVersion/builds/latest"
     Save-File $build.downloads."server:default".url (Join-Path $proxyDir "velocity.jar")
     Write-Host "Velocity $velocityVersion (build $($build.id)) を入れました。"
