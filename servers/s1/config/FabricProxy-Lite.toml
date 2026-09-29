@@ -1,0 +1,6 @@
+hackOnlineMode = true
+hackEarlySend = false
+hackMessageChain = true
+disconnectMessage = "プロキシ経由で接続してください。"
+# setup.ps1 が run/proxy/forwarding.secret の値に置き換える
+secret = "__FORWARDING_SECRET__"
