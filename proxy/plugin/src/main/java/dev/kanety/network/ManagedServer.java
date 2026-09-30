@@ -4,9 +4,11 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import org.slf4j.Logger;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
@@ -16,6 +18,11 @@ import java.util.concurrent.TimeUnit;
 final class ManagedServer {
 
     private static final long PING_INTERVAL_SECONDS = 2;
+    /** コマンドを送ってから、鯖の出力を Velocity のコンソールに表示し続けるミリ秒数。 */
+    private static final long ECHO_MILLIS = 3000;
+    /** 子プロセスの標準出力の文字コード（Windows 日本語環境なら MS932）。 */
+    private static final Charset CONSOLE_CHARSET =
+            Charset.forName(System.getProperty("native.encoding", "UTF-8"));
 
     private final String name;
     private final NetworkConfig.ServerEntry entry;
@@ -29,6 +36,7 @@ final class ManagedServer {
     private volatile boolean ready;
     private CompletableFuture<Void> starting;
     private long emptySince = -1;
+    private volatile long echoUntil;
 
     ManagedServer(String name, NetworkConfig.ServerEntry entry, Path directory, RegisteredServer server,
                   ProxyServer proxy, Object plugin, Logger logger) {
@@ -83,9 +91,9 @@ final class ManagedServer {
                 Process started = new ProcessBuilder(entry.command)
                         .directory(directory.toFile())
                         .redirectErrorStream(true)
-                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                         .start();
                 process = started;
+                startOutputReader(started);
                 started.onExit().thenRun(() -> onExit(started));
                 logger.info("{} を起動しました (pid {})", name, started.pid());
             } catch (IOException e) {
@@ -98,6 +106,47 @@ final class ManagedServer {
         long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(timeoutSeconds);
         schedulePing(starting, deadline);
         return starting;
+    }
+
+    /** 鯖の出力を読み捨てる。コマンドを送った直後だけ Velocity のコンソールに表示する。 */
+    private void startOutputReader(Process started) {
+        Thread reader = new Thread(() -> {
+            try (BufferedReader in = new BufferedReader(
+                    new InputStreamReader(started.getInputStream(), CONSOLE_CHARSET))) {
+                String line;
+                while ((line = in.readLine()) != null) {
+                    if (System.currentTimeMillis() < echoUntil) {
+                        logger.info("[{}] {}", name, line);
+                    }
+                }
+            } catch (IOException ignored) {
+                // プロセス終了時にストリームが閉じられる
+            }
+        }, "network-core-" + name + "-output");
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    /** 鯖のコンソールにコマンドを1行送る。動いていなければ false。 */
+    synchronized boolean sendCommand(String command) {
+        Process current = process;
+        if (current == null || !current.isAlive()) {
+            return false;
+        }
+        try {
+            writeLine(current, command);
+        } catch (IOException e) {
+            logger.warn("{} にコマンドを送れませんでした", name, e);
+            return false;
+        }
+        echoUntil = System.currentTimeMillis() + ECHO_MILLIS;
+        return true;
+    }
+
+    private static void writeLine(Process target, String line) throws IOException {
+        OutputStream stdin = target.getOutputStream();
+        stdin.write((line + "\n").getBytes(CONSOLE_CHARSET));
+        stdin.flush();
     }
 
     private void schedulePing(CompletableFuture<Void> future, long deadline) {
@@ -125,9 +174,7 @@ final class ManagedServer {
         ready = false;
         logger.info("{} を停止します", name);
         try {
-            OutputStream stdin = current.getOutputStream();
-            stdin.write("stop\n".getBytes(StandardCharsets.UTF_8));
-            stdin.flush();
+            writeLine(current, "stop");
         } catch (IOException e) {
             logger.warn("{} に stop を送れなかったため強制終了します", name, e);
             current.destroyForcibly();

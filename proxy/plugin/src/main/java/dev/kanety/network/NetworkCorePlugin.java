@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -202,7 +203,7 @@ public final class NetworkCorePlugin {
         }
     }
 
-    /** /network start|stop|status [鯖名]（管理者用）。 */
+    /** /network start|stop|status|cmd [鯖名]（管理者用）。 */
     private final class AdminCommand implements SimpleCommand {
 
         @Override
@@ -219,8 +220,12 @@ public final class NetworkCorePlugin {
                 }
                 return;
             }
+            if (args[0].equals("cmd")) {
+                sendCommand(source, args);
+                return;
+            }
             if (args.length < 2 || !managed.containsKey(args[1])) {
-                source.sendMessage(Component.text("使い方: /network <start|stop|status> <" +
+                source.sendMessage(Component.text("使い方: /network <start|stop|status|cmd> <" +
                         String.join("|", managed.keySet()) + ">", NamedTextColor.RED));
                 return;
             }
@@ -245,6 +250,27 @@ public final class NetworkCorePlugin {
             }
         }
 
+        /** /network cmd <鯖名> <コマンド>: 鯖のコンソールにコマンドを送る。 */
+        private void sendCommand(CommandSource source, String[] args) {
+            ManagedServer server = args.length >= 2 ? managed.get(args[1]) : null;
+            if (server == null || args.length < 3) {
+                source.sendMessage(Component.text("使い方: /network cmd <" + String.join("|", managed.keySet())
+                        + "> <コマンド>", NamedTextColor.RED));
+                return;
+            }
+            String command = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+            if (command.startsWith("/")) {
+                command = command.substring(1);
+            }
+            if (server.sendCommand(command)) {
+                logger.info("{} が {} に送信: {}", source instanceof Player player ? player.getUsername() : "コンソール",
+                        server.name(), command);
+                source.sendMessage(Component.text(server.name() + " に送信しました: " + command, NamedTextColor.GREEN));
+            } else {
+                source.sendMessage(Component.text(server.name() + " は停止中です。", NamedTextColor.RED));
+            }
+        }
+
         @Override
         public boolean hasPermission(Invocation invocation) {
             return isAdmin(invocation.source());
@@ -254,7 +280,7 @@ public final class NetworkCorePlugin {
         public List<String> suggest(Invocation invocation) {
             String[] args = invocation.arguments();
             if (args.length <= 1) {
-                return List.of("start", "stop", "status");
+                return List.of("start", "stop", "status", "cmd");
             }
             return new ArrayList<>(managed.keySet());
         }

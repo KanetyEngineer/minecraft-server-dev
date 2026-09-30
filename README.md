@@ -57,6 +57,7 @@ PC にサインインしたとき自動で起動したい場合は `scripts\inst
 | `/network status` | 各鯖の状態と人数 |
 | `/network start <鯖>` | 鯖を起動 |
 | `/network stop <鯖>` | 鯖を停止（中にいる人は lobby に移る） |
+| `/network cmd <鯖> <コマンド>` | 鯖のコンソールにコマンドを送る（例: `network cmd lobby whitelist add steve`）。結果は数秒間 Velocity の画面に出る |
 
 Velocity のコンソールからも同じコマンドが使える。
 
