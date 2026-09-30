@@ -61,7 +61,30 @@ PC にサインインしたとき自動で起動したい場合は `scripts\inst
 
 Velocity のコンソールからも同じコマンドが使える。
 
+## 各鯖へのコマンド送信（RCON）
+
+各鯖は RCON を 127.0.0.1 だけで待ち受けている（lobby=31001, s1=31002, c1=31003, dev=31004。パスワードは `run\rcon.secret`）。
+コマンドプロンプトから `scripts\mc.bat` で送れる。先頭の `/` は不要。
+
+```bat
+scripts\mc.bat lobby whitelist add <名前>
+scripts\mc.bat all whitelist add <名前>
+scripts\mc.bat s1
+```
+
+`all` にすると動いている鯖すべてに送る。コマンドを付けないと続けて入力できるモードになる（`exit` で終了）。
+止まっている鯖には送れないので、先に Velocity のコンソールで `network start <鯖>` する。
+
 ## c1 と lobby の奈落ワールド
 
 どちらも超平坦の「The Void」と同じ設定で生成するので、MOD なしで中央 (0, 0) 付近に 33×33 の石の足場だけができる。
-初回起動後、足場の上で `/setworldspawn` を実行してスポーン地点を合わせる（バックエンドの鯖のコンソールで自分を `op` にしてから）。
+Minecraft 26.x では、この足場だけだとスポーン地点が足場の下になり奈落に落ちる。初回起動後に次を実行して、足場を置き直してスポーン地点を固定する（lobby は足場を y=-51 に上げてある）。
+
+```bat
+scripts\mc.bat c1 forceload add -8 -8 24 24
+scripts\mc.bat c1 clone -8 -61 -8 24 -61 24 -8 -51 -8
+scripts\mc.bat c1 fill -8 -61 -8 24 -61 24 minecraft:air
+scripts\mc.bat c1 setworldspawn 8 -50 8
+scripts\mc.bat c1 gamerule respawn_radius 0
+scripts\mc.bat c1 forceload remove -8 -8 24 24
+```

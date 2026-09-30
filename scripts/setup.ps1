@@ -34,6 +34,23 @@ function Save-File([string]$Url, [string]$Path) {
     Invoke-WebRequest -Uri $Url -Headers $Headers -OutFile $Path -UseBasicParsing
 }
 
+function Set-Property([string]$Path, [string]$Key, [string]$Value) {
+    $lines = @(Get-Content -Path $Path -Encoding UTF8)
+    $pattern = "^" + [regex]::Escape($Key) + "="
+    if ($lines | Where-Object { $_ -match $pattern }) {
+        $lines = $lines | ForEach-Object { if ($_ -match $pattern) { "$Key=$Value" } else { $_ } }
+    } else {
+        $lines += "$Key=$Value"
+    }
+    [IO.File]::WriteAllLines($Path, [string[]]$lines)
+}
+
+function New-Secret {
+    $bytes = New-Object byte[] 24
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    return ([Convert]::ToBase64String($bytes)) -replace "[+/=]", ""
+}
+
 function Copy-IfMissing([string]$From, [string]$To) {
     if (-not (Test-Path $To)) {
         New-Item -ItemType Directory -Force -Path (Split-Path $To -Parent) | Out-Null
@@ -101,12 +118,15 @@ Copy-IfMissing (Join-Path $RepoRoot "proxy\config\velocity.toml") (Join-Path $pr
 
 $secretFile = Join-Path $proxyDir "forwarding.secret"
 if (-not (Test-Path $secretFile)) {
-    $bytes = New-Object byte[] 24
-    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-    $secret = ([Convert]::ToBase64String($bytes)) -replace "[+/=]", ""
-    [IO.File]::WriteAllText($secretFile, $secret)
+    [IO.File]::WriteAllText($secretFile, (New-Secret))
 }
 $secret = ([IO.File]::ReadAllText($secretFile)).Trim()
+
+# 各鯖の RCON（127.0.0.1 だけで待ち受ける）のパスワード。scripts\rcon.ps1 が使う
+if (-not (Test-Path $rconFile)) {
+    [IO.File]::WriteAllText($rconFile, (New-Secret))
+}
+$rconPassword = ([IO.File]::ReadAllText($rconFile)).Trim()
 
 Write-Host "Velocity をダウンロードしています..."
 try {
@@ -136,13 +156,19 @@ if ($pluginJar) {
 }
 
 # --- 各鯖 ---
-foreach ($name in $Servers) {
+for ($i = 0; $i -lt $Servers.Count; $i++) {
+    $name = $Servers[$i]
     Write-Host "$name を用意しています..."
     $serverDir = Join-Path $RunDir $name
     $template = Join-Path $RepoRoot "servers\$name"
     New-Item -ItemType Directory -Force -Path (Join-Path $serverDir "mods") | Out-Null
 
-    Copy-IfMissing (Join-Path $template "server.properties") (Join-Path $serverDir "server.properties")
+    $properties = Join-Path $serverDir "server.properties"
+    Copy-IfMissing (Join-Path $template "server.properties") $properties
+    # lobby=31001, s1=31002, ... (server-ip=127.0.0.1 なので外からは届かない)
+    Set-Property $properties "enable-rcon" "true"
+    Set-Property $properties "rcon.port" (31001 + $i)
+    Set-Property $properties "rcon.password" $rconPassword
     $proxyConfig = Join-Path $serverDir "config\FabricProxy-Lite.toml"
     Copy-IfMissing (Join-Path $template "config\FabricProxy-Lite.toml") $proxyConfig
     $content = [IO.File]::ReadAllText($proxyConfig) -replace "__FORWARDING_SECRET__", $secret
