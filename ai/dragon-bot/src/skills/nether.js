@@ -146,3 +146,43 @@ export async function huntEndermen(ctx, { pearls = 12 } = {}) {
   }
   return `エンダーパール ${count(bot, 'ender_pearl')} 個`;
 }
+
+// 砦の遺跡（廃要塞）を探して金ブロックを集め、金インゴットにする（RTA の流れ: ピグリン交易の元手）
+const BASTION_BLOCKS = ['gilded_blackstone', 'polished_blackstone_bricks', 'cracked_polished_blackstone_bricks', 'chiseled_polished_blackstone', 'gold_block'];
+
+export async function raidBastionGold(ctx, { ingots = 64 } = {}) {
+  const { bot, memory } = ctx;
+  if (dim(ctx) !== 'the_nether') throw new SkillError('ネザーにいない');
+  if (!['iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'].some((n) => findItem(bot, n))) throw new SkillError('鉄以上のツルハシが必要');
+  // 金の防具を着てピグリンを怒らせないようにする（金ブロックを掘ると周りのピグリンは怒るので、掘るのは手早く）
+  await wearGold(ctx);
+  let bastion = memory.getPlace('bastion');
+  for (let t = 0; !bastion && t < 50; t++) {
+    abortable(ctx);
+    const b = findVisibleBlocks(bot, BASTION_BLOCKS, { maxDistance: 64, count: 1 })[0];
+    if (b) { memory.setPlace('bastion', b.position, 'the_nether'); bastion = memory.getPlace('bastion'); ctx.say?.('廃要塞みつけた'); break; }
+    await exploreStep(ctx, 48);
+  }
+  if (!bastion) throw new SkillError('廃要塞が見つからなかった');
+  await travelTo(ctx, bastion.x, bastion.z, { range: 6 });
+  const goldTotal = () => count(bot, 'gold_ingot') + count(bot, 'gold_block') * 9;
+  for (let t = 0; goldTotal() < ingots && t < 40; t++) {
+    abortable(ctx);
+    const g = findVisibleBlocks(bot, ['gold_block', 'gilded_blackstone', 'nether_gold_ore'], { maxDistance: 32, count: 1 })[0];
+    if (!g) { await exploreStep(ctx, 16); continue; }
+    await bot.collectBlock.collect(g, { ignoreNoPath: true }).catch((e) => ctx.log.warn(e.message));
+  }
+  // 金ブロックはインゴットに、金塊はインゴットにまとめる
+  if (count(bot, 'gold_block') > 0) await craftItem(ctx, 'gold_ingot', count(bot, 'gold_ingot') + count(bot, 'gold_block') * 9).catch(() => {});
+  if (count(bot, 'gold_nugget') >= 9) await craftItem(ctx, 'gold_ingot', count(bot, 'gold_ingot') + Math.floor(count(bot, 'gold_nugget') / 9)).catch(() => {});
+  return `金インゴット ${count(bot, 'gold_ingot')} 個`;
+}
+
+async function wearGold(ctx) {
+  const { bot } = ctx;
+  const goldArmor = ['golden_helmet', 'golden_boots', 'golden_chestplate', 'golden_leggings'];
+  if (bot.inventory.slots.slice(5, 9).some((s) => s && goldArmor.includes(s.name))) return;
+  if (!goldArmor.some((n) => findItem(bot, n)) && count(bot, 'gold_ingot') >= 4) await craftItem(ctx, 'golden_boots', 1).catch(() => {});
+  const g = goldArmor.map((n) => findItem(bot, n)).find(Boolean);
+  if (g) await bot.equip(g, g.name.includes('helmet') ? 'head' : g.name.includes('boots') ? 'feet' : g.name.includes('chest') ? 'torso' : 'legs');
+}

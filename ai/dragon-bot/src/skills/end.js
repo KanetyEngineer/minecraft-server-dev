@@ -77,6 +77,41 @@ async function breakCage(ctx, crystal) {
   await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (p.x - crystal.position.x), p.z + (p.z - crystal.position.z) + 12, 3)).catch(() => {});
 }
 
+// ベッド爆破（RTA の定番）: 着地中のドラゴンの頭の近くにベッドを置き、間にブロックを挟んでから使う。
+// エンドではベッドは使うと爆発する。自分も巻き込まれないよう、体力が十分なときだけ行う。
+async function bedBomb(ctx, dragon, center) {
+  const { bot } = ctx;
+  const bed = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
+  if (!bed || bot.health < 14) return false;
+  const head = dragon.position;
+  // 自分はドラゴンから 4〜5 マス離れた位置に立つ
+  const dx = bot.entity.position.x - head.x; const dz = bot.entity.position.z - head.z;
+  const d = Math.hypot(dx, dz) || 1;
+  await bot.pathfinder.goto(new goals.GoalNear(head.x + (dx / d) * 4.5, center.y + 1, head.z + (dz / d) * 4.5, 1)).catch(() => {});
+  // ドラゴン側の 2 マス先の地面にベッドを置く
+  const p = bot.entity.position.floored();
+  const ux = Math.round(-dx / d); const uz = Math.round(-dz / d);
+  const floor = bot.blockAt(p.offset(ux * 2, -1, uz * 2));
+  if (!floor || floor.boundingBox !== 'block') return false;
+  await bot.equip(bed, 'hand');
+  await smoothLookAt(bot, floor.position.offset(0.5, 1, 0.5), 60);
+  try { await bot.placeBlock(floor, new Vec3(0, 1, 0)); } catch { return false; }
+  const placedBed = bot.blockAt(floor.position.offset(0, 1, 0));
+  if (!placedBed || !placedBed.name.endsWith('_bed')) return false;
+  // 爆風よけ: 目の高さに 1 ブロック挟む
+  const shield = bot.inventory.items().find((i) => ['cobblestone', 'end_stone', 'obsidian', 'cobbled_deepslate'].includes(i.name));
+  if (shield) {
+    const wallPos = p.offset(ux, 1, uz);
+    const ref = bot.blockAt(wallPos.offset(0, -1, 0));
+    if (ref && ref.boundingBox === 'block') {
+      await bot.equip(shield, 'hand');
+      await bot.placeBlock(ref, new Vec3(0, 1, 0)).catch(() => {});
+    }
+  }
+  await bot.activateBlock(placedBed).catch(() => {});
+  return true;
+}
+
 // ドラゴンの頭（部位エンティティ）を殴る。部位の ID は本体 ID の続き番号。
 function hitDragonHead(bot, dragon) {
   bot.attack({ id: dragon.id + 1, position: dragon.position, height: 1, isValid: true });
@@ -111,7 +146,11 @@ export async function fightDragon(ctx, { minutes = 15 } = {}) {
     }
     const horiz = Math.hypot(dragon.position.x - center.x, dragon.position.z - center.z);
     const perching = horiz < 8 && dragon.position.y < center.y + 10;
-    if (perching) {
+    if (perching && bot.inventory.items().some((i) => i.name.endsWith('_bed')) && bot.health >= 14) {
+      // 着地中でベッドがあれば、ベッド爆破で大ダメージを狙う
+      await bedBomb(ctx, dragon, center);
+      await sleep(500);
+    } else if (perching) {
       // 着地中: 近づいて頭を剣で殴る
       const sword = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword'].map((n) => findItem(bot, n)).find(Boolean);
       if (sword) await bot.equip(sword, 'hand');
