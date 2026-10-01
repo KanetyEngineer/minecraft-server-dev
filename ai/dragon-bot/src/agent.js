@@ -155,6 +155,16 @@ export class Agent {
     if (Date.now() - this.still.since > 20_000) {
       this.still = null;
       this.interrupt('20 秒動けなかった（フリーズ回避）');
+      // 木の上などに取り残されたら、体力が残る範囲で落下ダメージを受け入れて飛び降りる
+      const below = bot.blockAt(p.offset(0, -1, 0));
+      if (below && /(_leaves|_log|_wood)$/.test(below.name) && bot.pathfinder.movements) {
+        const mv = bot.pathfinder.movements;
+        // 落下ダメージ = 高さ - 3。体力を 4 以上残す高さまで許可する
+        mv.maxDropDown = Math.max(4, Math.min(20, Math.floor(bot.health) - 4 + 3));
+        log.info(`木の上で動けないので、最大 ${mv.maxDropDown} マスの飛び降りを許可`);
+        clearTimeout(this.dropTimer);
+        this.dropTimer = setTimeout(() => { mv.maxDropDown = 4; }, 30_000);
+      }
       // 少しランダムに歩いて引っかかりを外す
       const yaw = Math.random() * Math.PI * 2;
       bot.look(yaw, 0, true).catch(() => {});
