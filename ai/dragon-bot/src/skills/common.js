@@ -661,7 +661,20 @@ export async function smelt(ctx, input, n) {
     }
     return taken;
   } finally {
+    // 中断されても、焼けた物と焼き終わっていない材料は必ず持ち帰る（かまどに鉄を置き忘れて、
+    // 鉄 7 個を掘ったのにインゴット 1 個しか手元に無くなったことがある）
+    try { if (furnace.outputItem()) await furnace.takeOutput(); } catch {}
+    try { if (furnace.inputItem()?.type === inItem.id) await furnace.takeInput(); } catch {}
     furnace.close();
+    // 普段どおり終わったら、かまども回収して持ち歩く（遠くに置き去りにしない）
+    if (!ctx.signal?.aborted) {
+      const b = bot.blockAt(furnaceBlock.position);
+      if (b && b.name === 'furnace') {
+        await bot.tool.equipForBlock(b, {}).catch(() => {});
+        await bot.dig(b, true).catch(() => {});
+        await pickUpItems(ctx, 4).catch(() => {});
+      }
+    }
   }
 }
 
