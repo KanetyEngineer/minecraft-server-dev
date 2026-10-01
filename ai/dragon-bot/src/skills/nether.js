@@ -4,6 +4,7 @@ import {
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
+import { Vec3 } from 'vec3';
 
 // ポータルに入り、次元が変わるのを待つ
 export async function walkIntoPortal(ctx, place, expectDim) {
@@ -126,15 +127,31 @@ export async function barterWithPiglins(ctx, { pearls = 12 } = {}) {
 }
 
 // エンダーマンを倒してパールを集める（夜のオーバーワールドか歪んだ森）
+const WARPED = ['warped_nylium', 'warped_stem', 'warped_wart_block'];
+const BOATS = ['oak_boat', 'spruce_boat', 'birch_boat', 'jungle_boat', 'acacia_boat', 'dark_oak_boat', 'mangrove_boat', 'cherry_boat', 'pale_oak_boat'];
+
+// エンダーマンを倒してパールを集める。
+// ネザーで歪んだ森が見つかっていれば、ボートにエンダーマンを乗せて（ワープできなくして）倒す。
 export async function huntEndermen(ctx, { pearls = 12 } = {}) {
-  const { bot } = ctx;
+  const { bot, memory } = ctx;
   const start = count(bot, 'ender_pearl');
+  if (dim(ctx) === 'the_nether') {
+    const warped = findVisibleBlocks(bot, WARPED, { maxDistance: 64, count: 1 })[0];
+    if (warped && !memory.getPlace('warped_forest')) memory.setPlace('warped_forest', warped.position, 'the_nether');
+    const wf = memory.getPlace('warped_forest');
+    if (wf) await travelTo(ctx, wf.x, wf.z, { range: 6 }).catch(() => {});
+  }
   for (let t = 0; count(bot, 'ender_pearl') - start < pearls && t < 60; t++) {
     abortable(ctx);
     const em = nearestEntityNamed(bot, ['enderman'], 48);
     if (!em) {
       if (dim(ctx) === 'overworld' && bot.time.isDay) return `昼なのでエンダーマンが少ない（+${count(bot, 'ender_pearl') - start}）`;
       await exploreStep(ctx, 40);
+      continue;
+    }
+    const inWarped = dim(ctx) === 'the_nether' && !!memory.getPlace('warped_forest');
+    if (inWarped && await boatTrapEnderman(ctx, em)) {
+      await pickUpItems(ctx, 8);
       continue;
     }
     // 近づいて目を合わせ、向かってきたところを倒す
@@ -145,6 +162,61 @@ export async function huntEndermen(ctx, { pearls = 12 } = {}) {
     await pickUpItems(ctx, 8);
   }
   return `エンダーパール ${count(bot, 'ender_pearl')} 個`;
+}
+
+// ボート捕獲: 自分とエンダーマンの間にボートを置き、目を合わせて呼び寄せる。
+// ボートに乗ったエンダーマンはワープできないので、そのまま剣で倒す。
+async function boatTrapEnderman(ctx, em) {
+  const { bot } = ctx;
+  let boat = bot.inventory.items().find((i) => BOATS.includes(i.name));
+  if (!boat) {
+    const plank = bot.inventory.items().find((i) => i.name.endsWith('_planks') && i.count >= 5);
+    if (!plank) return false;
+    const boatName = `${plank.name.replace('_planks', '')}_boat`;
+    if (!bot.registry.itemsByName[boatName]) return false; // 歪んだ/真紅の板材ではボートは作れない
+    await craftItem(ctx, boatName, 1).catch(() => {});
+    boat = bot.inventory.items().find((i) => BOATS.includes(i.name));
+    if (!boat) return false;
+  }
+  // エンダーマンから 8 マスほどの所に立ち、相手側 2 マス先の地面にボートを置く
+  const dx = bot.entity.position.x - em.position.x; const dz = bot.entity.position.z - em.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  await bot.pathfinder.goto(new goals.GoalNearXZ(em.position.x + (dx / d) * 8, em.position.z + (dz / d) * 8, 2)).catch(() => {});
+  const p = bot.entity.position.floored();
+  const ux = Math.round(-dx / d); const uz = Math.round(-dz / d);
+  const floor = bot.blockAt(p.offset(ux * 2, -1, uz * 2));
+  if (!floor || floor.boundingBox !== 'block') return false;
+  await bot.equip(boat, 'hand');
+  await smoothLookAt(bot, floor.position.offset(0.5, 1, 0.5), ctx.cfg.human.turnSpeed);
+  try { await bot.placeEntity(floor, new Vec3(0, 1, 0)); } catch { return false; }
+  const vehicle = bot.nearestEntity((e) => e.name && e.name.endsWith('boat') && e.position.distanceTo(bot.entity.position) < 4);
+  if (!vehicle) return false;
+  // 目を合わせて怒らせ、ボートの方へ来させる（ボートの真後ろに立っておく）
+  await smoothLookAt(bot, em.position.offset(0, 2.6, 0), 60);
+  let caught = false;
+  for (let i = 0; i < 40 && em.isValid; i++) {
+    await sleep(250);
+    if (em.vehicle === vehicle || em.position.distanceTo(vehicle.position) < 0.8) { caught = true; break; }
+  }
+  if (caught) {
+    ctx.say?.('ボートで捕まえた');
+    const sword = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword'].map((n) => findItem(bot, n)).find(Boolean);
+    if (sword) await bot.equip(sword, 'hand');
+    for (let i = 0; i < 40 && em.isValid; i++) {
+      if (em.position.distanceTo(bot.entity.position) > 3) {
+        await bot.pathfinder.goto(new goals.GoalNear(em.position.x, em.position.y, em.position.z, 2)).catch(() => {});
+      }
+      await bot.lookAt(em.position.offset(0, 1.2, 0), true);
+      bot.attack(em);
+      await sleep(650);
+    }
+  } else {
+    // 捕まらなければ普通に戦う
+    await attackEntity(ctx, em, { timeoutMs: 20000 }).catch(() => {});
+  }
+  // ボートを壊して回収
+  for (let i = 0; vehicle.isValid && i < 6; i++) { bot.attack(vehicle); await sleep(300); }
+  return true;
 }
 
 // 砦の遺跡（廃要塞）を探して金ブロックを集め、金インゴットにする（RTA の流れ: ピグリン交易の元手）

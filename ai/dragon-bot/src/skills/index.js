@@ -32,7 +32,7 @@ export const SKILLS = [
   def('huntBlazes', nether.huntBlazes, 'ネザー要塞を探し、ブレイズを倒してブレイズロッドを集める。', { rods: int('目標のロッド数', 1, 16) }),
   def('raidBastionGold', nether.raidBastionGold, '砦の遺跡（廃要塞）を探し、金ブロックや金を掘って金インゴットを集める（ピグリン交易の元手）。', { ingots: int('目標の金インゴット数', 8, 128) }),
   def('barterWithPiglins', nether.barterWithPiglins, '金インゴットを投げてピグリンと物々交換し、エンダーパールを狙う。', { pearls: int('目標のパール数', 1, 16) }),
-  def('huntEndermen', nether.huntEndermen, 'エンダーマンを倒してエンダーパールを集める（夜のオーバーワールドや歪んだ森向き）。', { pearls: int('目標のパール数', 1, 16) }),
+  def('huntEndermen', nether.huntEndermen, 'エンダーマンを倒してエンダーパールを集める。ネザーで歪んだ森が見つかっていれば、ボートに乗せて捕まえてから倒す。', { pearls: int('目標のパール数', 1, 16) }),
   def('locateStronghold', sh.locateStronghold, 'エンダーアイを 2〜3 回投げて三角測量し、要塞の位置を推定する（オーバーワールド）。'),
   def('findEndPortal', sh.findEndPortal, '推定位置まで移動し、掘り下がって要塞とエンドポータルの部屋を探す。'),
   def('activateEndPortal', sh.activateEndPortal, 'エンドポータルの枠にエンダーアイをはめて起動し、ジ・エンドへ入る。'),
