@@ -434,7 +434,11 @@ export async function makeBed(ctx) {
     await pickUpItems(ctx);
   }
   const wool = bot.inventory.items().find((i) => i.name.endsWith('_wool') && i.count >= 3);
-  if (!wool) throw new SkillError('羊毛が 3 つそろわない');
+  if (!wool) {
+    // 羊が見つからないときは、しばらくベッド作りを飛ばして先へ進む（進行表が繰り返し選ばないように）
+    ctx.memory.setFlag('bedRetryAt', Date.now() + 10 * 60_000);
+    throw new SkillError('羊毛が 3 つそろわない');
+  }
   await ensurePlanks(ctx, 3);
   await craftItem(ctx, wool.name.replace('_wool', '_bed'), 1);
   return 'ベッド完成';
@@ -463,7 +467,8 @@ export async function gatherBlocks(ctx, { count: n = 64 } = {}) {
 
 export { STONE, IRON_ORE, DIAMOND_ORE, goals };
 
-// 夜の避難: 鉄の防具が無いうちは、その場で 3 マス掘り下がって頭上をふさぎ、朝まで待つ（普通のプレイヤーの「穴にこもる」）
+// 夜の避難: その場で 3 マス掘り下がって頭上をふさぐ（普通のプレイヤーの「穴にこもる」）。
+// ベッドを持っていれば穴の横に 2 マス空けて置いて寝る（起きたら回収）。寝られなければ朝まで待つ。
 export async function shelterForNight(ctx) {
   const { bot } = ctx;
   if (bot.time.isDay) return 'もう朝';
@@ -509,6 +514,15 @@ export async function shelterForNight(ctx) {
   ctx.state.sheltered = covered; // ふたがある間は反射で飛び出さない（agent.js）
   const start = Date.now();
   try {
+    const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
+    if (bedItem && covered) {
+      const slept = await sleepInShelter(ctx, feet, bedItem).catch((e) => {
+        if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+        ctx.log.warn(`寝られなかった、朝まで待つ: ${e.message}`);
+        return false;
+      });
+      if (slept) ctx.log.info('🛏 ベッドで寝て朝になった');
+    }
     while (!bot.time.isDay && Date.now() - start < 9 * 60_000) {
       abortable(ctx);
       await sleep(2000);
@@ -523,4 +537,48 @@ export async function shelterForNight(ctx) {
     await bot.dig(lid, true).catch(() => {});
   }
   return bot.time.isDay ? '朝まで穴で過ごした' : '待ちきれず出た';
+}
+
+// 穴の底の横に 2 マス空けてベッドを置き、寝る。起きたらベッドを掘って持ち帰る。寝られたら true。
+async function sleepInShelter(ctx, feet, bedItem) {
+  const { bot } = ctx;
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const a = feet.offset(dx, 0, dz);
+    const b = feet.offset(dx * 2, 0, dz * 2);
+    const floors = [a, b].map((q) => bot.blockAt(q.offset(0, -1, 0)));
+    if (!floors.every((f) => f && f.boundingBox === 'block')) continue;
+    if ([a, b].some((q) => isNextToLiquid(bot, q))) continue;
+    for (const q of [a, b]) {
+      const blk = bot.blockAt(q);
+      if (blk && blk.boundingBox === 'block' && bot.canDigBlock(blk)) {
+        await bot.tool.equipForBlock(blk, {}).catch(() => {});
+        await bot.dig(blk, true).catch(() => {});
+      }
+    }
+    if (![a, b].every((q) => bot.blockAt(q)?.boundingBox === 'empty')) continue;
+    // ベッドは向いている方向に頭が伸びるので、穴の横方向を向いてから置く
+    await bot.look(Math.atan2(-dx, -dz), -0.6, true);
+    await bot.equip(bedItem, 'hand');
+    await bot.placeBlock(floors[0], new Vec3(0, 1, 0));
+    const bed = bot.blockAt(a);
+    if (!bed || !bed.name.endsWith('_bed')) continue;
+    try {
+      await bot.sleep(bed);
+      const t0 = Date.now();
+      while (bot.isSleeping && Date.now() - t0 < 9 * 60_000) {
+        abortable(ctx);
+        await sleep(1000);
+      }
+      return true;
+    } finally {
+      // 寝られても寝られなくても、ベッドは回収して持ち歩く
+      const placed = bot.blockAt(a);
+      if (placed && placed.name.endsWith('_bed')) {
+        await bot.dig(placed, true).catch(() => {});
+        await sleep(400);
+        await pickUpItems(ctx, 4).catch(() => {});
+      }
+    }
+  }
+  return false;
 }

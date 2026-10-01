@@ -76,12 +76,14 @@ export function nextStep(bot, memory) {
     return { skill: 'returnThroughPortal', args: {} };
   }
 
-  // 夜は、ベッドも鉄の防具も無いうちは穴にこもって朝を待つ（装備なしで外にいると倒され続ける）
-  if (night && !m.armor && !memory.getPlace('bed')) return { skill: 'shelterForNight', args: {} };
+  // 夜は穴にこもる。ベッドを持っていれば穴の中で寝る、無ければ朝まで待つ（shelterForNight）
+  if (night) return { skill: 'shelterForNight', args: {} };
   if (!m.woodenTools) return { skill: 'gatherWood', args: { logs: 8 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
   if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };
-  if (night && memory.getPlace('bed')) return { skill: 'sleepInBed', args: {} };
+  // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
+  const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
+  if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
   if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: false } };
   if (!m.armor || !m.shield) return { skill: 'getIronGear', args: { armor: true } };
   if (!m.diamondPickaxe) return { skill: 'mineDiamonds', args: { count: 3 } };

@@ -13,13 +13,13 @@ test('木のツルハシがあれば石の道具へ', () => {
 });
 
 test('ダイヤのツルハシまであれば弓と矢へ', () => {
-  const bot = fakeBot({ diamond_pickaxe: 1, iron_sword: 1, bucket: 1, cooked_beef: 20, shield: 1 });
+  const bot = fakeBot({ diamond_pickaxe: 1, iron_sword: 1, bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 });
   bot.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }];
   assert.equal(nextStep(bot, fakeMemory()).skill, 'makeBowAndArrows');
 });
 
 test('ポータルを作ったらネザーへ、ロッドが集まったらパール集め', () => {
-  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, bow: 1, arrow: 64 };
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, bow: 1, arrow: 64, white_bed: 1 };
   const mem = fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 } });
   const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
   assert.equal(nextStep(armored(fakeBot(base)), mem).skill, 'enterNether');
@@ -71,12 +71,18 @@ test('死んで 4 分以内ならアイテム回収、回収済みや古い死�
   assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'overworld', at: old })).skill, 'gatherWood');
   assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'the_nether', at: now })).skill, 'gatherWood');
 });
-test('夜で防具もベッドも無ければ穴にこもる、防具があれば通常どおり', () => {
+
+test('夜は穴にこもる（ベッドの有無や防具に関係なく、寝るかどうかはスキルの中で決める）', () => {
   const s = nextStep(fakeBot({}, { isDay: false }), fakeMemory());
   assert.equal(s.skill, 'shelterForNight');
   assert.ok(SKILL_MAP[s.skill]);
-  const armored = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, iron_pickaxe: 1, iron_sword: 1, bucket: 1 }, { isDay: false });
-  armored.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }];
-  assert.notEqual(nextStep(armored, fakeMemory()).skill, 'shelterForNight');
+  assert.equal(nextStep(fakeBot({ white_bed: 1 }, { isDay: false }), fakeMemory()).skill, 'shelterForNight');
   assert.equal(nextStep(fakeBot({}, { isDay: true }), fakeMemory()).skill, 'gatherWood');
+});
+
+test('食料の次はベッド作り、羊が見つからなかった直後は飛ばす', () => {
+  const base = { stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20 };
+  assert.equal(nextStep(fakeBot(base), fakeMemory()).skill, 'makeBed');
+  assert.equal(nextStep(fakeBot(base), fakeMemory({}, { bedRetryAt: Date.now() + 60_000 })).skill, 'getIronGear');
+  assert.equal(nextStep(fakeBot({ ...base, red_bed: 1 }), fakeMemory()).skill, 'getIronGear');
 });
