@@ -326,6 +326,10 @@ export async function smelt(ctx, input, n) {
       fuelName = pick.name;
       fuelCount = Math.min(pick.count, Math.ceil(n / 1.5));
     }
+    // 前回の残り（焼けた物・別の材料・別の燃料）があると入れられない（destination full）ので先に取り出す
+    if (furnace.outputItem()) await furnace.takeOutput();
+    if (furnace.inputItem() && furnace.inputItem().type !== inItem.id) await furnace.takeInput();
+    if (furnace.fuelItem() && furnace.fuelItem().name !== fuelName) await furnace.takeFuel();
     if (!furnace.fuelItem() || furnace.fuelItem().count < fuelCount) {
       await furnace.putFuel(bot.registry.itemsByName[fuelName].id, null, fuelCount);
     }
