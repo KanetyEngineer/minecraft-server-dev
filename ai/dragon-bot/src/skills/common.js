@@ -468,3 +468,64 @@ export function dim(ctx) {
 }
 
 export { goals, LOGS, Vec3 };
+
+// ---------- 柱に乗って戦う（ゾンビ対策）----------
+
+const PILLAR_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt', 'netherrack', 'stone', 'andesite', 'diorite', 'granite'];
+
+// 真下にブロックを積んで上がる（ジャンプして足元に置く、普通のプレイヤーの「柱上り」）
+export async function pillarUp(ctx, height = 2) {
+  const { bot } = ctx;
+  let placed = 0;
+  for (let i = 0; i < height; i++) {
+    const item = bot.inventory.items().find((it) => PILLAR_BLOCKS.includes(it.name) || isPlanks(it.name));
+    if (!item) break;
+    await bot.equip(item, 'hand');
+    await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+    const below = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    bot.setControlState('jump', true);
+    await bot.waitForTicks(6);
+    try {
+      await bot.placeBlock(below, new Vec3(0, 1, 0));
+      placed++;
+    } catch {
+      // 置けなかったら打ち切り
+    } finally {
+      bot.setControlState('jump', false);
+    }
+    await bot.waitForTicks(4);
+  }
+  return placed;
+}
+
+// 柱を掘って降りる
+export async function pillarDown(ctx, placed) {
+  const { bot } = ctx;
+  for (let i = 0; i < placed; i++) {
+    const below = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    if (!below || below.boundingBox !== 'block') break;
+    await bot.tool.equipForBlock(below, {}).catch(() => {});
+    await bot.dig(below).catch(() => {});
+    await bot.waitForTicks(8);
+  }
+}
+
+// 高い所から、届く範囲の敵を殴る（移動はしない）
+export async function fightFromAbove(ctx, names, { timeoutMs = 30000 } = {}) {
+  const { bot } = ctx;
+  const sword = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword', 'wooden_sword']
+    .map((n) => findItem(bot, n)).find(Boolean);
+  if (sword) await bot.equip(sword, 'hand');
+  const set = new Set(names);
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const near = bot.nearestEntity((e) => set.has(e.name) && e.position.distanceTo(bot.entity.position) < 8);
+    if (!near) return true;
+    if (near.position.distanceTo(bot.entity.position) <= 3.5) {
+      await bot.lookAt(near.position.offset(0, (near.height ?? 1.9) * 0.85, 0), true);
+      bot.attack(near);
+    }
+    await sleep(650); // 攻撃のクールダウン
+  }
+  return false;
+}

@@ -3,11 +3,12 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
 
+const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack', 'gatherFood']);
 
 export class Agent {
@@ -78,6 +79,7 @@ export class Agent {
     let action = null;
     if (creeper && !inCombat) action = { kind: 'flee', from: creeper };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
+    else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && !bot.entity.isInWater && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
     if (!action) return;
 
@@ -85,7 +87,16 @@ export class Agent {
     try {
       this.interrupt(action.kind === 'flee' ? `${action.from.name} から逃げる` : `${action.target.name} に攻撃された`);
       const ctx = this.makeCtx(new AbortController());
-      if (action.kind === 'fight') {
+      if (action.kind === 'pillar') {
+        // ゾンビ系: 2 ブロック積んで上から倒し、終わったら降りる
+        const placed = await pillarUp(ctx, 2).catch(() => 0);
+        if (placed >= 2) {
+          await fightFromAbove(ctx, [...ZOMBIES], { timeoutMs: 40000 });
+          await pillarDown(ctx, placed);
+        } else {
+          await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
+        }
+      } else if (action.kind === 'fight') {
         await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
       } else {
         const p = bot.entity.position; const f = action.from.position;
@@ -94,7 +105,7 @@ export class Agent {
         await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + ((p.x - f.x) / d) * 14, p.z + ((p.z - f.z) / d) * 14, 3)).catch(() => {});
         bot.setControlState('sprint', false);
       }
-      this.history.push({ skill: `反射:${action.kind}`, args: {}, ok: true, result: action.kind === 'fight' ? `${action.target.name} と戦った` : '逃げた' });
+      this.history.push({ skill: `反射:${action.kind}`, args: {}, ok: true, result: action.kind !== 'flee' ? `${action.target.name} と戦った` : '逃げた' });
     } finally {
       this.reflexBusy = false;
     }
