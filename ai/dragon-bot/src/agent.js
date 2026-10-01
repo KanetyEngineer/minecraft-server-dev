@@ -88,8 +88,10 @@ export class Agent {
       this.interrupt(action.kind === 'flee' ? `${action.from.name} から逃げる` : `${action.target.name} に攻撃された`);
       const ctx = this.makeCtx(new AbortController());
       if (action.kind === 'pillar') {
-        // ゾンビ系: 2 ブロック積んで上から倒し、終わったら降りる
-        const placed = await pillarUp(ctx, 2).catch(() => 0);
+        // ゾンビ系: 3 ブロック積んで上から倒し、終わったら降りる
+        // 1.21.11 のゾンビは槍を持つことがありリーチが長いので 3 段積む
+        const placed = await pillarUp(ctx, 3).catch(() => 0);
+        log.info(`柱を ${placed} 段積んだ`);
         if (placed >= 2) {
           await fightFromAbove(ctx, [...ZOMBIES], { timeoutMs: 40000 });
           await pillarDown(ctx, placed);

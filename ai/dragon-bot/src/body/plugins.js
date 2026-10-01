@@ -103,6 +103,12 @@ export function configureBody(bot) {
     }
     return n;
   };
+  // pathfinder は水中で毎ティック sprint=false にするので、泳いでいる間はそれを無視する
+  const setCS = bot.setControlState.bind(bot);
+  bot.setControlState = (ctl, state) => {
+    if (ctl === 'sprint' && !state && swimSprint) return;
+    setCS(ctl, state);
+  };
   bot.on('physicsTick', () => {
     if (!bot.entity || bot.vehicle) return;
     const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
@@ -110,11 +116,14 @@ export function configureBody(bot) {
     const moving = bot.getControlState('forward') || bot.pathfinder?.isMoving?.();
     const longSwim = bot.entity.isInWater && moving && waterAheadCount() >= 5;
     if (longSwim) {
-      bot.setControlState('sprint', true); // 水中でのダッシュ = 泳ぎ
+      if (!swimSprint) setCS('sprint', true); // 水中でのダッシュ = 泳ぎ
       swimSprint = true;
+      // prismarine-physics は泳ぎの速さを計算しないので、バニラ（減速 0.9 / 通常 0.8）に合わせて補正
+      bot.entity.velocity.x *= 1.125;
+      bot.entity.velocity.z *= 1.125;
     } else if (swimSprint) {
-      bot.setControlState('sprint', false);
       swimSprint = false;
+      setCS('sprint', false);
     }
     // 泳いでいる間は水面近くを保ち、息が減ったら必ず浮上する
     const needAir = bot.oxygenLevel !== undefined && bot.oxygenLevel < 10;
