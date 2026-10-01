@@ -28,3 +28,9 @@ test('3 本以上は中央値で誤差に強い', () => {
 test('角度', () => {
   assert.equal(Math.round(rayAngleDeg({ dx: 1, dz: 0 }, { dx: 0, dz: 1 })), 90);
 });
+
+test('要塞の推定位置はチャンク内の (4, 4)（スターター階段）に合わせる', async () => {
+  const { toStarterStaircase } = await import('../src/skills/stronghold.js');
+  assert.deepEqual(toStarterStaircase({ x: 1000, z: -1000 }), { x: 996, z: -1004 });
+  assert.deepEqual(toStarterStaircase({ x: 15, z: 16 }), { x: 4, z: 20 });
+});

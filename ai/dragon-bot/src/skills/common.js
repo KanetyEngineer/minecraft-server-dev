@@ -162,10 +162,32 @@ export function isUnreachable(ctx, pos) {
 }
 
 // 見えているブロックを掘って集める。見つからなければ探索する。
-export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter, onMined } = {}) {
+// collectBlock は、落ちたアイテムを拾えない場所などで何分も戻ってこないことがあるので時間で打ち切る
+const COLLECT_TIMEOUT_MS = 40_000;
+export async function collectWithTimeout(ctx, block, ms = COLLECT_TIMEOUT_MS) {
+  const { bot } = ctx;
+  let timer;
+  try {
+    return await Promise.race([
+      bot.collectBlock.collect(block, { ignoreNoPath: true }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          try { bot.collectBlock.cancelTask?.(); } catch {}
+          try { bot.pathfinder.stop(); } catch {}
+          reject(new Error(`${Math.round(ms / 1000)} 秒たっても掘り終わらない`));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter, onMined, maxFails = 6 } = {}) {
   const { bot, cfg } = ctx;
   let mined = 0;
   let explored = 0;
+  let fails = 0;
   while (mined < n) {
     abortable(ctx);
     const blocks = findVisibleBlocks(bot, names, { maxDistance, count: filter ? 24 : 8, visibleOnly: cfg.human.visibleOnly })
@@ -177,8 +199,9 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       continue;
     }
     try {
-      await bot.collectBlock.collect(blocks[0], { ignoreNoPath: true });
+      await collectWithTimeout(ctx, blocks[0], COLLECT_TIMEOUT_MS);
       mined++;
+      fails = 0;
       onMined?.(blocks[0]);
     } catch (e) {
       if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
@@ -186,6 +209,11 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       if (/tool|harvest/i.test(e.message)) throw new SkillError(`${blocks[0].name} を掘る道具がない`);
       // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）
       markUnreachable(ctx, blocks[0].position);
+      // 失敗が続く地形（崖の上の石など）では粘らず、呼び出し側の別の方法（掘り下がるなど）に任せる
+      if (++fails >= maxFails) {
+        ctx.log.warn(`採掘が ${fails} 回続けて失敗したので、この場所での採掘をやめる`);
+        break;
+      }
     }
   }
   return mined;

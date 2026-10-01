@@ -12,6 +12,10 @@ export async function throwEye(ctx) {
   if (!findItem(bot, 'ender_eye')) throw new SkillError('エンダーアイがない');
   await bot.equip(findItem(bot, 'ender_eye'), 'hand');
   await smoothLookAt(bot, bot.entity.position.offset(Math.sin(-bot.entity.yaw) * 5, 3, -Math.cos(bot.entity.yaw) * 5), ctx.cfg.human.turnSpeed);
+  // 止まった直後はサーバーと位置がずれていることがある（エンダーアイの非同期）。1 秒以上静止してから投げる
+  try { bot.pathfinder.stop(); } catch {}
+  bot.clearControlStates();
+  await bot.waitForTicks(24);
   const from = bot.entity.position.clone();
   const seenIds = new Set(Object.values(bot.entities).filter((e) => e.name === 'eye_of_ender').map((e) => e.id));
   bot.activateItem();
@@ -29,7 +33,8 @@ export async function throwEye(ctx) {
   }
   const dx = p1.x - p0.x; const dz = p1.z - p0.z;
   const len = Math.hypot(dx, dz);
-  const result = { x: from.x, z: from.z, dx: len ? dx / len : 0, dz: len ? dz / len : 0, dy: p1.y - p0.y, horiz: len };
+  // 測定線の起点は、ボットの位置ではなくアイが実際に出現した位置（サーバーが決めた位置）にする
+  const result = { x: p0.x, z: p0.z, dx: len ? dx / len : 0, dz: len ? dz / len : 0, dy: p1.y - p0.y, horiz: len };
   memory.data.eyeThrows.push({ ...result, at: new Date().toISOString() });
   memory.save();
   // 割れずに落ちたら拾う
@@ -56,8 +61,15 @@ export async function locateStronghold(ctx) {
   }
   const est = estimateStronghold(throws);
   if (!est) throw new SkillError('三角測量に失敗（方向がほぼ平行）');
-  memory.setPlace('stronghold_estimate', { x: est.x, y: 30, z: est.z }, 'overworld');
-  return `要塞の推定位置 x=${est.x}, z=${est.z}`;
+  // アイはチャンクの中心を指すが、スターター階段はチャンク内の (4, 4) にあるので、そこを目指す（RTA Wiki「エンド要塞」）
+  const target = toStarterStaircase(est);
+  memory.setPlace('stronghold_estimate', { x: target.x, y: 30, z: target.z }, 'overworld');
+  return `要塞の推定位置 x=${target.x}, z=${target.z}（スターター階段の位置に補正）`;
+}
+
+// 推定位置をチャンク内の (4, 4) に合わせる
+export function toStarterStaircase(p) {
+  return { x: Math.floor(p.x / 16) * 16 + 4, z: Math.floor(p.z / 16) * 16 + 4 };
 }
 
 const STRONGHOLD_BLOCKS = ['stone_bricks', 'mossy_stone_bricks', 'cracked_stone_bricks', 'infested_stone_bricks', 'end_portal_frame'];
