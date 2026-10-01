@@ -84,6 +84,8 @@ export async function recoverItems(ctx) {
   d.attempts = (d.attempts ?? 0) + 1;
   if (d.attempts >= 3) d.recovered = true;
   ctx.memory.save();
+  const itemCount = () => ctx.bot.inventory.items().reduce((s, i) => s + i.count, 0);
+  const before = itemCount();
   try {
     await travelTo(ctx, d.x, d.z, { range: 2 });
     await goTo(ctx, d.x, d.y, d.z, 1).catch(() => {});
@@ -91,7 +93,14 @@ export async function recoverItems(ctx) {
   } catch (e) {
     if (ctx.bot.entity.position.distanceTo(new Vec3(d.x, d.y, d.z)) > 8) throw e; // 遠くで止まったなら次回また向かう
   }
+  // 本当に拾えたかを確かめて正直に報告する（着いても何も拾えていないのに「回収」と出ていた）
+  const got = itemCount() - before;
+  const dist = ctx.bot.entity.position.distanceTo(new Vec3(d.x, d.y, d.z));
+  if (got <= 0) {
+    if (d.attempts >= 3) { d.recovered = true; ctx.memory.save(); }
+    throw new SkillError(`死亡地点で何も拾えなかった（距離 ${dist.toFixed(1)}、${d.attempts}/3 回目）`);
+  }
   d.recovered = true;
   ctx.memory.save();
-  return '死亡地点のアイテムを回収';
+  return `死亡地点のアイテムを回収（${got} 個）`;
 }

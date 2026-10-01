@@ -865,7 +865,9 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   if (sky() >= 12) return false;
   ctx.log.info(`地下にいるので地上へ掘り上がる（y=${Math.floor(bot.entity.position.y)}）`);
   let dir = ctx.state.stairDir ?? [1, 0];
-  for (let i = 0; i < maxSteps && sky() < 12; i++) {
+  // 渓谷の底などで出られないまま何分も掘り続けないよう、90 秒で打ち切る
+  const until = Date.now() + 90_000;
+  for (let i = 0; i < maxSteps && sky() < 12 && Date.now() < until; i++) {
     abortable(ctx);
     const p = bot.entity.position.floored();
     const next = p.offset(dir[0], 1, dir[1]);
