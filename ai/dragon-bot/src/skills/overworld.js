@@ -188,7 +188,9 @@ export async function makeTools(ctx, { tier = 'stone' } = {}) {
     await getCobblestone(ctx, 16);
     for (const t of ['stone_pickaxe', 'stone_sword', 'stone_axe', 'stone_shovel']) {
       if (countMatching(bot, (n) => n.endsWith(t.split('_')[1]) && !n.startsWith('wooden')) === 0) {
-        await craftItem(ctx, t, 1);
+        // 必須はツルハシだけ。剣・斧・シャベルは材料が足りなければ後回しにする（全部そろわないと失敗にしていた）
+        if (t === 'stone_pickaxe') await craftItem(ctx, t, 1);
+        else await craftItem(ctx, t, 1).catch((e) => ctx.log.warn(`${t} は後回し: ${e.message}`));
       }
     }
     if (!findItem(bot, 'furnace')) await craftItem(ctx, 'furnace', 1);
@@ -271,7 +273,12 @@ async function ensureIronIngots(ctx, n) {
       const safeOre = (b) => b.position.distanceTo(me) <= 16 && b.position.y >= me.y - 4 && !overVoid(bot, b.position);
       await mineBlocks(ctx, IRON_ORE, needRaw, { maxDistance: 16, maxExplore: 1, filter: safeOre });
       if (n - ingots() - count(bot, 'raw_iron') > 0) {
-        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 16);
+        // 長い掘り下がりの途中でツルハシが壊れても作り直せるよう、棒と予備の石のツルハシを用意してから潜る
+        //（地下で木が無くなりツルハシを作れず、時間切れになったことがある）
+        await craftItem(ctx, 'stick', 8).catch(() => {});
+        if (count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate') >= 6) await craftItem(ctx, 'stone_pickaxe', 2).catch(() => {});
+        // y=16 まで降りると 50 段以上かかり 10 分の制限に届くので、鉄がまだ多い y=24 で掘る
+        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 24);
       }
     } finally {
       if (mv && prevDrop !== undefined) mv.maxDropDown = prevDrop;
