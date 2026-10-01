@@ -162,7 +162,7 @@ export function isUnreachable(ctx, pos) {
 }
 
 // 見えているブロックを掘って集める。見つからなければ探索する。
-export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter } = {}) {
+export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter, onMined } = {}) {
   const { bot, cfg } = ctx;
   let mined = 0;
   let explored = 0;
@@ -179,6 +179,7 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
     try {
       await bot.collectBlock.collect(blocks[0], { ignoreNoPath: true });
       mined++;
+      onMined?.(blocks[0]);
     } catch (e) {
       if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
       ctx.log.warn(`採掘失敗 ${blocks[0].name}: ${e.message}`);

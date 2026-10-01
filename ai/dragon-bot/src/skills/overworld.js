@@ -29,11 +29,65 @@ export function isGroundedLog(bot, block) {
   return false;
 }
 
+const posKey = (p) => `${p.x},${p.y},${p.z}`;
+
+// from の周り（斜めも含む 26 方向）につながる原木をたどって tree に足す。アカシアの斜めの枝も拾える。
+export function addConnectedLogs(bot, from, tree, { limit = 48, radius = 6 } = {}) {
+  const queue = [from];
+  const seen = new Set([posKey(from)]);
+  while (queue.length > 0 && tree.size < limit) {
+    const p = queue.shift();
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const q = p.offset(dx, dy, dz);
+          const k = posKey(q);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (Math.abs(q.x - from.x) > radius || Math.abs(q.z - from.z) > radius || q.y < from.y - 1) continue;
+          const b = bot.blockAt(q);
+          if (!b || !isLog(b.name)) continue;
+          tree.set(k, q);
+          queue.push(q);
+        }
+      }
+    }
+  }
+  return tree;
+}
+
 export async function gatherWood(ctx, { logs = 8 } = {}) {
   const { bot } = ctx;
   const have = () => countMatching(bot, isLog);
   const target = have() + logs;
-  await mineBlocks(ctx, LOGS, logs, { maxDistance: 48, maxExplore: 20, filter: (b) => isGroundedLog(bot, b) });
+  // 切り始めた木は残さず切る: 切った原木につながる原木を覚えておき、新しい木より先に切る
+  const tree = new Map(); // key -> Vec3
+  const onMined = (b) => { tree.delete(posKey(b.position)); addConnectedLogs(bot, b.position, tree); };
+  const finishTree = async (limit) => {
+    for (let n = 0; n < limit && tree.size > 0; n++) {
+      abortable(ctx);
+      const me = bot.entity.position;
+      const [k, pos] = [...tree.entries()].sort((a, b) => a[1].distanceTo(me) - b[1].distanceTo(me))[0];
+      const block = bot.blockAt(pos);
+      if (!block || !isLog(block.name)) { tree.delete(k); continue; }
+      try {
+        await bot.collectBlock.collect(block, { ignoreNoPath: true });
+        onMined(block);
+      } catch (e) {
+        if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+        ctx.log.warn(`木の残りに届かない: ${e.message}`);
+        tree.delete(k); // 届かない枝はあきらめる
+      }
+    }
+  };
+  for (let guard = 0; guard < logs * 3 + 10 && have() < target; guard++) {
+    abortable(ctx);
+    if (tree.size > 0) { await finishTree(1); continue; }
+    // 次の木: 幹が地面につながっている原木から切り始める
+    const got = await mineBlocks(ctx, LOGS, 1, { maxDistance: 48, maxExplore: 20, filter: (b) => isGroundedLog(bot, b), onMined });
+    if (got === 0) break;
+  }
+  await finishTree(24); // 目標数に届いても、切りかけの木は最後まで切る
   if (have() < Math.min(target, 4)) throw new SkillError('木が見つからなかった');
   // 作業台と木のツルハシまで作っておく（普通のプレイヤーの最初の流れ）
   if (!findItem(bot, 'wooden_pickaxe') && !findItem(bot, 'stone_pickaxe')) {
