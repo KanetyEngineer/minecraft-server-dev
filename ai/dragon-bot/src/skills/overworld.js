@@ -246,6 +246,13 @@ async function ensureIronIngots(ctx, n) {
 
 export async function getIronGear(ctx, { armor = false } = {}) {
   const { bot } = ctx;
+  // 道具を作るには作業台（と棒・盾の板材）が要る。作業台も木材も無ければ、先に原木を少し集める
+  // （鉄 10 個を持っていたのに作業台を作る木が無く、失敗を繰り返したことがある）
+  const woodPlanks = () => countMatching(bot, isLog) * 4 + countMatching(bot, (n) => n.endsWith('_planks'));
+  if (!findItem(bot, 'crafting_table') && woodPlanks() < 8) {
+    ctx.log.info('作業台と棒の木材が足りないので、原木を集める');
+    await gatherWood(ctx, { logs: 4 });
+  }
   if (!findItem(bot, 'stone_pickaxe') && !findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) {
     await makeTools(ctx, { tier: 'stone' });
   }

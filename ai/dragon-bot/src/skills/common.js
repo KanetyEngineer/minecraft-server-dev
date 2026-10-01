@@ -563,7 +563,8 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
         }
       }
     } catch (e) {
-      if (!(e instanceof SkillError) || badRecipes.size + 1 >= all.length) throw e;
+      // 「原木が足りない」はどのレシピでも同じなので、他のレシピを試さずにそのまま返す
+      if (!(e instanceof SkillError) || /原木が足りない/.test(e.message) || badRecipes.size + 1 >= all.length) throw e;
       ctx.log.warn(`${name}: このレシピの材料が作れない（${e.message}）、別のレシピを試す`);
       badRecipes.add(r);
     }
