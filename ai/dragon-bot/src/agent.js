@@ -70,6 +70,8 @@ export class Agent {
   async reflexTick() {
     const { bot } = this;
     if (!bot.entity || this.reflexBusy) return;
+    // 穴にこもってふたをしている間は、外の敵に反応して飛び出さない
+    if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
     const pos = bot.entity.position;
     const threat = bot.nearestEntity((e) => isHostile(e) && e.name !== 'ender_dragon' && e.position.distanceTo(pos) < 5);
     // クリーパーには近づかない（6 マス以内なら離れる）
@@ -144,7 +146,7 @@ export class Agent {
     const { bot } = this;
     if (!bot.entity || !this.current || this.reflexBusy) { this.still = null; return; }
     const busy = bot.targetDigBlock || bot.autoEat?.isEating || bot.isSleeping || bot.currentWindow
-      || ['wait', 'sleepInBed', 'fightDragon'].includes(this.current.name);
+      || ['wait', 'sleepInBed', 'fightDragon', 'shelterForNight'].includes(this.current.name);
     const p = bot.entity.position;
     if (busy || !this.still || this.still.pos.distanceTo(p) > 1.5) {
       this.still = { pos: p.clone(), since: Date.now() };

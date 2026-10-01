@@ -495,10 +495,15 @@ export async function shelterForNight(ctx) {
   }
   const covered = bot.blockAt(cover)?.boundingBox === 'block';
   ctx.log.info(`🌙 穴にこもって朝を待つ（ふた ${covered ? 'あり' : 'なし'}）`);
+  ctx.state.sheltered = covered; // ふたがある間は反射で飛び出さない（agent.js）
   const start = Date.now();
-  while (!bot.time.isDay && Date.now() - start < 9 * 60_000) {
-    abortable(ctx);
-    await sleep(2000);
+  try {
+    while (!bot.time.isDay && Date.now() - start < 9 * 60_000) {
+      abortable(ctx);
+      await sleep(2000);
+    }
+  } finally {
+    ctx.state.sheltered = false;
   }
   // ふたを掘って出る（出るのは次のスキルの移動に任せる）
   const lid = bot.blockAt(cover);
