@@ -343,8 +343,14 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
   const start = count(bot, ores[0]);
   const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
   let di = Math.floor(Math.random() * 4);
+  // 前に水没していた場所の近くなら、離れてから掘る（同じ帯水層に何度も戻って息継ぎを繰り返していた）
+  if (ctx.state.floodedAt && ctx.state.floodedAt.distanceTo(bot.entity.position) < 24) {
+    ctx.log.info('前に水没していた場所の近くなので、離れてから横掘りする');
+    for (let k = 0; k < 3 && ctx.state.floodedAt.distanceTo(bot.entity.position) < 24; k++) await exploreStep(ctx, 24);
+  }
   for (let leg = 0; leg < 6 && got < n; leg++) {
     if (!(await ensurePickaxe(ctx))) break;
+    if (ctx.state.floodedAt && ctx.state.floodedAt.distanceTo(bot.entity.position) < 6) break;
     const [dx, dz] = dirs[di % 4];
     for (let s = 0; s < length && got < n; s += 4) {
       abortable(ctx);
@@ -358,6 +364,7 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
       // 掘り進んだ先が水没していたら（地下の帯水層など）、息が続かないのでこの場所での横掘りをやめる
       if (bot.blockAt(bot.entity.position.offset(0, 1.6, 0))?.name === 'water' || bot.entity.isInWater) {
         ctx.log.warn('横掘りの先が水没しているので、ここでのブランチマイニングをやめる');
+        ctx.state.floodedAt = bot.entity.position.clone(); // 次は別の場所で掘る
         return Math.max(got, count(bot, ores[0]) - start);
       }
       await lightIfDark(ctx).catch(() => {});

@@ -86,6 +86,7 @@ export class Agent {
       try {
         this.interrupt('息継ぎ');
         log.warn(`酸素が少ない（${bot.oxygenLevel}/20）ので水面へ上がる`);
+        this.state.floodedAt = bot.entity.position.clone(); // 水没した場所として覚え、横掘りで戻らない
         bot.setControlState('jump', true);
         const headWet = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0))?.name === 'water';
         for (let t = 0; t < 120; t++) {
