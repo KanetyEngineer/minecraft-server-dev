@@ -38,3 +38,9 @@ test('どの種類でも足りないときは合計で数える', async () => {
   await ensurePlanks({ bot: craftBot(inv) }, 2);
   assert.equal(inv.acacia_planks, 1);
 });
+test('持っていない種類の板材を指定されても、手持ちの原木を全部板材にしない', async () => {
+  const inv = { oak_planks: 1, oak_log: 10 };
+  await ensurePlanks({ bot: craftBot(inv) }, 3, 'acacia_planks');
+  assert.equal(inv.oak_planks, 5);
+  assert.equal(inv.oak_log, 9);
+});

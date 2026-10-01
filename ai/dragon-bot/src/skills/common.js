@@ -569,7 +569,9 @@ export async function ensurePlanks(ctx, n, preferred) {
       matching = bot.inventory.items().find((i) => isLog(i.name) && plankOf(i.name) === preferred);
     }
   }
-  const have = () => (preferred ? count(bot, preferred) : plankTotal());
+  // その種類の原木を持っているときだけ種類別に数える。持っていない種類（レシピが選んだアカシアなど）で数えると
+  // いつまでも 0 のままで、手持ちの原木をすべて別の板材に変えてしまう（オーク板材 62 枚・原木 0 になった）
+  const have = () => (matching ? count(bot, preferred) : plankTotal());
   for (let g = 0; g < 20 && have() < n; g++) {
     const log = (matching && bot.inventory.items().find((i) => i.name === matching.name))
       ?? bot.inventory.items().find((i) => isLog(i.name));
