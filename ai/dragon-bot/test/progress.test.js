@@ -102,3 +102,19 @@ test('エンドポータルが見つかったら、ベッドを 4 個持って�
   assert.deepEqual([s.skill, s.args], ['makeBed', { count: 4 }]);
   assert.equal(nextStep(armored(fakeBot({ ...base, white_bed: 4 })), mem).skill, 'activateEndPortal');
 });
+test('ゲートを作る前にボートを 1 つ作る（原木が無ければ木集め）', () => {
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 };
+  const s = nextStep(armored(fakeBot({ ...base, acacia_log: 3 })), fakeMemory());
+  assert.deepEqual([s.skill, s.args], ['craftTo', { item: 'acacia_boat', count: 1 }]);
+  assert.equal(nextStep(armored(fakeBot(base)), fakeMemory()).skill, 'gatherWood');
+  assert.equal(nextStep(armored(fakeBot({ ...base, oak_boat: 1 })), fakeMemory()).skill, 'collectObsidian');
+});
+
+test('ネザーで歪んだ森を知っていてボートがあれば、ロッドより先にエンダーマン狩り', () => {
+  const nether = { dimension: 'the_nether' };
+  const mem = fakeMemory({ warped_forest: { x: 5, y: 70, z: 5, dimension: 'the_nether' } });
+  assert.equal(nextStep(fakeBot({ oak_boat: 1 }, nether), mem).skill, 'huntEndermen');
+  assert.equal(nextStep(fakeBot({}, nether), mem).skill, 'huntBlazes');
+  assert.equal(nextStep(fakeBot({ oak_boat: 1 }, nether), fakeMemory()).skill, 'huntBlazes');
+});

@@ -71,6 +71,11 @@ export function nextStep(bot, memory) {
     return { skill: 'fightDragon', args: {} };
   }
   if (dim === 'the_nether') {
+    // 歪んだ森が先に見つかったら、そこでエンダーマンをボートに乗せて倒してパールを集める（huntEndermen 内）
+    noteWarpedForest(bot, memory);
+    if (!m.enderPearls && memory.getPlace('warped_forest') && hasBoat(bot)) {
+      return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
+    }
     if (!m.blazeRods) return { skill: 'huntBlazes', args: { rods: Math.ceil(c.eyesNeeded / 2) } };
     if (!m.enderPearls && count(bot, 'gold_ingot') >= 8) return { skill: 'barterWithPiglins', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     return { skill: 'returnThroughPortal', args: {} };
@@ -97,6 +102,11 @@ export function nextStep(bot, memory) {
   if (!m.diamondPickaxe) return { skill: 'mineDiamonds', args: { count: 3 } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
   if (!m.netherPortal) {
+    // ネザーの板材ではボートを作れないので、歪んだ森でのエンダーマン捕獲用に 1 つ持っていく
+    if (!hasBoat(bot)) {
+      const boat = boatRecipeFor(bot);
+      return boat ? { skill: 'craftTo', args: { item: boat, count: 1 } } : { skill: 'gatherWood', args: { logs: 4 } };
+    }
     if (!m.obsidian) return { skill: 'collectObsidian', args: { count: 10 } };
     if (!m.flintAndSteel) return { skill: 'craftTo', args: { item: 'flint_and_steel', count: 1 } };
     return { skill: 'buildNetherPortal', args: {} };
@@ -122,3 +132,25 @@ export function heldSummary(bot) {
 }
 
 export { findItem };
+
+const isBoatItem = (n) => n.endsWith('_boat') && !n.includes('chest');
+export const hasBoat = (bot) => bot.inventory.items().some((i) => isBoatItem(i.name));
+
+// 持っている原木・板材から作れるボート名（同じ種類の板材 5 枚 = 原木 2 本）。作れなければ null
+export function boatRecipeFor(bot) {
+  const items = bot.inventory.items();
+  const ok = (type) => !['crimson', 'warped', 'bamboo'].includes(type);
+  const planks = items.find((i) => i.name.endsWith('_planks') && i.count >= 5 && ok(i.name.replace('_planks', '')));
+  if (planks) return planks.name.replace('_planks', '_boat');
+  const log = items.find((i) => /_log$/.test(i.name) && !i.name.startsWith('stripped_') && i.count >= 2 && ok(i.name.replace('_log', '')));
+  return log ? log.name.replace('_log', '_boat') : null;
+}
+
+// ネザーで歪んだナイリウムがまとまって見えたら歪んだ森として覚える（毎回呼ぶ軽い処理）
+export function noteWarpedForest(bot, memory) {
+  if (typeof bot.findBlocks !== 'function' || !memory.setPlace || memory.getPlace('warped_forest')) return;
+  const id = bot.registry?.blocksByName?.warped_nylium?.id;
+  if (id === undefined) return;
+  const found = bot.findBlocks({ matching: id, maxDistance: 48, count: 12 });
+  if (found.length >= 12) memory.setPlace('warped_forest', found[0], 'the_nether');
+}
