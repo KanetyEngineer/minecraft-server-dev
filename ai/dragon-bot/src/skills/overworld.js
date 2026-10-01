@@ -294,13 +294,6 @@ async function ensureIronIngots(ctx, n) {
 
 export async function getIronGear(ctx, { armor = false } = {}) {
   const { bot } = ctx;
-  // 道具を作るには作業台（と棒・盾の板材）が要る。作業台も木材も無ければ、先に原木を少し集める
-  // （鉄 10 個を持っていたのに作業台を作る木が無く、失敗を繰り返したことがある）
-  const woodPlanks = () => countMatching(bot, isLog) * 4 + countMatching(bot, (n) => n.endsWith('_planks'));
-  if (!findItem(bot, 'crafting_table') && woodPlanks() < 8) {
-    ctx.log.info('作業台と棒の木材が足りないので、原木を集める');
-    await gatherWood(ctx, { logs: 4 });
-  }
   if (!findItem(bot, 'stone_pickaxe') && !findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) {
     await makeTools(ctx, { tier: 'stone' });
   }
@@ -319,6 +312,16 @@ export async function getIronGear(ctx, { armor = false } = {}) {
   if (want.length === 0) return '鉄装備はそろっている';
   const total = want.reduce((s, [, c]) => s + c, 0);
   await ensureIronIngots(ctx, total);
+  // 作るには作業台と棒が要る。鉄がそろってから、足りない分だけ木を確保する
+  // （最初に確認すると、地下の鉄掘りの途中で毎回地上へ木を取りに戻って行き来していた）
+  const woodPlanks = () => countMatching(bot, isLog) * 4 + countMatching(bot, (n) => n.endsWith('_planks'));
+  const sticksNeeded = Math.max(0, 3 - count(bot, 'stick'));
+  const planksNeeded = (findItem(bot, 'crafting_table') ? 0 : 4) + Math.ceil(sticksNeeded / 4) * 2
+    + (want.some(([nm]) => nm === 'shield') ? 6 : 0);
+  if (woodPlanks() < planksNeeded) {
+    ctx.log.info(`作業台と棒の木材が足りない（板材 ${woodPlanks()}/${planksNeeded}）ので、原木を集める`);
+    await gatherWood(ctx, { logs: Math.ceil((planksNeeded - woodPlanks()) / 4) + 1 });
+  }
   for (const [name] of want) {
     if (name === 'shield') await ensurePlanks(ctx, 6);
     await craftItem(ctx, name, 1);
