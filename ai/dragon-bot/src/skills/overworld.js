@@ -221,10 +221,15 @@ export async function gatherFood(ctx, { amount = 12 } = {}) {
     ctx.log.info('肉を焼く燃料が無いので原木を集める');
     await gatherWood(ctx, { logs: 3 }).catch((e) => ctx.log.warn(`燃料用の木を集められなかった: ${e.message}`));
   }
+  // かまどが無く丸石も 8 個無ければ、かまど用の丸石を掘る（死んで丸石を失った後に焼けなかった）
+  if (rawCount() > 0 && !findItem(bot, 'furnace') && cobbleCount(bot) < 8) {
+    await getCobblestone(ctx, 8).catch((e) => ctx.log.warn(`かまど用の丸石を集められなかった: ${e.message}`));
+  }
   for (const raw of Object.keys(RAW)) {
     // 焼けなくても生肉は食べられるので、失敗しても集めた分は成果とする
     if (count(bot, raw) > 0) await smelt(ctx, raw, count(bot, raw)).catch((e) => ctx.log.warn(`焼けなかった: ${e.message}`));
   }
+  abortable(ctx); // 焼いている途中で中断されたら、成功扱いにせず中断として返す
   if (cookedCount() === 0 && rawCount() === 0) throw new SkillError('動物が見つからなかった');
   // 焼けずに食料が目標に届かないときは失敗として返す（成功扱いだと同じ作業を延々と繰り返す）
   if (rawCount() > 0 && cookedCount() < amount && !hasFuel()) {
