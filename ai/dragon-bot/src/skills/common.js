@@ -206,10 +206,13 @@ export async function mineOne(ctx, block, { reach = 4.5 } = {}) {
       if (bot.blockAt(pos)?.name !== block.name) break;
     }
   }
-  // ドロップを拾う（足元に落ちていれば歩き寄る）
-  await bot.waitForTicks(6);
-  for (let i = 0; i < 3; i++) {
-    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3);
+  // ドロップを拾う（足元に落ちていれば歩き寄る）。高い所のブロック（トウヒの上の原木など）は
+  // ドロップが下まで落ちるので、着地を待ってから、掘った所の真下も含めて広めに探す
+  await bot.waitForTicks(12);
+  const center = pos.offset(0.5, 0.5, 0.5);
+  const near = (e) => Math.hypot(e.position.x - center.x, e.position.z - center.z) < 4 && e.position.y <= center.y + 1 && center.y - e.position.y < 12;
+  for (let i = 0; i < 4; i++) {
+    const item = bot.nearestEntity((e) => e.name === 'item' && near(e));
     if (!item) break;
     await bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.5)).catch(() => {});
     await bot.waitForTicks(4);
