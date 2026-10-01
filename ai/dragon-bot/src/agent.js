@@ -88,7 +88,7 @@ export class Agent {
     if (creeper) action = { kind: 'creeper', from: creeper };
     else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat) action = { kind: 'shield', from: archer };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
-    else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && !bot.entity.isInWater && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
+    else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
     if (!action) return;
 
@@ -117,6 +117,20 @@ export class Agent {
         if (n === 0) await runAway(action.from, 16);
         else await sleep(3000);
       } else if (action.kind === 'pillar') {
+        // 水中（ドラウンドなど）では柱を積めないので、まず陸に上がる
+        if (bot.entity.isInWater) {
+          const land = this.findLandAwayFrom(action.target.position);
+          if (land) {
+            bot.setControlState('sprint', true);
+            await bot.pathfinder.goto(new goals.GoalBlock(land.x, land.y, land.z)).catch(() => {});
+            bot.setControlState('sprint', false);
+          }
+          if (bot.entity.isInWater) {
+            // 陸が見つからなければ、その場で応戦する
+            await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
+            return;
+          }
+        }
         // 追いつかれた状態で積むと殴られるので、まず走って距離を取る
         if (action.target.position.distanceTo(bot.entity.position) < 5) await runAway(action.target, 8);
         if (action.target.isValid && action.target.position.distanceTo(bot.entity.position) < 3) {
@@ -155,9 +169,11 @@ export class Agent {
       this.still = { pos: p.clone(), since: Date.now() };
       return;
     }
-    if (Date.now() - this.still.since > 20_000) {
+    // 死亡地点への長い移動は経路計算に時間がかかることがあるので長めに待つ
+    const limit = this.current.name === 'recoverItems' ? 45_000 : 20_000;
+    if (Date.now() - this.still.since > limit) {
       this.still = null;
-      this.interrupt('20 秒動けなかった（フリーズ回避）');
+      this.interrupt(`${limit / 1000} 秒動けなかった（フリーズ回避）`);
       // 木の上などに取り残されたら、体力が残る範囲で落下ダメージを受け入れて飛び降りる
       const below = bot.blockAt(p.offset(0, -1, 0));
       if (below && /(_leaves|_log|_wood)$/.test(below.name) && bot.pathfinder.movements) {
@@ -175,6 +191,25 @@ export class Agent {
       bot.setControlState('jump', true);
       setTimeout(() => bot.clearControlStates(), 1200);
     }
+  }
+
+  // 敵から離れる向きで、いちばん近い陸（足元が固く、水でない 2 マスの空き）を探す
+  findLandAwayFrom(from) {
+    const { bot } = this;
+    const me = bot.entity.position;
+    let best = null;
+    for (let dx = -12; dx <= 12; dx += 2) {
+      for (let dz = -12; dz <= 12; dz += 2) {
+        for (let dy = -2; dy <= 3; dy++) {
+          const p = me.floored().offset(dx, dy, dz);
+          const g = bot.blockAt(p.offset(0, -1, 0)); const a = bot.blockAt(p); const b = bot.blockAt(p.offset(0, 1, 0));
+          if (!g || g.boundingBox !== 'block' || !a || a.boundingBox !== 'empty' || a.name === 'water' || !b || b.boundingBox !== 'empty') continue;
+          const score = p.distanceTo(me) - 0.5 * p.distanceTo(from); // 近くて、敵からは遠い
+          if (!best || score < best.score) best = { x: p.x, y: p.y, z: p.z, score };
+        }
+      }
+    }
+    return best;
   }
 
   makeCtx(controller) {

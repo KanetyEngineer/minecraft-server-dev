@@ -511,11 +511,37 @@ export async function shelterForNight(ctx) {
   const feet = bot.entity.position.floored();
   const cover = feet.offset(0, 2, 0);
   if (bot.blockAt(cover)?.boundingBox !== 'block') {
-    const item = bot.inventory.items().find((i) => ['dirt', 'cobblestone', 'cobbled_deepslate', 'stone', 'andesite', 'diorite', 'granite', 'sand', 'gravel'].includes(i.name) || i.name.endsWith('_planks'));
-    const wall = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => bot.blockAt(cover.offset(x, 0, z))).find((b) => b && b.boundingBox === 'block');
-    if (item && wall) {
-      await bot.equip(item, 'hand');
-      await bot.placeBlock(wall, cover.minus(wall.position)).catch((e) => ctx.log.warn(`ふたを置けなかった: ${e.message}`));
+    const findCoverItem = () => bot.inventory.items().find((i) => ['dirt', 'cobblestone', 'cobbled_deepslate', 'stone', 'andesite', 'diorite', 'granite', 'sand', 'gravel', 'netherrack'].includes(i.name) || i.name.endsWith('_planks') || i.name.endsWith('_log'));
+    let item = findCoverItem();
+    // ふたにするブロックが無ければ、穴の壁（頭の高さ）を 1 つ掘って手に入れる
+    if (!item) {
+      const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => bot.blockAt(feet.offset(x, 1, z)))
+        .find((b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position));
+      if (side) {
+        await bot.tool.equipForBlock(side, {}).catch(() => {});
+        await bot.dig(side, true).catch(() => {});
+        await sleep(1500); // 落ちたブロックを拾う
+        item = findCoverItem();
+      }
+    }
+    if (!item) ctx.log.warn('ふたにするブロックが無い');
+    // 壁は上段（ふたの横）→ 下段（頭の横、上面に置く）の順に試す
+    const walls = [
+      ...[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => ({ b: bot.blockAt(cover.offset(x, 0, z)), face: (b) => cover.minus(b.position) })),
+      ...[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => ({ b: bot.blockAt(cover.offset(x, -1, z)), face: () => new Vec3(0, 1, 0) })),
+    ].filter(({ b }) => b && b.boundingBox === 'block');
+    if (item && walls.length === 0) ctx.log.warn('ふたを支える壁が無い');
+    for (const { b, face } of walls) {
+      if (!item || bot.blockAt(cover)?.boundingBox === 'block') break;
+      try {
+        await bot.equip(item, 'hand');
+        await bot.look(bot.entity.yaw, Math.PI / 2 * (face(b).y > 0 ? 0.5 : 0), true).catch(() => {});
+        await bot.placeBlock(b, face(b));
+      } catch (e) {
+        ctx.log.warn(`ふたを置けなかった（${b.name} 側）: ${e.message}`);
+      }
+      // 下段の上面に置くと頭の高さに入るので、その場合はさらにその上がふたになる
+      await bot.waitForTicks(4);
     }
   }
   const covered = bot.blockAt(cover)?.boundingBox === 'block';

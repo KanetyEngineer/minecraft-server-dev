@@ -1,3 +1,4 @@
+import { Vec3 } from 'vec3';
 // LLM が細かく組み合わせるための汎用スキル
 import {
   SkillError, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
@@ -79,11 +80,18 @@ export async function recoverItems(ctx) {
   const d = ctx.memory.data.deaths.at(-1);
   if (!d) throw new SkillError('死亡記録がない');
   if (d.dimension !== dim(ctx)) throw new SkillError(`死んだのは ${d.dimension}`);
-  // 失敗しても同じ死亡地点を何度も目指さないよう、1 回試したら済みにする
+  // 途中で中断されても次の判断で続きから戻れるよう、3 回試すか拾い終えたら済みにする
+  d.attempts = (d.attempts ?? 0) + 1;
+  if (d.attempts >= 3) d.recovered = true;
+  ctx.memory.save();
+  try {
+    await travelTo(ctx, d.x, d.z, { range: 2 });
+    await goTo(ctx, d.x, d.y, d.z, 1).catch(() => {});
+    await pickUpItems(ctx, 10);
+  } catch (e) {
+    if (ctx.bot.entity.position.distanceTo(new Vec3(d.x, d.y, d.z)) > 8) throw e; // 遠くで止まったなら次回また向かう
+  }
   d.recovered = true;
   ctx.memory.save();
-  await travelTo(ctx, d.x, d.z, { range: 2 });
-  await goTo(ctx, d.x, d.y, d.z, 1).catch(() => {});
-  await pickUpItems(ctx, 10);
   return '死亡地点のアイテムを回収';
 }

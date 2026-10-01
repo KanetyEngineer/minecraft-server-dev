@@ -378,8 +378,15 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
     for (let guard = 0; guard < 64 && count(bot, name) < n; guard++) {
       const r = bot.recipesFor(item.id, null, 1, t)[0];
       if (!r) return false;
-      if (!t) { await bot.craft(r, 1); continue; }
-      await withOpenRetry(ctx, t, ensureCraftingTable, async (tb) => { t = tb; table = tb; await bot.craft(r, 1, tb); });
+      try {
+        if (!t) { await bot.craft(r, 1); continue; }
+        await withOpenRetry(ctx, t, ensureCraftingTable, async (tb) => { t = tb; table = tb; await bot.craft(r, 1, tb); });
+      } catch (e) {
+        if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+        // 柱積みなどで持ち物が変わり、レシピと実際の材料がずれた場合。材料をそろえ直す側に回す
+        if (/missing ingredient/i.test(e.message)) { ctx.log.warn(`${name} の材料がずれた（${e.message}）、そろえ直す`); return false; }
+        throw e;
+      }
     }
     return true;
   };
@@ -430,8 +437,21 @@ export async function ensurePlanks(ctx, n, preferred) {
   const plankOf = (logName) => logName.replace(/^stripped_/, '').replace(/_(log|stem)$/, '_planks');
   // 種類の指定があり、その種類の原木を持っていれば、その種類の板材の数で数える
   //（全種類の合計で数えると、アカシア 1・オーク 1 で「2 枚ある」と判断してレシピがそろわない）
-  const matching = preferred && bot.inventory.items().find((i) => isLog(i.name) && plankOf(i.name) === preferred);
-  const have = () => (matching ? count(bot, preferred) : plankTotal());
+  let matching = preferred && bot.inventory.items().find((i) => isLog(i.name) && plankOf(i.name) === preferred);
+  // 種類の指定が無いときも、1 種類だけで n 枚そろうようにする（板材＋原木×4 が最多の種類を選ぶ）
+  if (!preferred) {
+    const score = {};
+    for (const i of bot.inventory.items()) {
+      if (isPlanks(i.name)) score[i.name] = (score[i.name] ?? 0) + i.count;
+      else if (isLog(i.name)) score[plankOf(i.name)] = (score[plankOf(i.name)] ?? 0) + i.count * 4;
+    }
+    const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= n) {
+      preferred = best[0];
+      matching = bot.inventory.items().find((i) => isLog(i.name) && plankOf(i.name) === preferred);
+    }
+  }
+  const have = () => (preferred ? count(bot, preferred) : plankTotal());
   for (let g = 0; g < 20 && have() < n; g++) {
     const log = (matching && bot.inventory.items().find((i) => i.name === matching.name))
       ?? bot.inventory.items().find((i) => isLog(i.name));

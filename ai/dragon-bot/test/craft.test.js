@@ -26,8 +26,15 @@ test('種類指定の板材は、その種類で数えて足りなければ同�
   assert.equal(inv.oak_log, 2);
 });
 
-test('種類指定が無ければ合計で数える', async () => {
+test('種類指定が無くても、1 種類で数がそろうように作る（混ざった板材ではレシピがそろわない）', async () => {
   const inv = { acacia_planks: 1, oak_planks: 1, acacia_log: 3 };
   await ensurePlanks({ bot: craftBot(inv) }, 2);
-  assert.equal(inv.acacia_log, 3);
+  assert.equal(inv.acacia_log, 2);
+  assert.equal(inv.acacia_planks, 5);
+});
+
+test('どの種類でも足りないときは合計で数える', async () => {
+  const inv = { acacia_planks: 1, oak_planks: 1 };
+  await ensurePlanks({ bot: craftBot(inv) }, 2);
+  assert.equal(inv.acacia_planks, 1);
 });
