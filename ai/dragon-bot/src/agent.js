@@ -83,10 +83,32 @@ export class Agent {
         this.interrupt('息継ぎ');
         log.warn(`酸素が少ない（${bot.oxygenLevel}/20）ので水面へ上がる`);
         bot.setControlState('jump', true);
+        const headWet = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0))?.name === 'water';
         for (let t = 0; t < 120; t++) {
           await bot.waitForTicks(1);
-          const h = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
-          if (h?.name !== 'water' && bot.oxygenLevel >= 18) break;
+          if (!headWet() && bot.oxygenLevel >= 18) break;
+          // 20 ティック浮いても頭が水の中（天井がある水没した坑道など）なら、近くの空気のある所へ逃げる。
+          // 無ければ頭上のブロックを掘って空気を探す
+          if (t === 20 && headWet()) {
+            bot.setControlState('jump', false);
+            const air = nearestAirPocket(bot, 8);
+            if (air) {
+              log.warn(`真上に出られないので空気のある所 (${air.x}, ${air.y}, ${air.z}) へ`);
+              await Promise.race([
+                bot.pathfinder.goto(new goals.GoalBlock(air.x, air.y, air.z)).catch(() => {}),
+                sleep(6000),
+              ]);
+              try { bot.pathfinder.stop(); } catch {}
+            } else {
+              const up = bot.blockAt(bot.entity.position.floored().offset(0, 2, 0));
+              if (up && up.boundingBox === 'block' && bot.canDigBlock(up)) {
+                log.warn('真上に出られないので頭上を掘る');
+                await bot.tool.equipForBlock(up, {}).catch(() => {});
+                await bot.dig(up, true).catch(() => {});
+              }
+            }
+            bot.setControlState('jump', true);
+          }
         }
       } finally {
         bot.setControlState('jump', false);
@@ -318,4 +340,14 @@ export class Agent {
     this.running = false;
     this.interrupt('停止');
   }
+}
+
+// 足と頭の 2 マスが空気（水ではない）の場所で、いちばん近い所。水没した所から逃げる先
+function nearestAirPocket(bot, radius) {
+  const me = bot.entity.position;
+  const airId = bot.registry.blocksByName.air?.id;
+  if (airId === undefined) return null;
+  return bot.findBlocks({ matching: airId, maxDistance: radius, count: 300 })
+    .filter((p) => bot.blockAt(p.offset(0, 1, 0))?.name === 'air' && bot.blockAt(p.offset(0, -1, 0))?.boundingBox === 'block')
+    .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0] ?? null;
 }
