@@ -76,14 +76,15 @@ export class Agent {
   // ---------- 反射 ----------
   async reflexTick() {
     const { bot } = this;
-    if (!bot.entity || this.reflexBusy) return;
-    // 穴にこもってふたをしている間は、外の敵に反応して飛び出さない
-    if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
-    // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）
+    if (!bot.entity) return;
+    // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）。
+    // ほかの反射（戦闘など）の最中でも割り込む（戦っている間に溺れたことがある）
     const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
     // 最後に息ができていた場所（頭が水の外で地面の上）を覚えておく。溺れそうなときの第一の逃げ先
     if (headBlock && headBlock.name !== 'water' && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
-    if (headBlock?.name === 'water' && bot.oxygenLevel !== undefined && bot.oxygenLevel < 8) {
+    if (headBlock?.name === 'water' && bot.oxygenLevel !== undefined && bot.oxygenLevel < 8 && !this.airBusy) {
+      this.airBusy = true;
+      this.stopBody(); // 戦闘などほかの反射の動きも止める
       this.reflexBusy = true;
       try {
         this.interrupt('息継ぎ');
@@ -130,9 +131,13 @@ export class Agent {
       } finally {
         bot.setControlState('jump', false);
         this.reflexBusy = false;
+        this.airBusy = false;
       }
       return;
     }
+    if (this.reflexBusy) return;
+    // 穴にこもってふたをしている間は、外の敵に反応して飛び出さない
+    if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
     const pos = bot.entity.position;
     const threat = bot.nearestEntity((e) => isHostile(e) && e.name !== 'ender_dragon' && e.position.distanceTo(pos) < 5);
     // クリーパーには近づかない（6 マス以内なら離れる）
