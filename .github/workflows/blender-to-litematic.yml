@@ -1,0 +1,33 @@
+name: blender-to-litematic
+
+on:
+  push:
+    paths: ["tools/blender-to-litematic/**", ".github/workflows/blender-to-litematic.yml"]
+  pull_request:
+    paths: ["tools/blender-to-litematic/**", ".github/workflows/blender-to-litematic.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/blender-to-litematic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install "numpy<2" litemapy "bpy==5.0.1"
+      - name: Core tests
+        run: python tests/test_core.py
+      - name: Blender tests
+        run: python tests/test_blender.py
+      - name: Package add-on
+        run: |
+          cd blender_to_litematic
+          zip -r ../blender_to_litematic.zip . -x "__pycache__/*"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blender_to_litematic
+          path: tools/blender-to-litematic/blender_to_litematic.zip
