@@ -476,8 +476,11 @@ export async function shelterForNight(ctx) {
     // 下が空洞・液体なら掘らない（洞窟や溶岩に落ちない）
     if (!solidSafe(below) || !under || under.boundingBox !== 'block' || under.name === 'lava') break;
     await bot.tool.equipForBlock(below, {}).catch(() => {});
+    const y0 = bot.entity.position.y;
     await bot.dig(below, true);
-    for (let t = 0; t < 20 && !bot.entity.onGround; t++) await bot.waitForTicks(1);
+    // 掘った直後はまだ落ちていないので、1 マス下に着地するまで待つ（待たないと次の「足元」が今掘った穴になる）
+    for (let t = 0; t < 30 && !(bot.entity.onGround && bot.entity.position.y <= y0 - 0.9); t++) await bot.waitForTicks(1);
+    if (bot.entity.position.y > y0 - 0.9) break;
   }
   // 頭上（足元 +2）を、穴の壁を足場にしてふさぐ
   const feet = bot.entity.position.floored();
