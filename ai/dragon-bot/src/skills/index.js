@@ -25,6 +25,7 @@ export const SKILLS = [
   def('buildNetherPortal', ow.buildNetherPortal, '黒曜石 10 個で近くにネザーポータルを建てて火打石で着火する。'),
   def('gatherBlocks', ow.gatherBlocks, '橋や柱に使う丸石を集める（エンドに行く前に 64 個以上推奨）。', { count: int('個数', 8, 256) }),
   def('makeBed', ow.makeBed, '羊を倒して羊毛を集め、ベッドを作る。'),
+  def('shelterForNight', ow.shelterForNight, '夜、防具が無いうちはその場で 3 マス掘り下がって頭上をふさぎ、朝まで待つ。'),
   def('sleepInBed', ow.sleepInBed, '夜にベッドで寝て朝にする（ベッドの場所も覚える）。'),
   def('enterNether', nether.enterNether, '覚えているネザーポータルからネザーへ入る。'),
   def('returnThroughPortal', nether.returnThroughPortal, 'ネザーからポータルを通ってオーバーワールドに戻る。'),

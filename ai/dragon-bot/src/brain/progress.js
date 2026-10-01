@@ -76,6 +76,8 @@ export function nextStep(bot, memory) {
     return { skill: 'returnThroughPortal', args: {} };
   }
 
+  // 夜は、ベッドも鉄の防具も無いうちは穴にこもって朝を待つ（装備なしで外にいると倒され続ける）
+  if (night && !m.armor && !memory.getPlace('bed')) return { skill: 'shelterForNight', args: {} };
   if (!m.woodenTools) return { skill: 'gatherWood', args: { logs: 8 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
   if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };

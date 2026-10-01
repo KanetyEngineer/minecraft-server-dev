@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown,
+  pillarUp, pillarDown, isNextToLiquid,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -462,3 +462,46 @@ export async function gatherBlocks(ctx, { count: n = 64 } = {}) {
 }
 
 export { STONE, IRON_ORE, DIAMOND_ORE, goals };
+
+// 夜の避難: 鉄の防具が無いうちは、その場で 3 マス掘り下がって頭上をふさぎ、朝まで待つ（普通のプレイヤーの「穴にこもる」）
+export async function shelterForNight(ctx) {
+  const { bot } = ctx;
+  if (bot.time.isDay) return 'もう朝';
+  bot.pathfinder.stop();
+  const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position);
+  for (let i = 0; i < 3; i++) {
+    abortable(ctx);
+    const below = bot.blockAt(bot.entity.position.floored().offset(0, -1, 0));
+    const under = below && bot.blockAt(below.position.offset(0, -1, 0));
+    // 下が空洞・液体なら掘らない（洞窟や溶岩に落ちない）
+    if (!solidSafe(below) || !under || under.boundingBox !== 'block' || under.name === 'lava') break;
+    await bot.tool.equipForBlock(below, {}).catch(() => {});
+    await bot.dig(below, true);
+    for (let t = 0; t < 20 && !bot.entity.onGround; t++) await bot.waitForTicks(1);
+  }
+  // 頭上（足元 +2）を、穴の壁を足場にしてふさぐ
+  const feet = bot.entity.position.floored();
+  const cover = feet.offset(0, 2, 0);
+  if (bot.blockAt(cover)?.boundingBox !== 'block') {
+    const item = bot.inventory.items().find((i) => ['dirt', 'cobblestone', 'cobbled_deepslate', 'stone', 'andesite', 'diorite', 'granite', 'sand', 'gravel'].includes(i.name) || i.name.endsWith('_planks'));
+    const wall = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => bot.blockAt(cover.offset(x, 0, z))).find((b) => b && b.boundingBox === 'block');
+    if (item && wall) {
+      await bot.equip(item, 'hand');
+      await bot.placeBlock(wall, cover.minus(wall.position)).catch((e) => ctx.log.warn(`ふたを置けなかった: ${e.message}`));
+    }
+  }
+  const covered = bot.blockAt(cover)?.boundingBox === 'block';
+  ctx.log.info(`🌙 穴にこもって朝を待つ（ふた ${covered ? 'あり' : 'なし'}）`);
+  const start = Date.now();
+  while (!bot.time.isDay && Date.now() - start < 9 * 60_000) {
+    abortable(ctx);
+    await sleep(2000);
+  }
+  // ふたを掘って出る（出るのは次のスキルの移動に任せる）
+  const lid = bot.blockAt(cover);
+  if (covered && lid && bot.canDigBlock(lid)) {
+    await bot.tool.equipForBlock(lid, {}).catch(() => {});
+    await bot.dig(lid, true).catch(() => {});
+  }
+  return bot.time.isDay ? '朝まで穴で過ごした' : '待ちきれず出た';
+}
