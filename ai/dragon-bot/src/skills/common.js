@@ -194,7 +194,7 @@ export async function mineOne(ctx, block, { reach = 4.5 } = {}) {
   const b = bot.blockAt(pos);
   if (!b || b.name !== block.name) throw new Error(`${block.name} が無くなっていた`);
   if (!bot.canDigBlock(b)) throw new Error(`${block.name} は掘れない`);
-  await bot.tool.equipForBlock(b, { requireHarvest: true });
+  await equipCheapestTool(bot, b, { requireHarvest: true });
   // 掘り切るまで待つ。途中で止められたら（持ち替え・押し出し）1 回だけやり直す
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -306,7 +306,7 @@ export async function descendTo(ctx, targetY) {
           ctx.state.stairDir = [dir[1], -dir[0]]; // 液体があれば向きを変える
           break;
         }
-        await bot.tool.equipForBlock(b, {});
+        await equipCheapestTool(bot, b);
         await bot.dig(b);
       }
     }
@@ -685,7 +685,7 @@ export async function smelt(ctx, input, n) {
     if (!ctx.signal?.aborted) {
       const b = bot.blockAt(furnaceBlock.position);
       if (b && b.name === 'furnace') {
-        await bot.tool.equipForBlock(b, {}).catch(() => {});
+        await equipCheapestTool(bot, b).catch(() => {});
         await bot.dig(b, true).catch(() => {});
         await pickUpItems(ctx, 4).catch(() => {});
       }
@@ -763,7 +763,7 @@ export async function pillarDown(ctx, placed) {
   for (let i = 0; i < placed; i++) {
     const below = bot.blockAt(bot.entity.position.offset(0, -1, 0));
     if (!below || below.boundingBox !== 'block') break;
-    await bot.tool.equipForBlock(below, {}).catch(() => {});
+    await equipCheapestTool(bot, below).catch(() => {});
     await bot.dig(below).catch(() => {});
     await bot.waitForTicks(8);
   }
@@ -874,7 +874,7 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
         const b = bot.blockAt(c);
         if (!b || b.boundingBox !== 'block') break;
         if (!bot.canDigBlock(b)) break;
-        await bot.tool.equipForBlock(b, {}).catch(() => {});
+        await equipCheapestTool(bot, b).catch(() => {});
         await bot.dig(b, true).catch(() => {});
         await bot.waitForTicks(4);
       }
@@ -915,4 +915,24 @@ export async function ensurePickaxe(ctx, { minTier = 'wooden' } = {}) {
     ctx.log.warn(`ツルハシを作れなかった: ${e.message}`);
   }
   return okTiers.some((n) => findItem(bot, n));
+}
+
+// 道具の持ち替え: 掘れるうちで一番安いツルハシ・シャベル・斧を使う（mineflayer-tool は一番速い道具を選ぶので、
+// 石や石炭を鉄のツルハシで掘って、鉄のツルハシを使い潰していた）。安い道具で掘れなければ通常の選び方に任せる
+const TOOL_TIERS = ['wooden', 'stone', 'golden', 'iron', 'diamond', 'netherite'];
+export async function equipCheapestTool(bot, block, { requireHarvest = false } = {}) {
+  const kinds = ['pickaxe', 'shovel', 'axe'];
+  const items = bot.inventory.items();
+  for (const tier of TOOL_TIERS) {
+    for (const kind of kinds) {
+      const it = items.find((i) => i.name === `${tier}_${kind}`);
+      if (!it) continue;
+      // その道具で回収できて、素手より速く掘れるなら使う
+      if (!block.canHarvest(it.type)) continue;
+      if (block.digTime(it.type, false, false, false) >= block.digTime(null, false, false, false)) continue;
+      await bot.equip(it, 'hand');
+      return it;
+    }
+  }
+  return bot.tool.equipForBlock(block, { requireHarvest });
 }
