@@ -61,6 +61,11 @@ export function nextStep(bot, memory) {
   const night = bot.time && !bot.time.isDay;
 
   if (m.dragonDefeated) return { skill: 'celebrate', args: {} };
+  // 死んだら、落とした物が消える（5 分）前に拾いに戻る
+  const death = memory.data?.deaths?.at(-1);
+  if (death && !death.recovered && death.dimension === dim && Date.now() - Date.parse(death.at) < 4 * 60_000) {
+    return { skill: 'recoverItems', args: {} };
+  }
   if (dim === 'the_end') {
     if (!m.crystalsDestroyed) return { skill: 'destroyEndCrystals', args: {} };
     return { skill: 'fightDragon', args: {} };

@@ -61,3 +61,13 @@ test('エンダーアイ 12 個で要塞探しへ', () => {
   const m = milestones(fakeBot({ ender_eye: 12 }), fakeMemory());
   assert.equal(m.enderEyes, true);
 });
+
+test('死んで 4 分以内ならアイテム回収、回収済みや古い死亡なら通常どおり', () => {
+  const mem = (d) => { const m = fakeMemory(); m.data.deaths = [d]; return m; };
+  const now = new Date().toISOString();
+  const old = new Date(Date.now() - 10 * 60_000).toISOString();
+  assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'overworld', at: now })).skill, 'recoverItems');
+  assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'overworld', at: now, recovered: true })).skill, 'gatherWood');
+  assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'overworld', at: old })).skill, 'gatherWood');
+  assert.equal(nextStep(fakeBot(), mem({ x: 0, y: 64, z: 0, dimension: 'the_nether', at: now })).skill, 'gatherWood');
+});

@@ -79,10 +79,11 @@ export async function recoverItems(ctx) {
   const d = ctx.memory.data.deaths.at(-1);
   if (!d) throw new SkillError('死亡記録がない');
   if (d.dimension !== dim(ctx)) throw new SkillError(`死んだのは ${d.dimension}`);
+  // 失敗しても同じ死亡地点を何度も目指さないよう、1 回試したら済みにする
+  d.recovered = true;
+  ctx.memory.save();
   await travelTo(ctx, d.x, d.z, { range: 2 });
   await goTo(ctx, d.x, d.y, d.z, 1).catch(() => {});
   await pickUpItems(ctx, 10);
-  d.recovered = true;
-  ctx.memory.save();
   return '死亡地点のアイテムを回収';
 }
