@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout,
+  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -511,7 +511,7 @@ export async function shelterForNight(ctx) {
   const feet = bot.entity.position.floored();
   const cover = feet.offset(0, 2, 0);
   if (bot.blockAt(cover)?.boundingBox !== 'block') {
-    const findCoverItem = () => bot.inventory.items().find((i) => ['dirt', 'cobblestone', 'cobbled_deepslate', 'stone', 'andesite', 'diorite', 'granite', 'sand', 'gravel', 'netherrack'].includes(i.name) || i.name.endsWith('_planks') || i.name.endsWith('_log'));
+    const findCoverItem = () => cheapBlock(bot) ?? bot.inventory.items().find((i) => i.name.endsWith('_log')); // 丸石は最後（cheapBlock の順）
     let item = findCoverItem();
     // ふたにするブロックが無ければ、穴の壁（頭の高さ）を 1 つ掘って手に入れる
     if (!item) {

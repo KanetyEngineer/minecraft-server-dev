@@ -649,14 +649,20 @@ export { goals, LOGS, Vec3 };
 
 // ---------- 柱に乗って戦う（ゾンビ対策）----------
 
-const PILLAR_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt', 'netherrack', 'stone', 'andesite', 'diorite', 'granite'];
+// 足場・壁・ふたに使うブロックは、使い道の少ないものから先に使う（丸石は道具やかまど、ゲートに要るので最後）
+const PILLAR_BLOCKS = ['dirt', 'coarse_dirt', 'netherrack', 'andesite', 'diorite', 'granite', 'tuff', 'stone', 'cobbled_deepslate', 'cobblestone'];
+export function cheapBlock(bot) {
+  const items = bot.inventory.items();
+  for (const n of PILLAR_BLOCKS) { const it = items.find((i) => i.name === n); if (it) return it; }
+  return items.find((i) => isPlanks(i.name)) ?? null;
+}
 
 // 真下にブロックを積んで上がる（ジャンプして足元に置く、普通のプレイヤーの「柱上り」）
 export async function pillarUp(ctx, height = 2) {
   const { bot } = ctx;
   let placed = 0;
   for (let i = 0; i < height; i++) {
-    const item = bot.inventory.items().find((it) => PILLAR_BLOCKS.includes(it.name) || isPlanks(it.name));
+    const item = cheapBlock(bot);
     if (!item) break;
     await bot.equip(item, 'hand');
     await bot.look(bot.entity.yaw, -Math.PI / 2, true);
@@ -720,7 +726,7 @@ export async function placeWallToward(ctx, entity, height = 2) {
     const target = p.plus(dir).offset(0, y, 0);
     const cur = bot.blockAt(target);
     if (cur && cur.boundingBox === 'block') { placed++; continue; }
-    const item = bot.inventory.items().find((it) => PILLAR_BLOCKS.includes(it.name) || isPlanks(it.name));
+    const item = cheapBlock(bot);
     if (!item) break;
     const ref = [[0, -1, 0], [-dir.x, 0, -dir.z], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]
       .map(([x, yy, z]) => bot.blockAt(target.offset(x, yy, z)))
