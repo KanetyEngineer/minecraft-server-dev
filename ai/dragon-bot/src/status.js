@@ -15,6 +15,8 @@ export function startStatusServer(port, getAgent) {
           current: agent.current?.name ?? null,
           lastDecision: agent.lastDecision,
           history: agent.history.slice(-15),
+          thoughts: agent.thoughts.slice(-10),
+          bannedSkills: agent.loopGuard.bannedSkills(),
           planner: agent.planner.usingLLM ? 'llm' : 'rules',
           snapshot: snapshot(agent.bot, agent.memory, agent.cfg),
         };

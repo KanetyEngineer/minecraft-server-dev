@@ -7,6 +7,7 @@ import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallTow
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
+import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack', 'gatherFood']);
@@ -21,6 +22,8 @@ export class Agent {
     this.running = false;
     this.state = {}; // スキルをまたいで覚えておく小さな状態（探索の向きなど）
     this.lastDecision = null;
+    this.loopGuard = new LoopGuard();
+    this.thoughts = []; // AI の思考ログ（状態ページ用）
   }
 
   say(text) {
@@ -193,11 +196,17 @@ export class Agent {
           continue;
         }
         const snap = snapshot(this.bot, this.memory, this.cfg);
-        const decision = await this.planner.decide({
+        let decision = await this.planner.decide({
           bot: this.bot, memory: this.memory, snapshot: snap, history: this.history.slice(-12), chatLog: this.chatLog.slice(-5),
+          banned: this.loopGuard.bannedSkills(),
         });
+        // ループ検知で禁止中のスキルが選ばれたら、進捗表の案か探索に差し替える
+        decision = this.loopGuard.substitute(decision, [decision.hint]);
         this.lastDecision = { ...decision, at: new Date().toISOString() };
+        if (decision.thinking) log.brain(`思考: ${decision.thinking}`);
         log.brain(`[${decision.source}] ${decision.skill}(${JSON.stringify(decision.args)}) ${decision.thought ?? ''}`);
+        this.thoughts.push({ at: this.lastDecision.at, source: decision.source, skill: decision.skill, args: decision.args, thinking: decision.thinking ?? null, thought: decision.thought ?? null });
+        this.thoughts = this.thoughts.slice(-50);
         await this.runSkill(decision.skill, decision.args);
         if (decision.skill === 'celebrate') this.memory.setFlag('celebrated');
         await sleep(jitter(this.cfg.human.thinkDelayMs));
@@ -218,6 +227,7 @@ export class Agent {
     const limitSec = name === 'fightDragon' ? (args.minutes ?? 15) * 60 + 30 : this.cfg.skillTimeoutSec;
     const timer = setTimeout(() => { controller.abort('時間切れ'); this.stopBody(); }, limitSec * 1000);
     this.current = { name, controller, startedAt: Date.now() };
+    const before = { inv: inventoryKey(this.bot), pos: this.bot.entity?.position.clone() };
     log.skill(`開始 ${name} ${JSON.stringify(args)}`);
     let entry;
     try {
@@ -233,6 +243,15 @@ export class Agent {
     log.skill(`${entry.ok ? '成功' : '失敗'} ${name}: ${entry.result}`);
     this.history.push(entry);
     this.history = this.history.slice(-30);
+    const moved = before.pos && this.bot.entity ? this.bot.entity.position.distanceTo(before.pos) : 0;
+    const progressed = inventoryKey(this.bot) !== before.inv || moved >= 16;
+    const loop = this.loopGuard.record({ skill: name, args, ok: entry.ok, result: entry.result, progressed });
+    if (loop) {
+      const msg = `${loop.skill} が進展なしにくり返されている。${Math.round(loop.banMs / 60_000)} 分間は使わず、別の行動に切り替える`;
+      log.warn(msg);
+      this.history.push({ skill: 'ループ検知', args: {}, ok: false, result: msg });
+      this.state.heading = Math.random() * Math.PI * 2; // 探索の向きも変える
+    }
   }
 
   stop() {

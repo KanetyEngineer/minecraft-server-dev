@@ -19,11 +19,12 @@ export class Planner {
     return !!this.client && this.failStreak < 5;
   }
 
-  async decide({ bot, memory, snapshot, history, chatLog }) {
+  async decide({ bot, memory, snapshot, history, chatLog, banned = [] }) {
     const hint = nextStep(bot, memory);
-    if (!this.usingLLM) return { ...hint, source: 'rules', thought: '（ルールベース）進捗表の次の項目' };
+    if (!this.usingLLM) return { ...hint, hint, source: 'rules', thought: '（ルールベース）進捗表の次の項目' };
     try {
-      const d = await this.askClaude({ snapshot, history, chatLog, hint });
+      const d = await this.askClaude({ snapshot, history, chatLog, hint, banned });
+      d.hint = hint;
       this.failStreak = 0;
       return d;
     } catch (e) {
@@ -33,7 +34,7 @@ export class Planner {
     }
   }
 
-  buildRequest({ snapshot, history, chatLog, hint }) {
+  buildRequest({ snapshot, history, chatLog, hint, banned }) {
     const text = [
       '## 今の状況',
       '```json',
@@ -45,8 +46,9 @@ export class Planner {
       chatLog.length ? chatLog.map((c) => `- ${c.username}: ${c.message}`).join('\n') : '- なし',
       '## 進捗表からのおすすめの次の一手（参考）',
       `${hint.skill}(${JSON.stringify(hint.args)})`,
+      banned?.length ? `## 今は使えないスキル（ループ検知で一時禁止）\n${banned.join(', ')}` : '',
       '',
-      '次に使うスキルを 1 つ呼んでください。',
+      '先に「なぜそうするか」を 1〜2 文で書いてから、次に使うスキルを 1 つ呼んでください。',
     ].join('\n');
 
     const req = {
@@ -57,6 +59,8 @@ export class Planner {
       tools: this.tools,
       tool_choice: { type: 'auto', disable_parallel_tool_use: true },
       output_config: { effort: this.cfg.llm.effort },
+      // 判断の思考過程も受け取り、ログに出す（人が読める要約が返る）
+      thinking: { type: 'adaptive' },
       messages: [{ role: 'user', content: text }],
     };
     if (this.cfg.llm.fallbacks) {
@@ -77,11 +81,12 @@ export class Planner {
   parseResponse(res) {
     if (res.stop_reason === 'refusal') throw new Error('リクエストが拒否された');
     const thought = res.content.filter((b) => b.type === 'text').map((b) => b.text).join(' ').trim();
+    const thinking = res.content.filter((b) => b.type === 'thinking').map((b) => b.thinking).join('\n').trim();
     const call = res.content.find((b) => b.type === 'tool_use');
     if (!call) throw new Error(`スキルが選ばれなかった: ${thought.slice(0, 80)}`);
     const skill = SKILL_MAP[call.name];
     if (!skill) throw new Error(`未知のスキル ${call.name}`);
     const args = sanitizeArgs(skill, call.input);
-    return { skill: call.name, args, thought, source: 'llm' };
+    return { skill: call.name, args, thought, thinking, source: 'llm' };
   }
 }
