@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
@@ -72,12 +72,16 @@ export class Agent {
     if (!bot.entity || this.reflexBusy) return;
     const pos = bot.entity.position;
     const threat = bot.nearestEntity((e) => isHostile(e) && e.name !== 'ender_dragon' && e.position.distanceTo(pos) < 5);
-    const creeper = bot.nearestEntity((e) => e.name === 'creeper' && e.position.distanceTo(pos) < 4);
+    // クリーパーには近づかない（6 マス以内なら離れる）
+    const creeper = bot.nearestEntity((e) => e.name === 'creeper' && e.position.distanceTo(pos) < 6);
+    // 遠くから撃ってくるスケルトン
+    const archer = bot.nearestEntity((e) => ['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(pos) < 24);
     const recentlyHurt = Date.now() - this.lastHurtAt < 2500;
     const inCombat = this.current && COMBAT_SKILLS.has(this.current.name);
 
     let action = null;
-    if (creeper && !inCombat) action = { kind: 'flee', from: creeper };
+    if (creeper) action = { kind: 'creeper', from: creeper };
+    else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat) action = { kind: 'shield', from: archer };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
     else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && !bot.entity.isInWater && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
@@ -85,9 +89,35 @@ export class Agent {
 
     this.reflexBusy = true;
     try {
-      this.interrupt(action.kind === 'flee' ? `${action.from.name} から逃げる` : `${action.target.name} に攻撃された`);
+      this.interrupt(action.from ? `${action.from.name} を避ける` : `${action.target.name} に攻撃された`);
       const ctx = this.makeCtx(new AbortController());
-      if (action.kind === 'pillar') {
+      const runAway = async (from, dist = 14) => {
+        const p = bot.entity.position; const f = from.position;
+        const d = Math.hypot(p.x - f.x, p.z - f.z) || 1;
+        bot.setControlState('sprint', true);
+        await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + ((p.x - f.x) / d) * dist, p.z + ((p.z - f.z) / d) * dist, 2)).catch(() => {});
+        bot.setControlState('sprint', false);
+      };
+      if (action.kind === 'creeper') {
+        // 爆発しそうなほど近ければ、間にブロックを置いて爆風を和らげてから離れる
+        if (action.from.position.distanceTo(bot.entity.position) < 3.5) {
+          const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
+          log.info(`クリーパーとの間にブロックを ${n} 個置いた`);
+        }
+        await runAway(action.from, 12);
+      } else if (action.kind === 'shield') {
+        // スケルトン: 矢の飛んでくる方向に壁を置いて盾にし、少し待ってから作業に戻る
+        const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
+        log.info(`スケルトンの方向に壁を ${n} 個置いた`);
+        if (n === 0) await runAway(action.from, 16);
+        else await sleep(3000);
+      } else if (action.kind === 'pillar') {
+        // 追いつかれた状態で積むと殴られるので、まず走って距離を取る
+        if (action.target.position.distanceTo(bot.entity.position) < 5) await runAway(action.target, 8);
+        if (action.target.isValid && action.target.position.distanceTo(bot.entity.position) < 3) {
+          await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
+          return;
+        }
         // ゾンビ系: 3 ブロック積んで上から倒し、終わったら降りる
         // 1.21.11 のゾンビは槍を持つことがありリーチが長いので 3 段積む
         const placed = await pillarUp(ctx, 3).catch(() => 0);
@@ -101,13 +131,9 @@ export class Agent {
       } else if (action.kind === 'fight') {
         await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
       } else {
-        const p = bot.entity.position; const f = action.from.position;
-        const d = Math.hypot(p.x - f.x, p.z - f.z) || 1;
-        bot.setControlState('sprint', true);
-        await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + ((p.x - f.x) / d) * 14, p.z + ((p.z - f.z) / d) * 14, 3)).catch(() => {});
-        bot.setControlState('sprint', false);
+        await runAway(action.from, 14);
       }
-      this.history.push({ skill: `反射:${action.kind}`, args: {}, ok: true, result: action.kind !== 'flee' ? `${action.target.name} と戦った` : '逃げた' });
+      this.history.push({ skill: `反射:${action.kind}`, args: {}, ok: true, result: action.target ? `${action.target.name} と戦った` : `${action.from.name} を避けた` });
     } finally {
       this.reflexBusy = false;
     }

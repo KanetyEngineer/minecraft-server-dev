@@ -597,3 +597,33 @@ export async function fightFromAbove(ctx, names, { timeoutMs = 30000 } = {}) {
   }
   return false;
 }
+
+// 相手の方向に 2 段の壁を置いて盾にする（スケルトンの矢・クリーパーの爆風よけ）
+export async function placeWallToward(ctx, entity, height = 2) {
+  const { bot } = ctx;
+  const p = bot.entity.position.floored();
+  const dx = entity.position.x - bot.entity.position.x;
+  const dz = entity.position.z - bot.entity.position.z;
+  const dir = Math.abs(dx) > Math.abs(dz) ? new Vec3(Math.sign(dx), 0, 0) : new Vec3(0, 0, Math.sign(dz));
+  let placed = 0;
+  for (let y = 0; y < height; y++) {
+    const target = p.plus(dir).offset(0, y, 0);
+    const cur = bot.blockAt(target);
+    if (cur && cur.boundingBox === 'block') { placed++; continue; }
+    const item = bot.inventory.items().find((it) => PILLAR_BLOCKS.includes(it.name) || isPlanks(it.name));
+    if (!item) break;
+    const ref = [[0, -1, 0], [-dir.x, 0, -dir.z], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]
+      .map(([x, yy, z]) => bot.blockAt(target.offset(x, yy, z)))
+      .find((b) => b && b.boundingBox === 'block' && !b.position.equals(p) && !b.position.equals(p.offset(0, 1, 0)));
+    if (!ref) continue;
+    await bot.equip(item, 'hand');
+    await bot.lookAt(target.offset(0.5, 0.5, 0.5), true);
+    try {
+      await bot.placeBlock(ref, target.minus(ref.position));
+      placed++;
+    } catch {
+      // 置けなければ次の段
+    }
+  }
+  return placed;
+}
