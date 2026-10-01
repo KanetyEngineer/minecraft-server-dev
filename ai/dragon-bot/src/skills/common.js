@@ -354,6 +354,26 @@ export async function placeNear(ctx, itemName) {
   throw new SkillError(`${itemName} を置ける場所がない`);
 }
 
+// 置ける場所が無ければ、少し歩いて場所を変えてから置き直す（木の中・水辺・急斜面で何度も失敗しないように）
+export async function placeNearOrRelocate(ctx, itemName, tries = 3) {
+  const { bot } = ctx;
+  let lastErr = null;
+  for (let i = 0; i < tries; i++) {
+    abortable(ctx);
+    try {
+      return await placeNear(ctx, itemName);
+    } catch (e) {
+      if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+      lastErr = e;
+      ctx.log.warn(`${e.message}。場所を変えて置き直す（${i + 1}/${tries}）`);
+      const a = Math.random() * Math.PI * 2;
+      const p = bot.entity.position;
+      await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + Math.cos(a) * 6, p.z + Math.sin(a) * 6, 1)).catch(() => {});
+    }
+  }
+  throw lastErr;
+}
+
 // ---------- クラフト ----------
 
 // 近くの作業台・かまどを使う。行けない・手が届かないものは外して null（呼び出し側で新しく置く）。
@@ -391,7 +411,7 @@ export async function ensureCraftingTable(ctx) {
   const near = await nearbyBlock(ctx, 'crafting_table');
   if (near) return near;
   if (!findItem(ctx.bot, 'crafting_table')) await craftItem(ctx, 'crafting_table', 1, { noTable: true });
-  return placeNear(ctx, 'crafting_table');
+  return placeNearOrRelocate(ctx, 'crafting_table');
 }
 
 // 材料が足りなければ中間素材（板材・棒など）も作る簡易レシピ解決
@@ -512,7 +532,7 @@ export async function ensureFurnace(ctx) {
     if (!r) throw new SkillError('かまどのレシピが使えない');
     await bot.craft(r, 1, table);
   }
-  return placeNear(ctx, 'furnace');
+  return placeNearOrRelocate(ctx, 'furnace');
 }
 
 export async function smelt(ctx, input, n) {
