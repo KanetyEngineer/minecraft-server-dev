@@ -222,6 +222,20 @@ export async function gatherFood(ctx, { amount = 12 } = {}) {
   return `食料 ${cookedCount()} 個（生 ${rawCount()}）`;
 }
 
+// そのブロックの下（または手前の足場）が 4 マス以上の空洞なら、渓谷や大きな洞窟の壁にあるとみなす
+function overVoid(bot, pos) {
+  for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    let air = 0;
+    for (let dy = 1; dy <= 5; dy++) {
+      const b = bot.blockAt(pos.offset(dx, -dy, dz));
+      if (!b || b.boundingBox !== 'empty') break;
+      air++;
+    }
+    if (air >= 4) return true;
+  }
+  return false;
+}
+
 async function ensureIronIngots(ctx, n) {
   const { bot } = ctx;
   const ingots = () => count(bot, 'iron_ingot');
@@ -230,10 +244,21 @@ async function ensureIronIngots(ctx, n) {
   if (needRaw > 0) {
     // 鉄鉱石は石のツルハシ以上でないと掘れない
     if (!(await ensurePickaxe(ctx, { minTier: 'stone' }))) throw new SkillError('石のツルハシが無くて鉄を掘れない');
-    // まず見えている鉄鉱石、無ければ Y=16 付近でブランチマイニング
-    await mineBlocks(ctx, IRON_ORE, needRaw, { maxDistance: 32, maxExplore: 3 });
-    if (n - ingots() - count(bot, 'raw_iron') > 0) {
-      await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 16);
+    // 洞窟や渓谷で転落・溺死・挟み撃ちが多かったので、鉄掘りの間は高い所から降りない。
+    // 見えている鉄鉱石は、近くて足元より大きく低くなく、下が深い空洞（渓谷の壁）でないものだけ狙う。
+    // 無ければ自分で掘った坑道（Y=16 付近のブランチマイニング）で探す
+    const mv = bot.pathfinder.movements;
+    const prevDrop = mv?.maxDropDown;
+    if (mv) mv.maxDropDown = 2;
+    try {
+      const me = bot.entity.position;
+      const safeOre = (b) => b.position.distanceTo(me) <= 16 && b.position.y >= me.y - 4 && !overVoid(bot, b.position);
+      await mineBlocks(ctx, IRON_ORE, needRaw, { maxDistance: 16, maxExplore: 1, filter: safeOre });
+      if (n - ingots() - count(bot, 'raw_iron') > 0) {
+        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 16);
+      }
+    } finally {
+      if (mv && prevDrop !== undefined) mv.maxDropDown = prevDrop;
     }
   }
   // 燃料に石炭を少し確保
@@ -259,11 +284,13 @@ export async function getIronGear(ctx, { armor = false } = {}) {
   const want = [];
   if (!findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) want.push(['iron_pickaxe', 3]);
   if (!findItem(bot, 'iron_sword') && !findItem(bot, 'diamond_sword')) want.push(['iron_sword', 2]);
+  // 盾は鉄 1 個で作れて矢を防げるので、道具と一緒に最初から作る
+  if (!findItem(bot, 'shield')) want.push(['shield', 1]);
   if (!findItem(bot, 'bucket') && !findItem(bot, 'water_bucket') && !findItem(bot, 'lava_bucket')) want.push(['bucket', 3]);
   if (armor) {
     for (const [p, c] of [['iron_chestplate', 8], ['iron_leggings', 7], ['iron_helmet', 5], ['iron_boots', 4], ['shield', 1]]) {
       const worn = bot.inventory.slots.some((s) => s && s.name.endsWith(p.split('_')[1]) && !s.name.startsWith('leather'));
-      if (!worn) want.push([p, c]);
+      if (!worn && !want.some(([n]) => n === p)) want.push([p, c]);
     }
   }
   if (want.length === 0) return '鉄装備はそろっている';
@@ -272,6 +299,16 @@ export async function getIronGear(ctx, { armor = false } = {}) {
   for (const [name] of want) {
     if (name === 'shield') await ensurePlanks(ctx, 6);
     await craftItem(ctx, name, 1);
+  }
+  // 余った鉄で防具を早めに作って着る（死ぬと大きく後戻りするので、道具の段階から少しでも硬くする）
+  if (!armor) {
+    for (const [p, c] of [['iron_helmet', 5], ['iron_boots', 4], ['iron_chestplate', 8], ['iron_leggings', 7]]) {
+      const worn = bot.inventory.slots.some((sl) => sl && sl.name === p);
+      if (!worn && count(bot, 'iron_ingot') + count(bot, 'raw_iron') >= c) {
+        if (count(bot, 'raw_iron') > 0) await smelt(ctx, 'raw_iron', count(bot, 'raw_iron')).catch(() => {});
+        if (count(bot, 'iron_ingot') >= c) { await craftItem(ctx, p, 1).catch(() => {}); want.push([p, c]); }
+      }
+    }
   }
   await bot.armorManager.equipAll();
   const shield = findItem(bot, 'shield');
