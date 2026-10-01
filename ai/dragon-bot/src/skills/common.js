@@ -259,7 +259,11 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       fails = 0;
       onMined?.(blocks[0]);
     } catch (e) {
-      if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+      if (e.name === 'AbortError' || ctx.signal?.aborted) {
+        // 見張りや反射で中断されたときも、このブロックはしばらく外す（次の判断で同じ届かないブロックを選び直さない）
+        markUnreachable(ctx, blocks[0].position);
+        throw e;
+      }
       ctx.log.warn(`採掘失敗 ${blocks[0].name}: ${e.message}`);
       if (/tool|harvest/i.test(e.message)) throw new SkillError(`${blocks[0].name} を掘る道具がない`);
       // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）
