@@ -213,12 +213,23 @@ export async function gatherFood(ctx, { amount = 12 } = {}) {
     await attackEntity(ctx, a, { timeoutMs: 20000 });
     await pickUpItems(ctx, 6);
   }
-  // 生肉は焼く
+  // 生肉は焼く。燃料（石炭・木炭・木材）が無ければ先に原木を少し集める
+  // （燃料もかまども無いまま「焼けなかった」→成功扱い→同じ作業を 3 秒ごとに繰り返していた）
+  const hasFuel = () => count(bot, 'coal') + count(bot, 'charcoal') > 0
+    || countMatching(bot, (n) => isLog(n) || n.endsWith('_planks')) > 0;
+  if (rawCount() > 0 && !hasFuel()) {
+    ctx.log.info('肉を焼く燃料が無いので原木を集める');
+    await gatherWood(ctx, { logs: 3 }).catch((e) => ctx.log.warn(`燃料用の木を集められなかった: ${e.message}`));
+  }
   for (const raw of Object.keys(RAW)) {
     // 焼けなくても生肉は食べられるので、失敗しても集めた分は成果とする
     if (count(bot, raw) > 0) await smelt(ctx, raw, count(bot, raw)).catch((e) => ctx.log.warn(`焼けなかった: ${e.message}`));
   }
   if (cookedCount() === 0 && rawCount() === 0) throw new SkillError('動物が見つからなかった');
+  // 焼けずに食料が目標に届かないときは失敗として返す（成功扱いだと同じ作業を延々と繰り返す）
+  if (rawCount() > 0 && cookedCount() < amount && !hasFuel()) {
+    throw new SkillError(`肉を焼けない（燃料が無い）。食料 ${cookedCount()} 個（生 ${rawCount()}）`);
+  }
   return `食料 ${cookedCount()} 個（生 ${rawCount()}）`;
 }
 
