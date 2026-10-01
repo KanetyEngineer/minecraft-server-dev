@@ -54,7 +54,10 @@ export function configureBody(bot) {
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
   bot.pathfinder.setMovements(mv);
-  bot.pathfinder.thinkTimeout = 10000;
+  // 掘削・塔積み込みの経路探索は範囲を絞らないとノードが膨れ、ヒープ不足で落ちる。
+  // 長距離は travelTo が 64 ブロックずつ区切るので、半径 128 で足りる。
+  bot.pathfinder.thinkTimeout = 5000;
+  bot.pathfinder.searchRadius = 128;
 
   // pvp プラグインも同じ移動ルールで追いかける
   if (bot.pvp) {

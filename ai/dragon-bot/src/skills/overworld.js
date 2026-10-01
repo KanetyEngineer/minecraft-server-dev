@@ -7,6 +7,9 @@ import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
 
 const STONE = ['stone', 'cobblestone', 'deepslate', 'cobbled_deepslate', 'andesite', 'diorite', 'granite', 'tuff'];
+// 掘ると丸石（深層岩の丸石）になるもの。花崗岩などはそのまま落ちるので丸石集めには使わない。
+const COBBLE_SOURCES = ['stone', 'cobblestone', 'deepslate', 'cobbled_deepslate'];
+const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'];
 const IRON_ORE = ['iron_ore', 'deepslate_iron_ore'];
 const COAL_ORE = ['coal_ore', 'deepslate_coal_ore'];
 const DIAMOND_ORE = ['diamond_ore', 'deepslate_diamond_ore'];
@@ -29,12 +32,15 @@ export async function gatherWood(ctx, { logs = 8 } = {}) {
 export async function getCobblestone(ctx, n) {
   const { bot } = ctx;
   if (cobbleCount(bot) >= n) return;
+  // ツルハシなしで石を掘っても何も落ちず、経路探索も膨れるので先に止める
+  if (!PICKAXES.some((p) => findItem(bot, p))) throw new SkillError('ツルハシが無いので丸石を掘れない');
   // 見えている石を掘る。無ければ少し掘り下がる。
-  await mineBlocks(ctx, STONE, n - cobbleCount(bot), { maxDistance: 24, maxExplore: 2 });
-  if (cobbleCount(bot) < n) {
+  await mineBlocks(ctx, COBBLE_SOURCES, n - cobbleCount(bot), { maxDistance: 24, maxExplore: 2 });
+  if (cobbleCount(bot) < n && PICKAXES.some((p) => findItem(bot, p))) {
     const y = Math.floor(bot.entity.position.y);
-    await branchMine(ctx, STONE, n - cobbleCount(bot), y - 8, { length: 12 });
+    await branchMine(ctx, COBBLE_SOURCES, n - cobbleCount(bot), y - 8, { length: 12 });
   }
+  if (cobbleCount(bot) < n) throw new SkillError(`丸石が足りない（${cobbleCount(bot)}/${n}）`);
 }
 
 export async function makeTools(ctx, { tier = 'stone' } = {}) {
@@ -238,7 +244,7 @@ export async function buildNetherPortal(ctx) {
   const { bot, memory } = ctx;
   if (count(bot, 'obsidian') < 10) throw new SkillError('黒曜石が 10 個必要');
   if (!findItem(bot, 'flint_and_steel')) await craftItem(ctx, 'flint_and_steel', 1);
-  if (count(bot, 'cobblestone') < 4) await mineBlocks(ctx, STONE, 4, { maxExplore: 2 });
+  if (count(bot, 'cobblestone') < 4) await mineBlocks(ctx, COBBLE_SOURCES, 4, { maxExplore: 2 });
 
   const origin = findPortalSite(bot);
   if (!origin) throw new SkillError('ポータルを建てる平らな場所がない');
