@@ -65,7 +65,8 @@ export class Agent {
 
   stopBody() {
     const { bot } = this;
-    try { bot.pathfinder.stop(); } catch {}
+    // stop() は次の goto まで止めてしまう（新しい作業の最初の移動が「Path was stopped」で失敗する）ので、目標を外すだけにする
+    try { bot.pathfinder.setGoal(null); } catch {}
     try { bot.pvp.stop(); } catch {}
     try { bot.collectBlock.cancelTask?.(); } catch {}
     try { bot.hawkEye.stop(); } catch {}

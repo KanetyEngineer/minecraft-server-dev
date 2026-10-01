@@ -91,7 +91,8 @@ export function nextStep(bot, memory) {
     if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     return { skill: 'shelterForNight', args: {} };
   }
-  if (!m.woodenTools) return { skill: 'gatherWood', args: { logs: 8 } };
+  // ツルハシを失っても原木が 3 本以上あれば、木集めに戻らずそのまま道具を作る（makeTools が木のツルハシから作る）
+  if (!m.woodenTools && c.logs < 3) return { skill: 'gatherWood', args: { logs: 8 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
   if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）

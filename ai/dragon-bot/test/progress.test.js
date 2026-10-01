@@ -127,3 +127,7 @@ test('ゲートは RTA 式（溶岩と水バケツ）。3 回失敗したらダ�
   assert.equal(nextStep(armored(fakeBot(base)), failed).skill, 'mineDiamonds');
   assert.equal(nextStep(armored(fakeBot({ ...base, diamond_pickaxe: 1 })), failed).skill, 'collectObsidian');
 });
+test('ツルハシを失っても原木が 3 本以上あれば、木集めに戻らず道具を作る', () => {
+  assert.equal(nextStep(fakeBot({ oak_log: 14 }), fakeMemory()).skill, 'makeTools');
+  assert.equal(nextStep(fakeBot({ oak_log: 2 }), fakeMemory()).skill, 'gatherWood');
+});
