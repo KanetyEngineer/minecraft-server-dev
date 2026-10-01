@@ -131,3 +131,10 @@ test('ツルハシを失っても原木が 3 本以上あれば、木集めに�
   assert.equal(nextStep(fakeBot({ oak_log: 14 }), fakeMemory()).skill, 'makeTools');
   assert.equal(nextStep(fakeBot({ oak_log: 2 }), fakeMemory()).skill, 'gatherWood');
 });
+test('体力が 8 以下なら、昼でも穴で休んで回復する', () => {
+  const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20 });
+  b.health = 6;
+  assert.deepEqual(nextStep(b, fakeMemory()), { skill: 'shelterForNight', args: { untilHealed: true } });
+  b.health = 18;
+  assert.notEqual(nextStep(b, fakeMemory()).skill, 'shelterForNight');
+});

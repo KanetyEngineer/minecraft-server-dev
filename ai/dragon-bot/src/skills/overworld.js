@@ -575,9 +575,13 @@ export { STONE, IRON_ORE, DIAMOND_ORE, goals };
 
 // 夜の避難: その場で 3 マス掘り下がって頭上をふさぐ（普通のプレイヤーの「穴にこもる」）。
 // ベッドを持っていれば穴の横に 2 マス空けて置いて寝る（起きたら回収）。寝られなければ朝まで待つ。
-export async function shelterForNight(ctx) {
+export async function shelterForNight(ctx, { untilHealed = false } = {}) {
   const { bot } = ctx;
-  if (bot.time.isDay) return 'もう朝';
+  // untilHealed: 体力が少ないときに、昼でも穴にこもって回復を待つ（弱ったまま掘ったり戦ったりして死んでいた）
+  if (bot.time.isDay && !untilHealed) return 'もう朝';
+  const keepWaiting = untilHealed
+    ? (start) => bot.health < 16 && Date.now() - start < 3 * 60_000
+    : (start) => !bot.time.isDay && Date.now() - start < 9 * 60_000;
   bot.pathfinder.stop();
   const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position);
   // 足元から 4 段下まで固くて液体の無い場所か（木の上や洞窟の天井では掘らない）
@@ -655,7 +659,7 @@ export async function shelterForNight(ctx) {
       });
       if (slept) ctx.log.info('🛏 ベッドで寝て朝になった');
     }
-    while (!bot.time.isDay && Date.now() - start < 9 * 60_000) {
+    while (keepWaiting(start)) {
       abortable(ctx);
       await sleep(2000);
     }
@@ -668,6 +672,7 @@ export async function shelterForNight(ctx) {
     await bot.tool.equipForBlock(lid, {}).catch(() => {});
     await bot.dig(lid, true).catch(() => {});
   }
+  if (untilHealed) return `穴で休んで体力 ${Math.round(bot.health)}/20 まで回復`;
   return bot.time.isDay ? '朝まで穴で過ごした' : '待ちきれず出た';
 }
 

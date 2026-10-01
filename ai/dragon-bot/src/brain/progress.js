@@ -87,6 +87,8 @@ export function nextStep(bot, memory) {
   //   ただしボットの生存のため、鉄の防具と盾はネザーの前にそろえる。黒曜石を掘るためダイヤのツルハシも作る。
 
   // 夜は穴にこもる（ベッドがあれば中で寝る）。ただし防具があってパール集めの段階なら、夜はエンダーマン狩りの時間
+  // 体力が少ないうちは、掘ったり戦ったりせず穴で休んで回復する（弱ったまま作業を続けて死んでいた）
+  if (typeof bot.health === 'number' && bot.health <= 8) return { skill: 'shelterForNight', args: { untilHealed: true } };
   if (night) {
     if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     return { skill: 'shelterForNight', args: {} };

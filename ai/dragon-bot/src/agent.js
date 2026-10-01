@@ -257,7 +257,8 @@ export class Agent {
       if (below && /(_leaves|_log|_wood)$/.test(below.name) && bot.pathfinder.movements) {
         const mv = bot.pathfinder.movements;
         // 落下ダメージ = 高さ - 3。体力を 4 以上残す高さまで許可する
-        mv.maxDropDown = Math.max(4, Math.min(20, Math.floor(bot.health) - 4 + 3));
+        // 落下ダメージは (高さ-3)。体力を 6 以上残し、最大でも 12 マスまで（20 マスまで許していて転落死した）
+      mv.maxDropDown = Math.max(4, Math.min(12, Math.floor(bot.health) - 6 + 3));
         log.info(`木の上で動けないので、最大 ${mv.maxDropDown} マスの飛び降りを許可`);
         clearTimeout(this.dropTimer);
         this.dropTimer = setTimeout(() => { mv.maxDropDown = 4; }, 30_000);
