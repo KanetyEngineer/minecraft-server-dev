@@ -469,6 +469,17 @@ export async function shelterForNight(ctx) {
   if (bot.time.isDay) return 'もう朝';
   bot.pathfinder.stop();
   const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position);
+  // 足元から 4 段下まで固くて液体の無い場所か（木の上や洞窟の天井では掘らない）
+  const diggableAt = (feet) => [1, 2, 3].every((d) => solidSafe(bot.blockAt(feet.offset(0, -d, 0))))
+    && bot.blockAt(feet.offset(0, -4, 0))?.boundingBox === 'block';
+  if (!diggableAt(bot.entity.position.floored())) {
+    const ground = ['grass_block', 'dirt', 'stone', 'sand', 'coarse_dirt', 'podzol', 'deepslate', 'andesite', 'diorite', 'granite']
+      .map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id !== undefined);
+    const spot = bot.findBlocks({ matching: ground, maxDistance: 16, count: 64 })
+      .map((p) => p.offset(0, 1, 0))
+      .find((f) => bot.blockAt(f)?.boundingBox === 'empty' && bot.blockAt(f.offset(0, 1, 0))?.boundingBox === 'empty' && diggableAt(f));
+    if (spot) await bot.pathfinder.goto(new goals.GoalBlock(spot.x, spot.y, spot.z)).catch(() => {});
+  }
   for (let i = 0; i < 3; i++) {
     abortable(ctx);
     const below = bot.blockAt(bot.entity.position.floored().offset(0, -1, 0));
