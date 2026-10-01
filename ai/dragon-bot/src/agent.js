@@ -358,7 +358,10 @@ export class Agent {
     this.history = this.history.slice(-30);
     const moved = before.pos && this.bot.entity ? this.bot.entity.position.distanceTo(before.pos) : 0;
     const progressed = inventoryKey(this.bot) !== before.inv || moved >= 16;
-    const loop = this.loopGuard.record({ skill: name, args, ok: entry.ok, result: entry.result, progressed });
+    // 反射（敵を避ける・攻撃された・息継ぎ・死亡）による中断は、スキル自体のループではないので数えない
+    //（クリーパーを 2 回避けただけで木集めが 3 分禁止されていた）
+    const byReflex = !entry.ok && /中断（.*(避ける|攻撃された|息継ぎ|死亡|停止)/.test(entry.result);
+    const loop = byReflex ? null : this.loopGuard.record({ skill: name, args, ok: entry.ok, result: entry.result, progressed });
     if (loop) {
       const msg = `${loop.skill} が進展なしにくり返されている。${Math.round(loop.banMs / 60_000)} 分間は使わず、別の行動に切り替える`;
       log.warn(msg);
