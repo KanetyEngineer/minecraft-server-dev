@@ -2,6 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
+  pillarUp, pillarDown,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -56,6 +57,45 @@ export function addConnectedLogs(bot, from, tree, { limit = 48, radius = 6 } = {
   return tree;
 }
 
+// 届かない原木: 近くまで歩き、届く高さまでブロックを積んで登り、届く範囲の原木をまとめて切って降りる。
+// 積むブロックが無ければ、持っている原木から板材を作って使う（降りるときに掘って回収する）。
+async function cutFromPillar(ctx, block, tree, onMined) {
+  const { bot } = ctx;
+  const p = block.position;
+  await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + 0.5, p.z + 0.5, 1.5)).catch(() => {});
+  const feetY = Math.floor(bot.entity.position.y);
+  const need = p.y - feetY - 3; // 足元から 3〜4 段上までは手が届く
+  if (need > 8) return false;
+  let placed = 0;
+  if (need > 0) {
+    const blocks = bot.inventory.items()
+      .filter((i) => ['cobblestone', 'cobbled_deepslate', 'dirt', 'netherrack', 'stone', 'andesite', 'diorite', 'granite'].includes(i.name) || i.name.endsWith('_planks'))
+      .reduce((s, i) => s + i.count, 0);
+    if (blocks < need) await ensurePlanks(ctx, need + 4);
+    placed = await pillarUp(ctx, need);
+  }
+  try {
+    // 登った位置から届く原木を近い順に切る（狙いの原木も含む）
+    const eye = () => bot.entity.position.offset(0, 1.62, 0);
+    const reach = [...tree.values(), p]
+      .filter((q) => eye().distanceTo(q.offset(0.5, 0.5, 0.5)) <= 4.5)
+      .sort((a, b) => eye().distanceTo(a) - eye().distanceTo(b));
+    let cut = false;
+    for (const q of reach) {
+      const b = bot.blockAt(q);
+      if (!b || !isLog(b.name)) { tree.delete(`${q.x},${q.y},${q.z}`); continue; }
+      await bot.tool.equipForBlock(b, {}).catch(() => {});
+      await bot.dig(b, true);
+      onMined(b);
+      if (q.equals(p)) cut = true;
+    }
+    return cut;
+  } finally {
+    if (placed > 0) await pillarDown(ctx, placed);
+    await pickUpItems(ctx, 8).catch(() => {});
+  }
+}
+
 export async function gatherWood(ctx, { logs = 8 } = {}) {
   const { bot } = ctx;
   const have = () => countMatching(bot, isLog);
@@ -75,8 +115,13 @@ export async function gatherWood(ctx, { logs = 8 } = {}) {
         onMined(block);
       } catch (e) {
         if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
-        ctx.log.warn(`木の残りに届かない: ${e.message}`);
-        tree.delete(k); // 届かない枝はあきらめる
+        ctx.log.warn(`木の残りに届かない、ブロックを積んで切る: ${e.message}`);
+        const ok = await cutFromPillar(ctx, block, tree, onMined).catch((err) => {
+          if (err.name === 'AbortError' || ctx.signal?.aborted) throw err;
+          ctx.log.warn(`積んでも切れなかった: ${err.message}`);
+          return false;
+        });
+        if (!ok) tree.delete(k); // 積んでも届かない枝だけあきらめる
       }
     }
   };
