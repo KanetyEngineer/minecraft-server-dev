@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock,
+  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock, ascendToSurface,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -97,6 +97,7 @@ async function cutFromPillar(ctx, block, tree, onMined) {
 }
 
 export async function gatherWood(ctx, { logs = 8 } = {}) {
+  await ascendToSurface(ctx); // 地上でやる作業なので、地下にいたらまず地上へ
   const { bot } = ctx;
   const have = () => countMatching(bot, isLog);
   const target = have() + logs;
@@ -200,6 +201,7 @@ const ANIMALS = ['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'mooshroom'];
 const RAW = { beef: 'cooked_beef', porkchop: 'cooked_porkchop', mutton: 'cooked_mutton', chicken: 'cooked_chicken', rabbit: 'cooked_rabbit' };
 
 export async function gatherFood(ctx, { amount = 12 } = {}) {
+  await ascendToSurface(ctx); // 地上でやる作業なので、地下にいたらまず地上へ
   const { bot } = ctx;
   const rawCount = () => Object.keys(RAW).reduce((s, n) => s + count(bot, n), 0);
   const cookedCount = () => Object.values(RAW).reduce((s, n) => s + count(bot, n), 0) + count(bot, 'bread');
@@ -442,6 +444,7 @@ function findPortalSite(bot) {
 }
 
 export async function makeBed(ctx, { count: want = 1 } = {}) {
+  await ascendToSurface(ctx); // 地上でやる作業なので、地下にいたらまず地上へ
   const { bot } = ctx;
   const beds = () => countMatching(bot, (n) => n.endsWith('_bed'));
   if (beds() >= want) return `ベッドを ${beds()} 個持っている`;

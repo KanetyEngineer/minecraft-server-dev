@@ -850,3 +850,46 @@ export async function lightIfDark(ctx) {
   }
   return false;
 }
+
+// 地下（空の光が届かない場所）にいたら、階段状に掘り上がって地上に出る。
+// 動物探しや木集めなど地上でやる作業の前に使う（地下から遠くの地上へは経路が見つからず、その場で固まっていた）
+export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
+  const { bot } = ctx;
+  const sky = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floored())?.skyLight ?? 15;
+  if (sky() >= 12) return false;
+  ctx.log.info(`地下にいるので地上へ掘り上がる（y=${Math.floor(bot.entity.position.y)}）`);
+  let dir = ctx.state.stairDir ?? [1, 0];
+  for (let i = 0; i < maxSteps && sky() < 12; i++) {
+    abortable(ctx);
+    const p = bot.entity.position.floored();
+    const next = p.offset(dir[0], 1, dir[1]);
+    // 頭上・次の足元・次の頭の 3 マスを空ける（液体の隣は避けて向きを変える）
+    const cells = [p.offset(0, 2, 0), next, next.offset(0, 1, 0)];
+    if (cells.some((c) => isNextToLiquid(bot, c))) { dir = [dir[1], -dir[0]]; continue; }
+    for (const c of cells) {
+      for (let k = 0; k < 4; k++) { // 砂利や砂が落ちてきたら掘り直す
+        const b = bot.blockAt(c);
+        if (!b || b.boundingBox !== 'block') break;
+        if (!bot.canDigBlock(b)) break;
+        await bot.tool.equipForBlock(b, {}).catch(() => {});
+        await bot.dig(b, true).catch(() => {});
+        await bot.waitForTicks(4);
+      }
+    }
+    // 次の段に足場が無ければ置く
+    const floor = bot.blockAt(next.offset(0, -1, 0));
+    if (floor && floor.boundingBox !== 'block') {
+      const item = cheapBlock(bot);
+      if (item) {
+        await bot.equip(item, 'hand').catch(() => {});
+        await bot.placeBlock(bot.blockAt(p), new Vec3(dir[0], 0, dir[1])).catch(() => {});
+      }
+    }
+    await Promise.race([
+      bot.pathfinder.goto(new goals.GoalBlock(next.x, next.y, next.z)).catch(() => {}),
+      sleep(4000),
+    ]);
+  }
+  ctx.log.info(sky() >= 12 ? `地上に出た（y=${Math.floor(bot.entity.position.y)}）` : '地上に出られなかった');
+  return sky() >= 12;
+}
