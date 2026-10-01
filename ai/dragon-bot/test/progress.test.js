@@ -94,3 +94,11 @@ test('RTA の流れ: エンダーアイがそろってから弓と矢、夜は�
   assert.equal(nextStep(armored(fakeBot({ ...base, blaze_rod: 6 }, { isDay: false })), mem).skill, 'huntEndermen');
   assert.equal(nextStep(fakeBot({ ...base, blaze_rod: 6 }, { isDay: false }), mem).skill, 'shelterForNight');
 });
+test('エンドポータルが見つかったら、ベッドを 4 個持ってから入る（ベッド爆破用）', () => {
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  const mem = fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 }, end_portal: { x: 9, y: 30, z: 9 } });
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, bow: 1, arrow: 64, ender_eye: 12 };
+  const s = nextStep(armored(fakeBot({ ...base, white_bed: 1 })), mem);
+  assert.deepEqual([s.skill, s.args], ['makeBed', { count: 4 }]);
+  assert.equal(nextStep(armored(fakeBot({ ...base, white_bed: 4 })), mem).skill, 'activateEndPortal');
+});

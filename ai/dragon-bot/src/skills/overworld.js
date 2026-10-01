@@ -423,10 +423,13 @@ function findPortalSite(bot) {
   return null;
 }
 
-export async function makeBed(ctx) {
+export async function makeBed(ctx, { count: want = 1 } = {}) {
   const { bot } = ctx;
-  if (bot.inventory.items().some((i) => i.name.endsWith('_bed'))) return 'ベッドを持っている';
-  for (let t = 0; t < 20 && countMatching(bot, (n) => n.endsWith('_wool')) < 3; t++) {
+  const beds = () => countMatching(bot, (n) => n.endsWith('_bed'));
+  if (beds() >= want) return `ベッドを ${beds()} 個持っている`;
+  // 必要なベッドの数 × 3 枚の羊毛を集める（エンドのベッド爆破用に複数作ることもある）
+  const woolNeed = (want - beds()) * 3;
+  for (let t = 0; t < 20 + woolNeed * 2 && countMatching(bot, (n) => n.endsWith('_wool')) < woolNeed; t++) {
     abortable(ctx);
     const sheep = nearestEntityNamed(bot, ['sheep'], 40);
     if (!sheep) { await exploreStep(ctx); continue; }
@@ -439,9 +442,15 @@ export async function makeBed(ctx) {
     ctx.memory.setFlag('bedRetryAt', Date.now() + 10 * 60_000);
     throw new SkillError('羊毛が 3 つそろわない');
   }
-  await ensurePlanks(ctx, 3);
-  await craftItem(ctx, wool.name.replace('_wool', '_bed'), 1);
-  return 'ベッド完成';
+  // 色ごとに 3 枚ずつそろっている分だけ作る
+  for (const w of bot.inventory.items().filter((i) => i.name.endsWith('_wool'))) {
+    for (let k = 0; k < Math.floor(w.count / 3) && beds() < want; k++) {
+      await ensurePlanks(ctx, 3);
+      const bedName = w.name.replace('_wool', '_bed');
+      await craftItem(ctx, bedName, count(bot, bedName) + 1);
+    }
+  }
+  return `ベッド ${beds()} 個`;
 }
 
 export async function sleepInBed(ctx) {
