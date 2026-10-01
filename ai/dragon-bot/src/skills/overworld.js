@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock, ascendToSurface,
+  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock, ascendToSurface, ensurePickaxe,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -228,6 +228,8 @@ async function ensureIronIngots(ctx, n) {
   if (ingots() >= n) return;
   const needRaw = n - ingots() - count(bot, 'raw_iron');
   if (needRaw > 0) {
+    // 鉄鉱石は石のツルハシ以上でないと掘れない
+    if (!(await ensurePickaxe(ctx, { minTier: 'stone' }))) throw new SkillError('石のツルハシが無くて鉄を掘れない');
     // まず見えている鉄鉱石、無ければ Y=16 付近でブランチマイニング
     await mineBlocks(ctx, IRON_ORE, needRaw, { maxDistance: 32, maxExplore: 3 });
     if (n - ingots() - count(bot, 'raw_iron') > 0) {

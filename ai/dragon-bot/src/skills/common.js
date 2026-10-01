@@ -294,6 +294,7 @@ export async function descendTo(ctx, targetY) {
   const { bot } = ctx;
   for (let i = 0; i < 200 && bot.entity.position.y > targetY + 1; i++) {
     abortable(ctx);
+    if (i % 10 === 0 && !(await ensurePickaxe(ctx))) throw new SkillError('ツルハシが無くて掘り下がれない');
     const p = bot.entity.position.floored();
     const dir = ctx.state.stairDir ?? (ctx.state.stairDir = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(Math.random() * 4)]);
     const next = p.offset(dir[0], -1, dir[1]);
@@ -340,6 +341,7 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
   const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
   let di = Math.floor(Math.random() * 4);
   for (let leg = 0; leg < 6 && got < n; leg++) {
+    if (!(await ensurePickaxe(ctx))) break;
     const [dx, dz] = dirs[di % 4];
     for (let s = 0; s < length && got < n; s += 4) {
       abortable(ctx);
@@ -892,4 +894,24 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   }
   ctx.log.info(sky() >= 12 ? `地上に出た（y=${Math.floor(bot.entity.position.y)}）` : '地上に出られなかった');
   return sky() >= 12;
+}
+
+// ツルハシが無ければ作る（丸石が 3 個あれば石、無ければ木）。石の道具は 131 回、木は 59 回で壊れるので、
+// 掘り下がり・鉄掘りの途中でも確認する（石のツルハシが y=65→16 の掘り下がりで壊れ、鉄が掘れなかった）
+const PICK_TIERS = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe', 'stone_pickaxe', 'wooden_pickaxe'];
+export async function ensurePickaxe(ctx, { minTier = 'wooden' } = {}) {
+  const { bot } = ctx;
+  const okTiers = PICK_TIERS.slice(0, PICK_TIERS.indexOf(`${minTier}_pickaxe`) + 1);
+  if (okTiers.some((n) => findItem(bot, n))) return true;
+  const cobble = count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate') + count(bot, 'blackstone');
+  const want = cobble >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe';
+  if (!okTiers.includes(want)) return false;
+  ctx.log.info(`ツルハシが無いので ${want} を作る`);
+  try {
+    if (count(bot, 'stick') < 2) await craftItem(ctx, 'stick', 2);
+    await craftItem(ctx, want, 1);
+  } catch (e) {
+    ctx.log.warn(`ツルハシを作れなかった: ${e.message}`);
+  }
+  return okTiers.some((n) => findItem(bot, n));
 }
