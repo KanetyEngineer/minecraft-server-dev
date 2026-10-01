@@ -275,6 +275,10 @@ export async function pickUpItems(ctx, radius = 8) {
 
 // ---------- 設置 ----------
 
+const REPLACEABLE = new Set(['short_grass', 'grass', 'tall_grass', 'fern', 'large_fern', 'dead_bush', 'snow',
+  'dandelion', 'poppy', 'blue_orchid', 'allium', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'red_tulip', 'orange_tulip',
+  'white_tulip', 'pink_tulip', 'short_dry_grass', 'tall_dry_grass', 'bush', 'firefly_bush', 'leaf_litter']);
+
 // 足元周辺の置ける場所を探してブロックを置く
 export async function placeNear(ctx, itemName) {
   const { bot } = ctx;
@@ -283,8 +287,13 @@ export async function placeNear(ctx, itemName) {
   const base = bot.entity.position.floored();
   for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [2, 0], [0, 2], [-2, 0], [0, -2]]) {
     const target = base.offset(x, 0, z);
-    const at = bot.blockAt(target);
+    let at = bot.blockAt(target);
     const below = bot.blockAt(target.offset(0, -1, 0));
+    // 草や花は刈ってから置く（サバンナなどは足元が草だらけで、空気の場所がほとんど無い）
+    if (at && REPLACEABLE.has(at.name) && below && below.boundingBox === 'block') {
+      await bot.dig(at, true).catch(() => {});
+      at = bot.blockAt(target);
+    }
     if (at && at.name === 'air' && below && below.boundingBox === 'block') {
       await bot.equip(item, 'hand');
       await smoothLookAt(bot, target.offset(0.5, 0, 0.5), ctx.cfg.human.turnSpeed);
