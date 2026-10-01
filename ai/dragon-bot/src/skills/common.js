@@ -173,7 +173,22 @@ export async function mineOne(ctx, block, { reach = 4.5 } = {}) {
   // 届かなければ近づく（真下・真上のブロックは pathfinder に任せず、その場で掘る）
   const eye = () => bot.entity.position.offset(0, 1.6, 0);
   if (eye().distanceTo(pos.offset(0.5, 0.5, 0.5)) > reach) {
-    await bot.pathfinder.goto(new goals.GoalLookAtBlock(pos, bot.world, { reach }));
+    // 見える位置への経路探索は、たどり着けない場所だと何も言わずにその場で考え続けることがある
+    // （見張りの「20 秒動けなかった」で切られるまで止まって見えた）。近づくのは 12 秒で打ち切る
+    let timer;
+    try {
+      await Promise.race([
+        bot.pathfinder.goto(new goals.GoalLookAtBlock(pos, bot.world, { reach })),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            try { bot.pathfinder.stop(); } catch {}
+            reject(new Error(`${block.name} (${pos.x}, ${pos.y}, ${pos.z}) に近づけない`));
+          }, 12_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
   const b = bot.blockAt(pos);
   if (!b || b.name !== block.name) throw new Error(`${block.name} が無くなっていた`);
