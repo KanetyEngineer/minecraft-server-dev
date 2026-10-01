@@ -528,19 +528,30 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
     }).filter((m) => m.have < m.need);
   };
   // いちばん不足の少ないレシピ（板材の種類違いなど）を選ぶ。持ち物が変わるので毎回選び直す
+  // 材料が作れなかったレシピは外して次の候補を試す（例: 色付きベッドの「白いベッド＋染料」は染料が作れない）
+  const badRecipes = new Set();
   const pick = () => all
+    .filter((r) => !badRecipes.has(r))
     .map((r) => ({ r, miss: missingOf(r) }))
     .sort((a, b) => a.miss.reduce((s, m) => s + m.need - m.have, 0) - b.miss.reduce((s, m) => s + m.need - m.have, 0))[0];
   // 中間素材を作ると他の材料が減ることがある（棒を作ると板材が減る）ので、そろうまで数え直す
-  for (let pass = 0; pass < 3; pass++) {
-    const { miss } = pick();
+  for (let pass = 0; pass < 3 + all.length; pass++) {
+    const chosen = pick();
+    if (!chosen) break;
+    const { r, miss } = chosen;
     if (miss.length === 0) break;
-    for (const m of miss) {
-      if (isPlanks(m.name)) {
-        await ensurePlanks(ctx, m.need, m.name);
-      } else {
-        await craftItem(ctx, m.name, m.need, { noTable, depth: depth + 1 });
+    try {
+      for (const m of miss) {
+        if (isPlanks(m.name)) {
+          await ensurePlanks(ctx, m.need, m.name);
+        } else {
+          await craftItem(ctx, m.name, m.need, { noTable, depth: depth + 1 });
+        }
       }
+    } catch (e) {
+      if (!(e instanceof SkillError) || badRecipes.size + 1 >= all.length) throw e;
+      ctx.log.warn(`${name}: このレシピの材料が作れない（${e.message}）、別のレシピを試す`);
+      badRecipes.add(r);
     }
   }
   if (!(await tryCraft(table)) || count(bot, name) < n) {
