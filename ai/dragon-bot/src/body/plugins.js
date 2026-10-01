@@ -88,14 +88,38 @@ export function configureBody(bot) {
     }
   };
 
-  // 泳ぐ: 頭まで水に浸かったら浮き上がる（溺れない・沈まない）
-  let swimming = false;
+  // 泳ぐ:
+  // - 頭まで水に浸かったら浮き上がる（溺れない・沈まない）
+  // - 進む先に水が 5 マス以上続くときは、水底を歩かずダッシュ泳ぎで進む
+  let floating = false;
+  let swimSprint = false;
+  const waterAheadCount = () => {
+    const p = bot.entity.position;
+    const ux = -Math.sin(bot.entity.yaw); const uz = -Math.cos(bot.entity.yaw);
+    let n = 0;
+    for (let i = 1; i <= 6; i++) {
+      const b = bot.blockAt(p.offset(ux * i, 0.2, uz * i));
+      if (b && b.name === 'water') n++; else break;
+    }
+    return n;
+  };
   bot.on('physicsTick', () => {
     if (!bot.entity || bot.vehicle) return;
     const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
     const under = !!head && head.name === 'water';
-    if (under) { bot.setControlState('jump', true); swimming = true; }
-    else if (swimming) { bot.setControlState('jump', false); swimming = false; }
+    const moving = bot.getControlState('forward') || bot.pathfinder?.isMoving?.();
+    const longSwim = bot.entity.isInWater && moving && waterAheadCount() >= 5;
+    if (longSwim) {
+      bot.setControlState('sprint', true); // 水中でのダッシュ = 泳ぎ
+      swimSprint = true;
+    } else if (swimSprint) {
+      bot.setControlState('sprint', false);
+      swimSprint = false;
+    }
+    // 泳いでいる間は水面近くを保ち、息が減ったら必ず浮上する
+    const needAir = bot.oxygenLevel !== undefined && bot.oxygenLevel < 10;
+    if (under && (!longSwim || needAir)) { bot.setControlState('jump', true); floating = true; }
+    else if (floating) { bot.setControlState('jump', false); floating = false; }
   });
   return mv;
 }
