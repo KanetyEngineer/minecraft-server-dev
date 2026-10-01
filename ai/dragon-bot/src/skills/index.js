@@ -9,6 +9,20 @@ import * as portal from './portal.js';
 const int = (description, minimum = 1, maximum = 640) => ({ type: 'integer', description, minimum, maximum });
 const str = (description) => ({ type: 'string', description });
 
+// 失敗が続いたら別の方法に切り替えられるよう、続けて失敗した回数を記憶に残す（成功で 0 に戻す）
+function countFailures(name, run) {
+  return async (ctx, args) => {
+    try {
+      const r = await run(ctx, args);
+      ctx.memory.setFlag(`Fails`, 0);
+      return r;
+    } catch (e) {
+      if (!ctx.signal?.aborted) ctx.memory.setFlag(`Fails`, (ctx.memory.flag(`Fails`) ?? 0) + 1);
+      throw e;
+    }
+  };
+}
+
 function def(name, run, description, properties = {}, required = []) {
   return { name, run, description, input_schema: { type: 'object', properties, required, additionalProperties: false } };
 }
@@ -23,7 +37,7 @@ export const SKILLS = [
   def('makeBowAndArrows', ow.makeBowAndArrows, 'クモ/クモの巣から糸、砂利から火打石、ニワトリから羽を集めて弓と矢を作る。エンドクリスタル破壊に必須。', { arrows: int('目標の矢の数', 4, 128) }),
   def('fillWaterBucket', ow.fillWaterBucket, '水源をバケツでくむ。'),
   def('collectObsidian', ow.collectObsidian, '溶岩溜まりに水をかけて黒曜石を作り、ダイヤのツルハシで掘る。', { count: int('黒曜石の数', 1, 20) }),
-  def('castNetherPortal', portal.castNetherPortal, 'RTA 式: 溶岩溜まりの横で、溶岩バケツと水バケツを使って黒曜石を 1 つずつ作りネザーゲートを建てる（ダイヤ不要。水入りバケツ・空バケツ・丸石 30 個が必要）。'),
+  def('castNetherPortal', countFailures('castNetherPortal', portal.castNetherPortal), 'RTA 式: 溶岩溜まりの横で、溶岩バケツと水バケツを使って黒曜石を 1 つずつ作りネザーゲートを建てる（ダイヤ不要。水入りバケツ・空バケツ・丸石 30 個が必要）。'),
   def('buildNetherPortal', ow.buildNetherPortal, '黒曜石 10 個で近くにネザーポータルを建てて火打石で着火する。'),
   def('gatherBlocks', ow.gatherBlocks, '橋や柱に使う丸石を集める（エンドに行く前に 64 個以上推奨）。', { count: int('個数', 8, 256) }),
   def('makeBed', ow.makeBed, '羊を倒して羊毛を集め、ベッドを作る（count 個持つまで。エンドのベッド爆破用に 3〜5 個）。', { count: int('持っておくベッドの数', 1, 8) }),

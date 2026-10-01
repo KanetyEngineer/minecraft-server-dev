@@ -99,7 +99,6 @@ export function nextStep(bot, memory) {
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
   if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: false } };
   if (!m.armor || !m.shield) return { skill: 'getIronGear', args: { armor: true } };
-  if (!m.diamondPickaxe) return { skill: 'mineDiamonds', args: { count: 3 } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
   if (!m.netherPortal) {
     // ネザーの板材ではボートを作れないので、歪んだ森でのエンダーマン捕獲用に 1 つ持っていく
@@ -107,6 +106,19 @@ export function nextStep(bot, memory) {
       const boat = boatRecipeFor(bot);
       return boat ? { skill: 'craftTo', args: { item: boat, count: 1 } } : { skill: 'gatherWood', args: { logs: 4 } };
     }
+    // RTA 式: ダイヤを使わず、溶岩溜まりで溶岩バケツと水バケツから黒曜石を作ってゲートを建てる（castNetherPortal）。
+    // 水入りバケツのほかに空のバケツがもう 1 つ要るので、鉄 3 個を先に用意する。
+    // 3 回続けて失敗したら、従来どおりダイヤのツルハシで黒曜石を掘る方式に切り替える。
+    if ((memory.flag('castNetherPortalFails') ?? 0) < 3 && !m.obsidian) {
+      const buckets = count(bot, 'bucket') + count(bot, 'water_bucket') + count(bot, 'lava_bucket');
+      if (buckets < 2) {
+        if (count(bot, 'iron_ingot') >= 3) return { skill: 'craftTo', args: { item: 'bucket', count: 1 } };
+        if (count(bot, 'raw_iron') + count(bot, 'iron_ingot') >= 3) return { skill: 'smeltItem', args: { item: 'raw_iron', count: 3 - count(bot, 'iron_ingot') } };
+        return { skill: 'mineBlock', args: { block: 'iron_ore,deepslate_iron_ore', count: 3 - count(bot, 'raw_iron') - count(bot, 'iron_ingot') } };
+      }
+      return { skill: 'castNetherPortal', args: {} };
+    }
+    if (!m.obsidian && !m.diamondPickaxe) return { skill: 'mineDiamonds', args: { count: 3 } };
     if (!m.obsidian) return { skill: 'collectObsidian', args: { count: 10 } };
     if (!m.flintAndSteel) return { skill: 'craftTo', args: { item: 'flint_and_steel', count: 1 } };
     return { skill: 'buildNetherPortal', args: {} };

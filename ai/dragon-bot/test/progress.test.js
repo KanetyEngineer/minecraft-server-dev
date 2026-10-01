@@ -108,7 +108,7 @@ test('ゲートを作る前にボートを 1 つ作る（原木が無ければ�
   const s = nextStep(armored(fakeBot({ ...base, acacia_log: 3 })), fakeMemory());
   assert.deepEqual([s.skill, s.args], ['craftTo', { item: 'acacia_boat', count: 1 }]);
   assert.equal(nextStep(armored(fakeBot(base)), fakeMemory()).skill, 'gatherWood');
-  assert.equal(nextStep(armored(fakeBot({ ...base, oak_boat: 1 })), fakeMemory()).skill, 'collectObsidian');
+  assert.equal(nextStep(armored(fakeBot({ ...base, oak_boat: 1 })), fakeMemory()).skill, 'mineBlock'); // 2 個目のバケツ用の鉄
 });
 
 test('ネザーで歪んだ森を知っていてボートがあれば、ロッドより先にエンダーマン狩り', () => {
@@ -117,4 +117,13 @@ test('ネザーで歪んだ森を知っていてボートがあれば、ロッ�
   assert.equal(nextStep(fakeBot({ oak_boat: 1 }, nether), mem).skill, 'huntEndermen');
   assert.equal(nextStep(fakeBot({}, nether), mem).skill, 'huntBlazes');
   assert.equal(nextStep(fakeBot({ oak_boat: 1 }, nether), fakeMemory()).skill, 'huntBlazes');
+});
+test('ゲートは RTA 式（溶岩と水バケツ）。3 回失敗したらダイヤで黒曜石を掘る方式へ', () => {
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  const base = { iron_pickaxe: 1, iron_sword: 1, water_bucket: 1, bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1, oak_boat: 1 };
+  assert.equal(nextStep(armored(fakeBot(base)), fakeMemory()).skill, 'castNetherPortal');
+  assert.equal(nextStep(armored(fakeBot({ ...base, bucket: 0, iron_ingot: 3 })), fakeMemory()).skill, 'craftTo');
+  const failed = fakeMemory({}, { castNetherPortalFails: 3 });
+  assert.equal(nextStep(armored(fakeBot(base)), failed).skill, 'mineDiamonds');
+  assert.equal(nextStep(armored(fakeBot({ ...base, diamond_pickaxe: 1 })), failed).skill, 'collectObsidian');
 });
