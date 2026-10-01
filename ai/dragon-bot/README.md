@@ -11,7 +11,7 @@
 木 → 石の道具 → 食料 → 鉄装備・バケツ → ダイヤのツルハシ → 弓と矢 → 黒曜石 → ネザーポータル → ブレイズロッド → エンダーパール → エンダーアイ → 三角測量で要塞 → エンドポータル → クリスタル破壊 → ドラゴン戦
 
 ## 動かし方（Windows）
-1. 試験鯖を用意します: `powershell -ExecutionPolicy Bypass -File scripts\setup-test-server.ps1`。作成先は `Documents\ClaudeCode\dragon-bot-test`（127.0.0.1:25566）です。その後 `start.bat` で起動します。
+1. 試験鯖を用意します: `powershell -ExecutionPolicy Bypass -File scripts\setup-test-server.ps1`。作成先は `Documents\ClaudeCode\dragon-bot-test`（127.0.0.1:25570）です。その後 `start.bat` で起動します。
 2. `npm install`
 3. `.env.example` を `.env` にコピーします。Claude を使う場合は `ANTHROPIC_API_KEY` を書きます。
 4. `node --env-file=.env src/index.js`
