@@ -56,9 +56,7 @@ export class LoopGuard {
 
   isBanned(skill) {
     const b = this.bans.get(skill);
-    if (!b) return false;
-    if (b.until <= this.now()) { this.bans.delete(skill); return false; }
-    return true;
+    return !!b && b.until > this.now(); // 期限切れでも回数は残し、再発時の禁止時間を伸ばす
   }
 
   bannedSkills() {
