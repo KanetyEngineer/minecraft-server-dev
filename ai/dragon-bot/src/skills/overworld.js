@@ -82,7 +82,8 @@ export async function gatherFood(ctx, { amount = 12 } = {}) {
   }
   // 生肉は焼く
   for (const raw of Object.keys(RAW)) {
-    if (count(bot, raw) > 0) await smelt(ctx, raw, count(bot, raw));
+    // 焼けなくても生肉は食べられるので、失敗しても集めた分は成果とする
+    if (count(bot, raw) > 0) await smelt(ctx, raw, count(bot, raw)).catch((e) => ctx.log.warn(`焼けなかった: ${e.message}`));
   }
   if (cookedCount() === 0 && rawCount() === 0) throw new SkillError('動物が見つからなかった');
   return `食料 ${cookedCount()} 個（生 ${rawCount()}）`;

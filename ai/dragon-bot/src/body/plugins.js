@@ -75,5 +75,27 @@ export function configureBody(bot) {
     bannedFood: ['rotten_flesh', 'spider_eye', 'poisonous_potato', 'pufferfish', 'chorus_fruit', 'suspicious_stew'],
   });
   bot.autoEat.enableAuto();
+
+  // 掘っている最中に食事で持ち物を持ち替えると採掘が中断されるので、掘っている間は自動で食べない
+  const dig = bot.dig.bind(bot);
+  bot.dig = async (...args) => {
+    const wasOn = bot.autoEat.enabled;
+    if (wasOn) bot.autoEat.disableAuto();
+    try {
+      return await dig(...args);
+    } finally {
+      if (wasOn) bot.autoEat.enableAuto();
+    }
+  };
+
+  // 泳ぐ: 頭まで水に浸かったら浮き上がる（溺れない・沈まない）
+  let swimming = false;
+  bot.on('physicsTick', () => {
+    if (!bot.entity || bot.vehicle) return;
+    const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
+    const under = !!head && head.name === 'water';
+    if (under) { bot.setControlState('jump', true); swimming = true; }
+    else if (swimming) { bot.setControlState('jump', false); swimming = false; }
+  });
   return mv;
 }

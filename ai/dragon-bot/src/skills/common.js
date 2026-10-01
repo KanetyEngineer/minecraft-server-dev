@@ -42,6 +42,15 @@ export async function travelTo(ctx, x, z, { step = 64, range = 3 } = {}) {
     const d = Math.hypot(dx, dz);
     if (d <= range + 1) return;
     const k = Math.min(1, step / d);
+    if (ctx.allowBoat !== false && waterAhead(bot, dx / d, dz / d, Math.min(d, step)) >= 20) {
+      try {
+        await crossByBoat(ctx, x, z);
+        continue;
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        ctx.log.warn(`ボート移動に失敗: ${e.message}`);
+      }
+    }
     try {
       await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + dx * k, p.z + dz * k, range));
     } catch (e) {
@@ -51,6 +60,74 @@ export async function travelTo(ctx, x, z, { step = 64, range = 3 } = {}) {
       await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + dz / d * side, p.z - dx / d * side, 4)).catch(() => {});
     }
   }
+}
+
+// 進む方向の水面ブロックの数（長い水上かどうかの判定）
+export function waterAhead(bot, ux, uz, dist) {
+  const p = bot.entity.position;
+  let n = 0;
+  for (let i = 2; i <= dist; i += 2) {
+    const x = Math.floor(p.x + ux * i); const z = Math.floor(p.z + uz * i);
+    for (let y = Math.floor(p.y) + 3; y > Math.floor(p.y) - 6; y--) {
+      const b = bot.blockAt(new Vec3(x, y, z));
+      if (!b || b.name === 'air') continue;
+      if (b.name === 'water') n += 2;
+      break;
+    }
+  }
+  return n;
+}
+
+const BOATS = ['oak_boat', 'spruce_boat', 'birch_boat', 'jungle_boat', 'acacia_boat', 'dark_oak_boat', 'mangrove_boat', 'cherry_boat', 'pale_oak_boat'];
+
+// ボートを作って水上を渡る。対岸に着いたら降りて回収する。
+export async function crossByBoat(ctx, x, z) {
+  const { bot } = ctx;
+  let boat = bot.inventory.items().find((i) => BOATS.includes(i.name));
+  if (!boat) {
+    const plank = bot.inventory.items().find((i) => isPlanks(i.name) && i.count >= 5)
+      ?? bot.inventory.items().find((i) => isLog(i.name) && i.count >= 2);
+    if (!plank) throw new SkillError('ボートを作る木材がない');
+    const wood = plank.name.replace(/_(planks|log)$/, '');
+    await craftItem(ctx, `${wood}_boat`, 1);
+    boat = bot.inventory.items().find((i) => BOATS.includes(i.name));
+  }
+  // 水際まで行く
+  const water = findVisibleBlocks(bot, ['water'], { maxDistance: 24, count: 1, visibleOnly: true,
+    extra: (b) => { const up = bot.blockAt(b.position.offset(0, 1, 0)); return up && up.name === 'air'; } })[0];
+  if (!water) throw new SkillError('水面が見つからない');
+  await goTo(ctx, water.position.x, water.position.y + 1, water.position.z, 2);
+  await bot.equip(boat, 'hand');
+  await smoothLookAt(bot, water.position.offset(0.5, 1, 0.5), ctx.cfg.human.turnSpeed);
+  await bot.placeEntity(bot.blockAt(water.position), new Vec3(0, 1, 0));
+  const vehicle = bot.nearestEntity((e) => e.name && e.name.endsWith('boat') && e.position.distanceTo(bot.entity.position) < 5);
+  if (!vehicle) throw new SkillError('ボートを置けなかった');
+  bot.mount(vehicle);
+  await sleep(800);
+  const deadline = Date.now() + 5 * 60_000;
+  try {
+    while (Date.now() < deadline) {
+      abortable(ctx);
+      const p = bot.entity.position;
+      const d = Math.hypot(x - p.x, z - p.z);
+      if (d < 4) break;
+      const yaw = Math.atan2(-(x - p.x), -(z - p.z));
+      await bot.look(yaw, 0, false);
+      bot.moveVehicle(0, 1);
+      // 2 ブロック先が陸なら降りる
+      const ux = (x - p.x) / d; const uz = (z - p.z) / d;
+      const ahead = bot.blockAt(new Vec3(Math.floor(p.x + ux * 2), Math.floor(p.y), Math.floor(p.z + uz * 2)));
+      if (ahead && ahead.boundingBox === 'block') break;
+      await bot.waitForTicks(2);
+    }
+  } finally {
+    bot.dismount();
+  }
+  await sleep(500);
+  // ボートを壊して回収
+  const v = bot.nearestEntity((e) => e.name && e.name.endsWith('boat') && e.position.distanceTo(bot.entity.position) < 5);
+  for (let i = 0; v && v.isValid && i < 6; i++) { bot.attack(v); await sleep(300); }
+  await pickUpItems(ctx, 6).catch(() => {});
 }
 
 // 探索: 前回と近い向きに 24〜40 ブロック歩く。行き止まりなら向きを変える。
@@ -299,7 +376,20 @@ const FUELS = [['coal', 8], ['charcoal', 8], ['coal_block', 80], ['blaze_rod', 1
 export async function ensureFurnace(ctx) {
   const near = await nearbyBlock(ctx, 'furnace');
   if (near) return near;
-  if (!findItem(ctx.bot, 'furnace')) await craftItem(ctx, 'furnace', 1);
+  const { bot } = ctx;
+  if (!findItem(bot, 'furnace')) {
+    // 遠出先でかまどが無いときは、まず丸石を 8 個掘ってから作る
+    const cobble = () => count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate');
+    if (cobble() < 8) {
+      await mineBlocks(ctx, ['stone', 'cobblestone', 'deepslate', 'cobbled_deepslate'], 8 - cobble(), { maxDistance: 24, maxExplore: 4 });
+    }
+    const kind = count(bot, 'cobblestone') >= 8 ? 'cobblestone' : 'cobbled_deepslate';
+    if (count(bot, kind) < 8) throw new SkillError('かまどを作る丸石が足りない');
+    const table = await ensureCraftingTable(ctx);
+    const r = bot.recipesFor(bot.registry.itemsByName.furnace.id, null, 1, table)[0];
+    if (!r) throw new SkillError('かまどのレシピが使えない');
+    await bot.craft(r, 1, table);
+  }
   return placeNear(ctx, 'furnace');
 }
 

@@ -15,7 +15,7 @@ function bool(name, def) {
 export function loadConfig() {
   return {
     host: process.env.MC_HOST || '127.0.0.1',
-    port: num('MC_PORT', 25565),
+    port: num('MC_PORT', 25570),
     username: process.env.MC_USERNAME || 'DragonBot',
     // offline: online-mode=false の試験鯖用。microsoft: 本物のアカウントでログイン。
     auth: process.env.MC_AUTH || 'offline',
