@@ -42,6 +42,9 @@ export class Agent {
       this.memory.save();
       log.warn('死んでしまった。リスポーンして立て直す');
       this.interrupt('死亡');
+      // 反射の途中で死ぬと、その反射の経路は終わらないことがあるので、ここで止めて解除する
+      this.stopBody();
+      this.reflexBusy = false;
     });
     bot.on('chat', async (username, message) => {
       if (username === bot.username) return;
@@ -270,7 +273,21 @@ export class Agent {
     const reflexTimer = setInterval(() => this.reflexTick().catch((e) => log.warn(e.message)), 500);
     const watchdog = setInterval(() => this.watchdogTick(), 2000);
     try {
+      let busySince = 0;
       while (this.running) {
+        // 反射が終わらないまま（死亡やリスポーンで経路が宙に浮いたなど）だと、ここで永久に待ってしまう。
+        // 30 秒を超えたら体を止めて反射を解除し、判断に戻る（実際に 30 分止まったことがある）
+        if (this.reflexBusy) {
+          busySince ||= Date.now();
+          if (Date.now() - busySince > 30_000) {
+            log.warn('反射が 30 秒以上終わらないので打ち切って、行動を再開する');
+            this.stopBody();
+            this.reflexBusy = false;
+            busySince = 0;
+          }
+        } else {
+          busySince = 0;
+        }
         if (this.reflexBusy || !this.bot.entity || this.bot.health <= 0) { await sleep(500); continue; }
         if (this.memory.flag('dragonDefeated') && this.memory.flag('celebrated')) {
           log.info('🎉 エンダードラゴン討伐済み。待機します');
