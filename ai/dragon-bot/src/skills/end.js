@@ -1,5 +1,5 @@
 // ジ・エンド: エンドクリスタルを壊し、エンダードラゴンを倒す
-import { SkillError, abortable, travelTo, dim, goals, Vec3 } from './common.js';
+import { SkillError, abortable, travelTo, dim, goals, Vec3, pillarUp, pillarDown } from './common.js';
 import { shootAt } from './nether.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
@@ -140,8 +140,15 @@ export async function fightDragon(ctx, { minutes = 15 } = {}) {
     // ドラゴンブレスの紫の雲からは離れる
     const cloud = bot.nearestEntity((e) => e.name === 'area_effect_cloud' && e.position.distanceTo(bot.entity.position) < 5);
     if (cloud) {
-      const p = bot.entity.position;
-      await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (p.x - cloud.position.x) * 2, p.z + (p.z - cloud.position.z) * 2, 2)).catch(() => {});
+      // RTA の定石: ブレスの雲からは 2 段積んで上に逃げるのが速くて安全。積めなければ離れる
+      const placed = await pillarUp(ctx, 2).catch(() => 0);
+      if (placed < 2) {
+        const p = bot.entity.position;
+        await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (p.x - cloud.position.x) * 2, p.z + (p.z - cloud.position.z) * 2, 2)).catch(() => {});
+      } else {
+        await sleep(3000);
+        await pillarDown(ctx, placed);
+      }
       continue;
     }
     const horiz = Math.hypot(dragon.position.x - center.x, dragon.position.z - center.z);

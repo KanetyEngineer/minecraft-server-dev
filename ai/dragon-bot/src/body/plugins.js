@@ -54,6 +54,8 @@ export function configureBody(bot) {
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
   bot.pathfinder.setMovements(mv);
+  bot.on('spawn', () => tuneMovementsForDimension(bot));
+  tuneMovementsForDimension(bot);
   // 掘削・塔積み込みの経路探索は範囲を絞らないとノードが膨れ、ヒープ不足で落ちる。
   // 長距離は travelTo が 64 ブロックずつ区切るので、半径 128 で足りる。
   bot.pathfinder.thinkTimeout = 5000;
@@ -122,4 +124,17 @@ export function configureBody(bot) {
     else if (floating) { bot.setControlState('jump', false); floating = false; }
   });
   return mv;
+}
+
+// 次元ごとの移動ルール。ネザーでは落下と溶岩が最大の死因なので、崖を降りず、液体を強く避け、
+// 少し遠回りでも平らで開けた地形を通る（RTA 走者の定石）。
+export function tuneMovementsForDimension(bot) {
+  const mv = bot.pathfinder?.movements;
+  if (!mv) return;
+  const nether = bot.game?.dimension?.includes('nether');
+  mv.maxDropDown = nether ? 3 : 4;
+  mv.infiniteLiquidDropdownDistance = !nether; // ネザーの液体は溶岩なので「水に落ちれば安全」を無効化
+  mv.liquidCost = nether ? 50 : 1;
+  const magma = bot.registry.blocksByName.magma_block?.id;
+  if (magma !== undefined) { if (nether) mv.blocksToAvoid.add(magma); else mv.blocksToAvoid.delete(magma); }
 }

@@ -114,8 +114,12 @@ export class Agent {
         // スケルトン: 矢の飛んでくる方向に壁を置いて盾にし、少し待ってから作業に戻る
         const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
         log.info(`スケルトンの方向に壁を ${n} 個置いた`);
-        if (n === 0) await runAway(action.from, 16);
+        // 盾を持っていれば構えて矢を防ぐ
+        const shield = bot.inventory.slots[45]?.name === 'shield';
+        if (shield) { await bot.look(Math.atan2(-(action.from.position.x - bot.entity.position.x), -(action.from.position.z - bot.entity.position.z)), 0, true).catch(() => {}); bot.activateItem(true); }
+        if (n === 0 && !shield) await runAway(action.from, 16);
         else await sleep(3000);
+        if (shield) bot.deactivateItem();
       } else if (action.kind === 'pillar') {
         // 水中（ドラウンドなど）では柱を積めないので、まず陸に上がる
         if (bot.entity.isInWater) {

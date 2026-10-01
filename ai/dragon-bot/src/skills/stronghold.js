@@ -66,11 +66,16 @@ export async function findEndPortal(ctx) {
   const { bot, memory } = ctx;
   const est = memory.getPlace('stronghold_estimate');
   if (!est) throw new SkillError('要塞の場所が分からない（locateStronghold が先）');
-  await travelTo(ctx, est.x, est.z, { range: 6 });
+  // アイはチャンクの中心（4,4）に向かうので、推定地点のチャンク中央に立ってから掘る（起点の螺旋階段に当たりやすい）
+  const cx = Math.floor(est.x / 16) * 16 + 4; const cz = Math.floor(est.z / 16) * 16 + 4;
+  await travelTo(ctx, cx, cz, { range: 3 });
   // 近くでもう一度投げて、真下に落ちるか確認（真下ならこの下）
   if (count(bot, 'ender_eye') > 1) {
     const t = await throwEye(ctx).catch(() => null);
-    if (t && t.horiz > 2 && t.dy >= 0) await travelTo(ctx, bot.entity.position.x + t.dx * 24, bot.entity.position.z + t.dz * 24, { range: 3 });
+    if (t && t.horiz > 2 && t.dy >= 0) {
+      const nx = bot.entity.position.x + t.dx * 24; const nz = bot.entity.position.z + t.dz * 24;
+      await travelTo(ctx, Math.floor(nx / 16) * 16 + 4, Math.floor(nz / 16) * 16 + 4, { range: 3 });
+    }
   }
   // 掘り下がりながら石レンガを探す
   for (const y of [40, 30, 20, 10, 0, -10, -20]) {

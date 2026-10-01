@@ -132,9 +132,9 @@ export function nextStep(bot, memory) {
   if (!m.bow || !m.arrows) return { skill: 'makeBowAndArrows', args: { arrows: 32 } };
   if (!m.strongholdLocated) return { skill: 'locateStronghold', args: {} };
   if (!m.endPortalFound) return { skill: 'findEndPortal', args: {} };
-  // エンドのドラゴン戦（ベッド爆破）用に、ベッドを 4 個持ってから入る（羊が見つからなければ飛ばす）
+  // エンドのドラゴン戦（ベッド爆破）用に、ベッドを 7 個持ってから入る（RTA の目安。羊が見つからなければ飛ばす）
   const bedCount = bot.inventory.items().filter((i) => i.name.endsWith('_bed')).reduce((s, i) => s + i.count, 0);
-  if (bedCount < 4 && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: { count: 4 } };
+  if (bedCount < 7 && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: { count: 7 } };
   return { skill: 'activateEndPortal', args: {} };
 }
 

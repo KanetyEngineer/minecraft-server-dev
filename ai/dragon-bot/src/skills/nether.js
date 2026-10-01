@@ -1,6 +1,6 @@
 // ネザー関連とエンダーパール集め
 import {
-  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals,
+  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals, placeWallToward,
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
@@ -62,9 +62,17 @@ export async function huntBlazes(ctx, { rods = 6 } = {}) {
   if (!fortress) throw new SkillError('要塞が見つからなかった');
   await travelTo(ctx, fortress.x, fortress.z, { range: 4 });
 
+  let cleared = false;
   for (let t = 0; rodCount() < rods && t < 80; t++) {
     abortable(ctx);
     const blaze = nearestEntityNamed(bot, ['blaze'], 32);
+    // 体力が少ないときは戦わず、ブレイズとの間に壁を置いて回復を待つ（火の玉は壁で防げる）
+    if (blaze && bot.health <= 8) {
+      await placeWallToward(ctx, blaze, 2).catch(() => 0);
+      ctx.log.info('体力が少ないので壁の裏で回復を待つ');
+      for (let w = 0; w < 20 && bot.health < 14; w++) { abortable(ctx); await sleep(1000); }
+      continue;
+    }
     if (blaze) {
       const reachable = Math.abs(blaze.position.y - bot.entity.position.y) < 3;
       if (!reachable && findItem(bot, 'bow') && count(bot, 'arrow') > 0) {
@@ -75,18 +83,46 @@ export async function huntBlazes(ctx, { rods = 6 } = {}) {
       await pickUpItems(ctx, 10);
       continue;
     }
-    // スポナーを探してその近くで待つ
+    // スポナーを探してその近くで待つ。周りの土・石を壊すと湧く範囲（9×3×9）が広がる
     const spawner = findVisibleBlocks(bot, ['spawner'], { maxDistance: 48, count: 1 })[0];
     if (spawner) {
       memory.setPlace('blaze_spawner', spawner.position, 'the_nether');
+      if (!cleared) { await clearAroundSpawner(ctx, spawner.position).catch((e) => ctx.log.warn(`スポナー周りを掘れなかった: ${e.message}`)); cleared = true; }
       await goTo(ctx, spawner.position.x + 3, spawner.position.y, spawner.position.z + 3, 2).catch(() => {});
       await sleep(4000);
     } else {
-      await exploreStep(ctx, 24);
+      // 要塞の中: ネザーウォートのある階段は下り、無い階段は上るとスポナーのある屋外側に出やすい
+      const wart = findVisibleBlocks(bot, ['nether_wart'], { maxDistance: 24, count: 1 })[0];
+      if (wart) await goTo(ctx, wart.position.x, wart.position.y - 2, wart.position.z, 3).catch(() => {});
+      else await exploreStep(ctx, 24);
     }
   }
   if (rodCount() < rods) throw new SkillError(`ブレイズロッド ${rodCount()}/${rods}`);
   return `ブレイズロッド ${rodCount()} 本`;
+}
+
+// スポナー周りの地形ブロック（ネザーラック・砂利・ソウルサンド）を壊して湧き場所を増やす。要塞のレンガは壊さない
+const SPAWNER_CLUTTER = new Set(['netherrack', 'gravel', 'soul_sand', 'soul_soil', 'blackstone', 'basalt', 'magma_block']);
+async function clearAroundSpawner(ctx, pos) {
+  const { bot } = ctx;
+  let dug = 0;
+  for (let dy = 0; dy <= 2 && dug < 24; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        abortable(ctx);
+        const b = bot.blockAt(pos.offset(dx, dy, dz));
+        if (!b || !SPAWNER_CLUTTER.has(b.name) || !bot.canDigBlock(b)) continue;
+        if (b.position.distanceTo(bot.entity.position) > 4.5) {
+          await goTo(ctx, b.position.x, b.position.y, b.position.z, 3).catch(() => {});
+          if (b.position.distanceTo(bot.entity.position) > 4.5) continue;
+        }
+        await bot.tool.equipForBlock(b, {}).catch(() => {});
+        await bot.dig(b).catch(() => {});
+        dug++;
+      }
+    }
+  }
+  ctx.log.info(`スポナー周りを ${dug} ブロック掘った`);
 }
 
 export async function shootAt(ctx, entity, { shots = 4 } = {}) {
@@ -119,7 +155,10 @@ export async function barterWithPiglins(ctx, { pearls = 12 } = {}) {
     if (!piglin) { await exploreStep(ctx, 32); continue; }
     await goTo(ctx, piglin.position.x, piglin.position.y, piglin.position.z, 3).catch(() => {});
     await smoothLookAt(bot, piglin.position.offset(0, 1, 0), ctx.cfg.human.turnSpeed);
-    await bot.toss(bot.registry.itemsByName.gold_ingot.id, null, 1);
+    // ピグリンが多ければまとめて投げる（1 体につき 1 個ずつ品定めするので、待ち時間を節約できる）
+    const nearby = Object.values(bot.entities).filter((e) => e.name === 'piglin' && e.position.distanceTo(bot.entity.position) < 6).length;
+    const toss = Math.max(1, Math.min(nearby, 4, count(bot, 'gold_ingot')));
+    await bot.toss(bot.registry.itemsByName.gold_ingot.id, null, toss);
     await sleep(7000); // ピグリンが品定めする時間
     await pickUpItems(ctx, 8);
   }
