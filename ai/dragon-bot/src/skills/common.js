@@ -148,6 +148,19 @@ export async function exploreStep(ctx, distance = 32) {
 
 // ---------- 採掘 ----------
 
+// 行けなかった・開けなかったブロックは数分のあいだ候補から外す（同じ場所で何度も固まらないように）
+const SKIP_MS = 3 * 60_000;
+const posKey = (p) => `${p.x},${p.y},${p.z}`;
+export function markUnreachable(ctx, pos) {
+  (ctx.state.unreachable ??= new Map()).set(posKey(pos), Date.now() + SKIP_MS);
+}
+export function isUnreachable(ctx, pos) {
+  const until = ctx.state.unreachable?.get(posKey(pos));
+  if (until === undefined) return false;
+  if (until < Date.now()) { ctx.state.unreachable.delete(posKey(pos)); return false; }
+  return true;
+}
+
 // 見えているブロックを掘って集める。見つからなければ探索する。
 export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12 } = {}) {
   const { bot, cfg } = ctx;
@@ -155,7 +168,8 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
   let explored = 0;
   while (mined < n) {
     abortable(ctx);
-    const blocks = findVisibleBlocks(bot, names, { maxDistance, count: 4, visibleOnly: cfg.human.visibleOnly });
+    const blocks = findVisibleBlocks(bot, names, { maxDistance, count: 8, visibleOnly: cfg.human.visibleOnly })
+      .filter((b) => !isUnreachable(ctx, b.position));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
@@ -169,7 +183,8 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
       ctx.log.warn(`採掘失敗 ${blocks[0].name}: ${e.message}`);
       if (/tool|harvest/i.test(e.message)) throw new SkillError(`${blocks[0].name} を掘る道具がない`);
-      await exploreStep(ctx, 12);
+      // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）
+      markUnreachable(ctx, blocks[0].position);
     }
   }
   return mined;
@@ -285,11 +300,35 @@ export async function placeNear(ctx, itemName) {
 
 // ---------- クラフト ----------
 
+// 近くの作業台・かまどを使う。行けない・手が届かないものは外して null（呼び出し側で新しく置く）。
 async function nearbyBlock(ctx, name, dist = 6) {
-  const b = findVisibleBlocks(ctx.bot, [name], { maxDistance: 24, count: 1, visibleOnly: false })[0];
+  const b = findVisibleBlocks(ctx.bot, [name], { maxDistance: 24, count: 4, visibleOnly: false })
+    .find((x) => !isUnreachable(ctx, x.position));
   if (!b) return null;
-  if (b.position.distanceTo(ctx.bot.entity.position) > dist) await goNearBlock(ctx, b, 2);
+  if (b.position.distanceTo(ctx.bot.entity.position) > dist) {
+    try {
+      await goNearBlock(ctx, b, 2);
+    } catch (e) {
+      if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+      markUnreachable(ctx, b.position);
+      return null;
+    }
+  }
+  const eye = ctx.bot.entity.position.offset(0, 1.62, 0);
+  if (eye.distanceTo(b.position.offset(0.5, 0.5, 0.5)) > 4.5) { markUnreachable(ctx, b.position); return null; }
   return ctx.bot.blockAt(b.position);
+}
+
+// 窓が開かない（届かない・視線が通らない）ときは、その台を外して新しく置き直して 1 回だけやり直す
+async function withOpenRetry(ctx, block, ensure, fn) {
+  try {
+    return await fn(block);
+  } catch (e) {
+    if (!/windowOpen/.test(e.message)) throw e;
+    ctx.log.warn(`${block.name} を開けなかったので置き直す`);
+    markUnreachable(ctx, block.position);
+    return fn(await ensure(ctx));
+  }
 }
 
 export async function ensureCraftingTable(ctx) {
@@ -307,11 +346,12 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
   if (!item) throw new SkillError(`不明なアイテム: ${name}`);
   if (count(bot, name) >= n) return;
 
-  const tryCraft = async (table) => {
+  const tryCraft = async (t) => {
     for (let guard = 0; guard < 64 && count(bot, name) < n; guard++) {
-      const r = bot.recipesFor(item.id, null, 1, table)[0];
+      const r = bot.recipesFor(item.id, null, 1, t)[0];
       if (!r) return false;
-      await bot.craft(r, 1, table ?? undefined);
+      if (!t) { await bot.craft(r, 1); continue; }
+      await withOpenRetry(ctx, t, ensureCraftingTable, async (tb) => { t = tb; table = tb; await bot.craft(r, 1, tb); });
     }
     return true;
   };
@@ -400,7 +440,7 @@ export async function smelt(ctx, input, n) {
   n = Math.min(n, have);
   if (n <= 0) throw new SkillError(`${input} を持っていない`);
   const furnaceBlock = await ensureFurnace(ctx);
-  const furnace = await bot.openFurnace(furnaceBlock);
+  const furnace = await withOpenRetry(ctx, furnaceBlock, ensureFurnace, (b) => bot.openFurnace(b));
   try {
     // 燃料: 石炭類 → 板材 → 原木 の順に使う
     let fuel = FUELS.find(([f, per]) => count(bot, f) >= Math.ceil(n / per));
