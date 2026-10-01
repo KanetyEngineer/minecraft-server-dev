@@ -355,6 +355,11 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
         if (e.name === 'AbortError') throw e;
         break;
       }
+      // 掘り進んだ先が水没していたら（地下の帯水層など）、息が続かないのでこの場所での横掘りをやめる
+      if (bot.blockAt(bot.entity.position.offset(0, 1.6, 0))?.name === 'water' || bot.entity.isInWater) {
+        ctx.log.warn('横掘りの先が水没しているので、ここでのブランチマイニングをやめる');
+        return Math.max(got, count(bot, ores[0]) - start);
+      }
       await lightIfDark(ctx).catch(() => {});
       const seen = findVisibleBlocks(bot, ores, { maxDistance: 8, count: 4, visibleOnly: true });
       for (const b of seen) {
