@@ -259,6 +259,7 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       mined++;
       fails = 0;
       onMined?.(blocks[0]);
+      if (mined % 3 === 0) await lightIfDark(ctx).catch(() => {});
     } catch (e) {
       if (e.name === 'AbortError' || ctx.signal?.aborted) {
         // 見張りや反射で中断されたときも、このブロックはしばらく外す（次の判断で同じ届かないブロックを選び直さない）
@@ -349,6 +350,7 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
         if (e.name === 'AbortError') throw e;
         break;
       }
+      await lightIfDark(ctx).catch(() => {});
       const seen = findVisibleBlocks(bot, ores, { maxDistance: 8, count: 4, visibleOnly: true });
       for (const b of seen) {
         abortable(ctx);
@@ -812,4 +814,39 @@ export async function placeWallToward(ctx, entity, height = 2) {
     }
   }
   return placed;
+}
+
+// 暗い地下（空の光が届かず、松明などの光も弱い）では足元の横に松明を置く。モンスターが湧きにくくなる。
+// 松明が無ければ石炭（木炭）と棒から作る。置けたら true
+export async function lightIfDark(ctx) {
+  const { bot } = ctx;
+  const feet = bot.entity.position.floored();
+  const here = bot.blockAt(feet);
+  if (!here || here.skyLight > 7 || here.light >= 8) return false;
+  if (!findItem(bot, 'torch')) {
+    if (count(bot, 'coal') + count(bot, 'charcoal') < 1) return false;
+    try {
+      if (count(bot, 'stick') < 1) await craftItem(ctx, 'stick', 4);
+      await craftItem(ctx, 'torch', 4);
+    } catch {
+      return false;
+    }
+  }
+  const torch = findItem(bot, 'torch');
+  if (!torch) return false;
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const target = feet.offset(dx, 0, dz);
+    const at = bot.blockAt(target);
+    const below = bot.blockAt(target.offset(0, -1, 0));
+    if (!at || at.name !== 'air' || !below || below.boundingBox !== 'block' || isNextToLiquid(bot, target)) continue;
+    try {
+      await bot.equip(torch, 'hand');
+      await bot.placeBlock(below, new Vec3(0, 1, 0));
+      ctx.log.info(`暗いので松明を置いた (${target.x}, ${target.y}, ${target.z})`);
+      return true;
+    } catch {
+      // 置けなければ次の場所
+    }
+  }
+  return false;
 }
