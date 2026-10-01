@@ -275,6 +275,10 @@ async function ensureIronIngots(ctx, n) {
       if (n - ingots() - count(bot, 'raw_iron') > 0) {
         // 長い掘り下がりの途中でツルハシが壊れても作り直せるよう、棒と予備の石のツルハシを用意してから潜る
         //（地下で木が無くなりツルハシを作れず、時間切れになったことがある）
+        // 地下でツルハシを作り直すには棒と作業台（木材）が要る。木材が少なければ、潜る前に地上で原木を集めておく
+        //（丸石は 400 個あるのに木が無く、地下でツルハシを作れずに失敗した）
+        const woodNow = countMatching(bot, isLog) * 4 + countMatching(bot, (n) => n.endsWith('_planks'));
+        if (woodNow < 16) await gatherWood(ctx, { logs: Math.ceil((16 - woodNow) / 4) + 1 }).catch((e) => ctx.log.warn(`潜る前の木集めに失敗: ${e.message}`));
         await craftItem(ctx, 'stick', 8).catch(() => {});
         if (count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate') >= 6) await craftItem(ctx, 'stone_pickaxe', 2).catch(() => {});
         // y=16 まで降りると 50 段以上かかり 10 分の制限に届くので、鉄がまだ多い y=24 で掘る

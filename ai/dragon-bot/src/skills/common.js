@@ -510,11 +510,32 @@ export async function ensureCraftingTable(ctx) {
   const near = await nearbyBlock(ctx, 'crafting_table');
   if (near) return near;
   if (!findItem(ctx.bot, 'crafting_table')) await craftItem(ctx, 'crafting_table', 1, { noTable: true });
-  return placeNearOrRelocate(ctx, 'crafting_table');
+  const placed = await placeNearOrRelocate(ctx, 'crafting_table');
+  // 自分で置いた作業台は、作り終わったら回収して持ち歩く（毎回置き去りにして木材を使い切っていた）
+  if (placed) ctx.state.placedTable = placed.position.clone();
+  return placed;
 }
 
 // 材料が足りなければ中間素材（板材・棒など）も作る簡易レシピ解決
-export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 } = {}) {
+export async function craftItem(ctx, name, n = 1, opts = {}) {
+  try {
+    return await craftItemInner(ctx, name, n, opts);
+  } finally {
+    // いちばん外側の呼び出しが終わったら、自分で置いた作業台を回収する
+    if (!opts.depth && ctx.state?.placedTable) {
+      const pos = ctx.state.placedTable;
+      ctx.state.placedTable = null;
+      const b = ctx.bot.blockAt(pos);
+      if (b && b.name === 'crafting_table' && b.position.distanceTo(ctx.bot.entity.position) < 6) {
+        await equipCheapestTool(ctx.bot, b).catch(() => {});
+        await ctx.bot.dig(b, true).catch(() => {});
+        await pickUpItems(ctx, 4).catch(() => {});
+      }
+    }
+  }
+}
+
+async function craftItemInner(ctx, name, n = 1, { noTable = false, depth = 0 } = {}) {
   const { bot } = ctx;
   abortable(ctx);
   const item = bot.registry.itemsByName[name];
