@@ -163,9 +163,11 @@ export async function getCobblestone(ctx, n) {
     // ツルハシなしで石を掘っても何も落ちず、経路探索も膨れるので先に止める
     if (!(await ensurePick())) throw new SkillError('ツルハシが無いので丸石を掘れない');
     // 見えている石を掘る。無ければ少し掘り下がる。
+    ctx.log.info(`丸石集め ${round + 1} 回目: 見えている石を掘る（${cobbleCount(bot)}/${n}）`);
     await mineBlocks(ctx, COBBLE_SOURCES, n - cobbleCount(bot), { maxDistance: 24, maxExplore: 2 });
     if (cobbleCount(bot) < n && (await ensurePick())) {
       const y = Math.floor(bot.entity.position.y);
+      ctx.log.info(`丸石集め: 足りないので y=${y - 8} まで掘り下がって横に掘る（${cobbleCount(bot)}/${n}）`);
       await branchMine(ctx, COBBLE_SOURCES, n - cobbleCount(bot), y - 8, { length: 12 });
     }
   }

@@ -247,10 +247,13 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
+      ctx.log.info(`掘れる ${names[0]} などが見当たらないので探しに歩く（${explored}/${maxExplore}）`);
       await exploreStep(ctx);
       continue;
     }
     try {
+      const t = blocks[0].position;
+      ctx.log.info(`掘る: ${blocks[0].name} (${t.x}, ${t.y}, ${t.z}) 距離 ${t.distanceTo(bot.entity.position).toFixed(1)}`);
       await collectWithTimeout(ctx, blocks[0], COLLECT_TIMEOUT_MS);
       mined++;
       fails = 0;
