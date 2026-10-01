@@ -15,11 +15,25 @@ const COAL_ORE = ['coal_ore', 'deepslate_coal_ore'];
 const DIAMOND_ORE = ['diamond_ore', 'deepslate_diamond_ore'];
 const cobbleCount = (bot) => count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate');
 
+// 幹が地面までつながっている原木だけを狙う。切り残しで宙に浮いた枝や葉の中の原木は
+// 地上から届かず、その下をぐるぐる回り続けてしまう。
+export function isGroundedLog(bot, block) {
+  let p = block.position;
+  for (let i = 0; i < 12; i++) {
+    p = p.offset(0, -1, 0);
+    const b = bot.blockAt(p);
+    if (!b) return false;
+    if (isLog(b.name)) continue;
+    return b.boundingBox === 'block' && !b.name.endsWith('_leaves');
+  }
+  return false;
+}
+
 export async function gatherWood(ctx, { logs = 8 } = {}) {
   const { bot } = ctx;
   const have = () => countMatching(bot, isLog);
   const target = have() + logs;
-  await mineBlocks(ctx, LOGS, logs, { maxDistance: 48, maxExplore: 20 });
+  await mineBlocks(ctx, LOGS, logs, { maxDistance: 48, maxExplore: 20, filter: (b) => isGroundedLog(bot, b) });
   if (have() < Math.min(target, 4)) throw new SkillError('木が見つからなかった');
   // 作業台と木のツルハシまで作っておく（普通のプレイヤーの最初の流れ）
   if (!findItem(bot, 'wooden_pickaxe') && !findItem(bot, 'stone_pickaxe')) {

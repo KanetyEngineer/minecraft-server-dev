@@ -162,14 +162,14 @@ export function isUnreachable(ctx, pos) {
 }
 
 // 見えているブロックを掘って集める。見つからなければ探索する。
-export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12 } = {}) {
+export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter } = {}) {
   const { bot, cfg } = ctx;
   let mined = 0;
   let explored = 0;
   while (mined < n) {
     abortable(ctx);
-    const blocks = findVisibleBlocks(bot, names, { maxDistance, count: 8, visibleOnly: cfg.human.visibleOnly })
-      .filter((b) => !isUnreachable(ctx, b.position));
+    const blocks = findVisibleBlocks(bot, names, { maxDistance, count: filter ? 24 : 8, visibleOnly: cfg.human.visibleOnly })
+      .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
