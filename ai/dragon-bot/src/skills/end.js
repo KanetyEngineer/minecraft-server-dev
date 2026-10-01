@@ -168,8 +168,8 @@ export async function fightDragon(ctx, { minutes = 15 } = {}) {
     } else if (findItem(bot, 'bow') && count(bot, 'arrow') > 0 && dragon.position.distanceTo(bot.entity.position) < 64) {
       await shootAt(ctx, dragon, { shots: 1 }).catch(() => {});
     } else {
-      // 待機位置（中央から少し離れた場所）で待つ
-      await bot.pathfinder.goto(new goals.GoalNearXZ(center.x + 8, center.z + 8, 3)).catch(() => {});
+      // 待機位置: RTA の定石どおり噴水の北側で待つ（ドラゴンは南北方向から降りてくることが多く、着地を見てから走り込める）
+      await bot.pathfinder.goto(new goals.GoalNearXZ(center.x, center.z - 14, 3)).catch(() => {});
       await sleep(800);
     }
   }

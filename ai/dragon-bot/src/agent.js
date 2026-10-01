@@ -80,7 +80,9 @@ export class Agent {
     // クリーパーには近づかない（6 マス以内なら離れる）
     const creeper = bot.nearestEntity((e) => e.name === 'creeper' && e.position.distanceTo(pos) < 6);
     // 遠くから撃ってくるスケルトン
-    const archer = bot.nearestEntity((e) => ['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(pos) < 24);
+    // 飛び道具を使う敵: スケルトン系、トライデント持ちのドラウンド、ガスト（火の玉）は壁と盾で防ぐ
+    const archer = bot.nearestEntity((e) => (['skeleton', 'stray', 'bogged', 'ghast'].includes(e.name)
+      || (e.name === 'drowned' && e.heldItem?.name === 'trident')) && e.position.distanceTo(pos) < (e.name === 'ghast' ? 48 : 24));
     const recentlyHurt = Date.now() - this.lastHurtAt < 2500;
     const inCombat = this.current && COMBAT_SKILLS.has(this.current.name);
 
