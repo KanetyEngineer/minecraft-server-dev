@@ -45,6 +45,12 @@ test('ルールベースが返すスキルはすべて登録済み', () => {
     [fakeBot({}, { dimension: 'the_nether' }), fakeMemory()],
     [fakeBot({ ender_eye: 12 }), fakeMemory({ overworld_portal: {} })],
   ];
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, bow: 1, arrow: 64 };
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  cases.push(
+    [armored(fakeBot({ ...base, obsidian: 10 })), fakeMemory()],
+    [armored(fakeBot({ ...base, blaze_rod: 6, ender_pearl: 12 })), fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 } })],
+  );
   for (const [b, m] of cases) {
     const s = nextStep(b, m).skill;
     assert.ok(SKILL_MAP[s], `${s} が未登録`);

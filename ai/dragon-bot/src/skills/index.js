@@ -44,6 +44,7 @@ export const SKILLS = [
   }),
   def('mineBlock', gen.mineBlock, '見えている指定ブロックを掘る（カンマ区切りで複数可、例 "coal_ore,deepslate_coal_ore"）。', { block: str('ブロック名'), count: int('個数', 1, 64) }, ['block']),
   def('craft', gen.craft, 'アイテムを追加で作る（必要なら板材・棒・作業台も自動）。', { item: str('アイテム名（英語 ID）'), count: int('作る数', 1, 64) }, ['item']),
+  def('craftTo', gen.craftTo, '所持数が count 個になるまでアイテムを作る（すでにあれば何もしない）。', { item: str('アイテム名（英語 ID）'), count: int('目標の所持数', 1, 64) }, ['item']),
   def('smeltItem', gen.smeltItem, 'かまどで精錬・調理する。', { item: str('材料のアイテム名'), count: int('数', 1, 64) }, ['item']),
   def('explore', gen.explore, '新しい場所を探して歩く。', { steps: int('歩く回数（1 回 約 40 ブロック）', 1, 10) }),
   def('attack', gen.attack, '近くの指定モブを倒す（カンマ区切り可）。', { mob: str('モブ名') }, ['mob']),

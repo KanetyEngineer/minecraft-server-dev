@@ -260,11 +260,16 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
   const recipe = all
     .map((r) => ({ r, miss: missingOf(r) }))
     .sort((a, b) => a.miss.reduce((s, m) => s + m.need - m.have, 0) - b.miss.reduce((s, m) => s + m.need - m.have, 0))[0];
-  for (const m of recipe.miss) {
-    if (isPlanks(m.name)) {
-      await ensurePlanks(ctx, m.need, m.name);
-    } else {
-      await craftItem(ctx, m.name, m.need, { noTable, depth: depth + 1 });
+  // 中間素材を作ると他の材料が減ることがある（棒を作ると板材が減る）ので、そろうまで数え直す
+  for (let pass = 0; pass < 3; pass++) {
+    const miss = missingOf(recipe.r);
+    if (miss.length === 0) break;
+    for (const m of miss) {
+      if (isPlanks(m.name)) {
+        await ensurePlanks(ctx, m.need, m.name);
+      } else {
+        await craftItem(ctx, m.name, m.need, { noTable, depth: depth + 1 });
+      }
     }
   }
   if (!(await tryCraft(table)) || count(bot, name) < n) {
