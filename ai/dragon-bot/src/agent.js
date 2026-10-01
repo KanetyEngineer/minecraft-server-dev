@@ -37,8 +37,17 @@ export class Agent {
     bot.on('entityHurt', (e) => { if (e === bot.entity) this.lastHurtAt = Date.now(); });
     bot.on('death', () => {
       const p = bot.entity.position;
-      this.memory.data.deaths.push({ x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z),
-        dimension: dimensionOf(bot), at: new Date().toISOString(), during: this.current?.name ?? null });
+      const death = { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z),
+        dimension: dimensionOf(bot), at: new Date().toISOString(), during: this.current?.name ?? null };
+      // 前回の死亡地点の近く（16 マス以内・10 分以内）でまた死んだら、そこは危険な場所なので回収に戻らない
+      //（溺れた場所へ回収に戻ってまた溺れる、を繰り返したことがある）
+      const prev = this.memory.data.deaths.at(-1);
+      if (prev && prev.dimension === death.dimension && Date.now() - Date.parse(prev.at) < 10 * 60_000
+        && Math.hypot(prev.x - death.x, prev.y - death.y, prev.z - death.z) < 16) {
+        death.recovered = true;
+        log.warn('前回とほぼ同じ場所でまた死んだので、ここへはアイテムを取りに戻らない');
+      }
+      this.memory.data.deaths.push(death);
       this.memory.save();
       log.warn('死んでしまった。リスポーンして立て直す');
       this.interrupt('死亡');
