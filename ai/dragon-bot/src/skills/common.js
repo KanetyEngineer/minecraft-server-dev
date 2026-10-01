@@ -402,12 +402,13 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
       return { name: nm, need: -d.count * times, have: count(bot, nm) };
     }).filter((m) => m.have < m.need);
   };
-  const recipe = all
+  // いちばん不足の少ないレシピ（板材の種類違いなど）を選ぶ。持ち物が変わるので毎回選び直す
+  const pick = () => all
     .map((r) => ({ r, miss: missingOf(r) }))
     .sort((a, b) => a.miss.reduce((s, m) => s + m.need - m.have, 0) - b.miss.reduce((s, m) => s + m.need - m.have, 0))[0];
   // 中間素材を作ると他の材料が減ることがある（棒を作ると板材が減る）ので、そろうまで数え直す
   for (let pass = 0; pass < 3; pass++) {
-    const miss = missingOf(recipe.r);
+    const { miss } = pick();
     if (miss.length === 0) break;
     for (const m of miss) {
       if (isPlanks(m.name)) {
@@ -426,11 +427,16 @@ export async function craftItem(ctx, name, n = 1, { noTable = false, depth = 0 }
 export async function ensurePlanks(ctx, n, preferred) {
   const { bot } = ctx;
   const plankTotal = () => bot.inventory.items().filter((i) => isPlanks(i.name)).reduce((s, i) => s + i.count, 0);
-  if (preferred && count(bot, preferred) >= n) return;
-  for (let g = 0; g < 20 && plankTotal() < n; g++) {
-    const log = bot.inventory.items().find((i) => isLog(i.name));
+  const plankOf = (logName) => logName.replace(/^stripped_/, '').replace(/_(log|stem)$/, '_planks');
+  // 種類の指定があり、その種類の原木を持っていれば、その種類の板材の数で数える
+  //（全種類の合計で数えると、アカシア 1・オーク 1 で「2 枚ある」と判断してレシピがそろわない）
+  const matching = preferred && bot.inventory.items().find((i) => isLog(i.name) && plankOf(i.name) === preferred);
+  const have = () => (matching ? count(bot, preferred) : plankTotal());
+  for (let g = 0; g < 20 && have() < n; g++) {
+    const log = (matching && bot.inventory.items().find((i) => i.name === matching.name))
+      ?? bot.inventory.items().find((i) => isLog(i.name));
     if (!log) throw new SkillError('原木が足りない');
-    const plank = log.name.replace(/_(log|stem)$/, '_planks');
+    const plank = plankOf(log.name);
     const r = bot.recipesFor(bot.registry.itemsByName[plank].id, null, 1, null)[0];
     if (!r) throw new SkillError(`${plank} のレシピがない`);
     await bot.craft(r, 1);
