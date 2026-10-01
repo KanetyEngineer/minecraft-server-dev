@@ -111,6 +111,29 @@ export class Agent {
     }
   }
 
+  // フリーズ対策: 作業中なのに 20 秒動かず、掘る・食べる・精錬・睡眠もしていなければ作業を切り上げる
+  watchdogTick() {
+    const { bot } = this;
+    if (!bot.entity || !this.current || this.reflexBusy) { this.still = null; return; }
+    const busy = bot.targetDigBlock || bot.autoEat?.isEating || bot.isSleeping || bot.currentWindow
+      || ['wait', 'sleepInBed', 'fightDragon'].includes(this.current.name);
+    const p = bot.entity.position;
+    if (busy || !this.still || this.still.pos.distanceTo(p) > 1.5) {
+      this.still = { pos: p.clone(), since: Date.now() };
+      return;
+    }
+    if (Date.now() - this.still.since > 20_000) {
+      this.still = null;
+      this.interrupt('20 秒動けなかった（フリーズ回避）');
+      // 少しランダムに歩いて引っかかりを外す
+      const yaw = Math.random() * Math.PI * 2;
+      bot.look(yaw, 0, true).catch(() => {});
+      bot.setControlState('forward', true);
+      bot.setControlState('jump', true);
+      setTimeout(() => bot.clearControlStates(), 1200);
+    }
+  }
+
   makeCtx(controller) {
     return { bot: this.bot, cfg: this.cfg, memory: this.memory, log, signal: controller.signal, state: this.state, say: (t) => this.say(t) };
   }
@@ -120,6 +143,7 @@ export class Agent {
     this.running = true;
     this.attachEvents();
     const reflexTimer = setInterval(() => this.reflexTick().catch((e) => log.warn(e.message)), 500);
+    const watchdog = setInterval(() => this.watchdogTick(), 2000);
     try {
       while (this.running) {
         if (this.reflexBusy || !this.bot.entity || this.bot.health <= 0) { await sleep(500); continue; }
@@ -140,6 +164,7 @@ export class Agent {
       }
     } finally {
       clearInterval(reflexTimer);
+      clearInterval(watchdog);
     }
   }
 
