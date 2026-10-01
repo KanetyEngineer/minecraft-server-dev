@@ -897,6 +897,19 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   const sky = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floored())?.skyLight ?? 15;
   if (sky() >= 12) return false;
   ctx.log.info(`地下にいるので地上へ掘り上がる（y=${Math.floor(bot.entity.position.y)}）`);
+  // まず洞窟の通路を歩いて上へ向かう（ツルハシが無いと石を掘るのは非常に遅いので、歩ける道があればそちらが速い）
+  {
+    const targetY = Math.max(64, Math.floor(bot.entity.position.y) + 20);
+    await Promise.race([
+      bot.pathfinder.goto(new goals.GoalY(targetY)).catch(() => {}),
+      sleep(25_000),
+    ]);
+    try { bot.pathfinder.setGoal(null); } catch {}
+    if (sky() >= 12) {
+      ctx.log.info(`洞窟を歩いて地上に出た（y=${Math.floor(bot.entity.position.y)}）`);
+      return true;
+    }
+  }
   let dir = ctx.state.stairDir ?? [1, 0];
   // 渓谷の底などで出られないまま何分も掘り続けないよう、90 秒で打ち切る
   const until = Date.now() + 90_000;
