@@ -736,6 +736,10 @@ for f in sorted(FUNCS):
         line = line.rstrip("\n")
         if not line.strip() or line.startswith("#"):
             continue
+        if line.startswith("$") and "$(" not in line:
+            errors += 1
+            print(f"{f}:{ln}: macro line without variables (26.2 rejects the whole function)")
+            continue
         if line.startswith("$"):
             line = re.sub(r"\$\(([a-z]+)\)", lambda m: MACRO_SAMPLE[m.group(1)], line[1:])
         count += 1

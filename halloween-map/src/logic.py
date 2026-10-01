@@ -377,7 +377,7 @@ function {NS}:patch/spawn_at with storage {NS}:tmp
     F["patch/spawn_at"] = [
         "$execute unless block $(x) 64 $(z) minecraft:air run return 0",
         "$execute unless block $(x) 65 $(z) minecraft:air run return 0",
-        f"$execute if score #g hw.tmp matches 1 run return run function {NS}:patch/spawn_gold with storage {NS}:tmp",
+        f"execute if score #g hw.tmp matches 1 run return run function {NS}:patch/spawn_gold with storage {NS}:tmp",
         "$summon minecraft:block_display $(x) 64 $(z) " + disp.format(blk="jack_o_lantern", props=",Properties:{facing:\"south\"}", glow=16744448),
         "$execute positioned $(x) 64 $(z) align xyz positioned ~0.5 ~ ~0.5 run summon minecraft:interaction ~ ~ ~ {width:0.95f,height:0.95f,response:1b,Tags:[\"hw.click\",\"hw.c.pt\",\"hw.pt\",\"hw.ptall\",\"hw.tmpent\"]}",
         "$particle minecraft:flame $(x) 64.5 $(z) 0.3 0.3 0.3 0.02 8",
