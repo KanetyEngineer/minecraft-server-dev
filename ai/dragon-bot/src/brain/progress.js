@@ -76,8 +76,16 @@ export function nextStep(bot, memory) {
     return { skill: 'returnThroughPortal', args: {} };
   }
 
-  // 夜は穴にこもる。ベッドを持っていれば穴の中で寝る、無ければ朝まで待つ（shelterForNight）
-  if (night) return { skill: 'shelterForNight', args: {} };
+  // 流れはエンドラ RTA を参考にする（https://minecraft-rta.playing.wiki の「エンドラRTAの流れ」）:
+  //   オーバーワールドの準備は最小限 → ネザーでブレイズロッド（金があればピグリン交易でパール）
+  //   → 戻って夜にエンダーマン狩りでパール → エンダーアイ → 要塞 → エンド。弓は最後（エンドの前）でよい。
+  //   ただしボットの生存のため、鉄の防具と盾はネザーの前にそろえる。黒曜石を掘るためダイヤのツルハシも作る。
+
+  // 夜は穴にこもる（ベッドがあれば中で寝る）。ただし防具があってパール集めの段階なら、夜はエンダーマン狩りの時間
+  if (night) {
+    if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
+    return { skill: 'shelterForNight', args: {} };
+  }
   if (!m.woodenTools) return { skill: 'gatherWood', args: { logs: 8 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
   if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };
@@ -87,7 +95,6 @@ export function nextStep(bot, memory) {
   if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: false } };
   if (!m.armor || !m.shield) return { skill: 'getIronGear', args: { armor: true } };
   if (!m.diamondPickaxe) return { skill: 'mineDiamonds', args: { count: 3 } };
-  if (!m.bow || !m.arrows) return { skill: 'makeBowAndArrows', args: { arrows: 32 } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
   if (!m.netherPortal) {
     if (!m.obsidian) return { skill: 'collectObsidian', args: { count: 10 } };
@@ -99,6 +106,8 @@ export function nextStep(bot, memory) {
     if (!m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     return { skill: 'craftTo', args: { item: 'ender_eye', count: c.eyesNeeded } };
   }
+  // 弓と矢はエンドのクリスタル用なので、要塞に向かう前にそろえる
+  if (!m.bow || !m.arrows) return { skill: 'makeBowAndArrows', args: { arrows: 32 } };
   if (!m.strongholdLocated) return { skill: 'locateStronghold', args: {} };
   if (!m.endPortalFound) return { skill: 'findEndPortal', args: {} };
   return { skill: 'activateEndPortal', args: {} };

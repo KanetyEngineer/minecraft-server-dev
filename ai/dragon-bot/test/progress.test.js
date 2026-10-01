@@ -12,10 +12,10 @@ test('木のツルハシがあれば石の道具へ', () => {
   assert.equal(nextStep(fakeBot({ wooden_pickaxe: 1 }), fakeMemory()).skill, 'makeTools');
 });
 
-test('ダイヤのツルハシまであれば弓と矢へ', () => {
+test('ダイヤのツルハシまであれば水入りバケツへ（RTA に合わせ、弓はネザーの後）', () => {
   const bot = fakeBot({ diamond_pickaxe: 1, iron_sword: 1, bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 });
   bot.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }];
-  assert.equal(nextStep(bot, fakeMemory()).skill, 'makeBowAndArrows');
+  assert.equal(nextStep(bot, fakeMemory()).skill, 'fillWaterBucket');
 });
 
 test('ポータルを作ったらネザーへ、ロッドが集まったらパール集め', () => {
@@ -85,4 +85,12 @@ test('食料の次はベッド作り、羊が見つからなかった直後は�
   assert.equal(nextStep(fakeBot(base), fakeMemory()).skill, 'makeBed');
   assert.equal(nextStep(fakeBot(base), fakeMemory({}, { bedRetryAt: Date.now() + 60_000 })).skill, 'getIronGear');
   assert.equal(nextStep(fakeBot({ ...base, red_bed: 1 }), fakeMemory()).skill, 'getIronGear');
+});
+test('RTA の流れ: エンダーアイがそろってから弓と矢、夜は防具があればエンダーマン狩り', () => {
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  const mem = fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 } });
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 };
+  assert.equal(nextStep(armored(fakeBot({ ...base, ender_eye: 12 })), mem).skill, 'makeBowAndArrows');
+  assert.equal(nextStep(armored(fakeBot({ ...base, blaze_rod: 6 }, { isDay: false })), mem).skill, 'huntEndermen');
+  assert.equal(nextStep(fakeBot({ ...base, blaze_rod: 6 }, { isDay: false }), mem).skill, 'shelterForNight');
 });
