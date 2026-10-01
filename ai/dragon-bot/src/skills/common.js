@@ -269,8 +269,14 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       if (/tool|harvest/i.test(e.message)) throw new SkillError(`${blocks[0].name} を掘る道具がない`);
       // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）。原木なら同じ幹の上下もまとめて外す
       markUnreachable(ctx, blocks[0].position);
-      if (/近づけない|No path/.test(e.message) && isLog(blocks[0].name)) {
-        for (let dy = -4; dy <= 8; dy++) markUnreachable(ctx, blocks[0].position.offset(0, dy, 0));
+      if (/近づけない|No path|Took to long/.test(e.message)) {
+        const b0 = blocks[0].position;
+        if (isLog(blocks[0].name)) {
+          for (let dy = -4; dy <= 8; dy++) markUnreachable(ctx, b0.offset(0, dy, 0));
+        } else {
+          // 鉱脈などはまとまっているので、届かなかったブロックの周り 2 マスもまとめて外す
+          for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) markUnreachable(ctx, b0.offset(dx, dy, dz));
+        }
       }
       // 失敗が続く地形（崖の上の石など）では粘らず、呼び出し側の別の方法（掘り下がるなど）に任せる
       if (++fails >= maxFails) {
@@ -323,7 +329,11 @@ export function isNextToLiquid(bot, pos) {
 // ブランチマイニング: 指定の高さで横穴を掘り進み、壁に見えた鉱石を掘る。
 export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
   const { bot } = ctx;
-  if (Math.abs(bot.entity.position.y - y) > 3) await descendTo(ctx, y);
+  if (Math.abs(bot.entity.position.y - y) > 3) {
+    ctx.log.info(`ブランチマイニング: y=${Math.floor(bot.entity.position.y)} から y=${y} まで階段状に掘り下がる`);
+    await descendTo(ctx, y);
+    ctx.log.info(`ブランチマイニング: y=${Math.floor(bot.entity.position.y)} に着いた、横に掘り進む`);
+  }
   let got = 0;
   const start = count(bot, ores[0]);
   const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
