@@ -1,6 +1,6 @@
 // ネザー関連とエンダーパール集め
 import {
-  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals, placeWallToward,
+  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals, placeWallToward, collectWithTimeout,
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
@@ -281,7 +281,7 @@ export async function raidBastionGold(ctx, { ingots = 64 } = {}) {
     abortable(ctx);
     const g = findVisibleBlocks(bot, ['gold_block', 'gilded_blackstone', 'nether_gold_ore'], { maxDistance: 32, count: 1 })[0];
     if (!g) { await exploreStep(ctx, 16); continue; }
-    await bot.collectBlock.collect(g, { ignoreNoPath: true }).catch((e) => ctx.log.warn(e.message));
+    await collectWithTimeout(ctx, g).catch((e) => ctx.log.warn(e.message));
   }
   // 金ブロックはインゴットに、金塊はインゴットにまとめる
   if (count(bot, 'gold_block') > 0) await craftItem(ctx, 'gold_ingot', count(bot, 'gold_ingot') + count(bot, 'gold_block') * 9).catch(() => {});

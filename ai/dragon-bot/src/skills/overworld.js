@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown, isNextToLiquid,
+  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -111,7 +111,7 @@ export async function gatherWood(ctx, { logs = 8 } = {}) {
       const block = bot.blockAt(pos);
       if (!block || !isLog(block.name)) { tree.delete(k); continue; }
       try {
-        await bot.collectBlock.collect(block, { ignoreNoPath: true });
+        await collectWithTimeout(ctx, block);
         onMined(block);
       } catch (e) {
         if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
@@ -273,7 +273,7 @@ export async function makeBowAndArrows(ctx, { arrows = 32 } = {}) {
       const spider = nearestEntityNamed(bot, ['spider', 'cave_spider'], 32);
       if (spider) { await attackEntity(ctx, spider); await pickUpItems(ctx); continue; }
       const web = findVisibleBlocks(bot, ['cobweb'], { maxDistance: 32, count: 1 })[0];
-      if (web) { await bot.collectBlock.collect(web, { ignoreNoPath: true }).catch(() => {}); continue; }
+      if (web) { await collectWithTimeout(ctx, web).catch(() => {}); continue; }
       const skel = night && nearestEntityNamed(bot, ['skeleton'], 24);
       if (skel) { await attackEntity(ctx, skel); await pickUpItems(ctx); if (findItem(bot, 'bow')) break; continue; }
       await exploreStep(ctx);
@@ -327,7 +327,7 @@ export async function collectObsidian(ctx, { count: n = 10 } = {}) {
     abortable(ctx);
     // すでに黒曜石が見えていればそれを掘る
     const obs = findVisibleBlocks(bot, ['obsidian'], { maxDistance: 24, count: 1 })[0];
-    if (obs) { await bot.collectBlock.collect(obs, { ignoreNoPath: true }).catch((e) => ctx.log.warn(e.message)); continue; }
+    if (obs) { await collectWithTimeout(ctx, obs).catch((e) => ctx.log.warn(e.message)); continue; }
     const lava = findVisibleBlocks(bot, ['lava'], { maxDistance: 48, count: 1, extra: (b) => b.metadata === 0 })[0];
     if (!lava) {
       // 洞窟の溶岩を探して少し下へ

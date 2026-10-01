@@ -162,18 +162,54 @@ export function isUnreachable(ctx, pos) {
 }
 
 // 見えているブロックを掘って集める。見つからなければ探索する。
-// collectBlock は、落ちたアイテムを拾えない場所などで何分も戻ってこないことがあるので時間で打ち切る
+//
+// 1 ブロックの採掘は自前で行う（collectBlock プラグインは、経路が無い・ドロップを拾えない場所で
+// 何分も戻ってこない／途中で止まることがあり、動きがおぼつかなく見える原因だった）:
+//   届く位置まで歩く → 道具を持つ → ブロックを見て掘り切る → 落ちた物を拾う。全体を時間で打ち切る。
 const COLLECT_TIMEOUT_MS = 40_000;
+export async function mineOne(ctx, block, { reach = 4.5 } = {}) {
+  const { bot } = ctx;
+  const pos = block.position;
+  // 届かなければ近づく（真下・真上のブロックは pathfinder に任せず、その場で掘る）
+  const eye = () => bot.entity.position.offset(0, 1.6, 0);
+  if (eye().distanceTo(pos.offset(0.5, 0.5, 0.5)) > reach) {
+    await bot.pathfinder.goto(new goals.GoalLookAtBlock(pos, bot.world, { reach }));
+  }
+  const b = bot.blockAt(pos);
+  if (!b || b.name !== block.name) throw new Error(`${block.name} が無くなっていた`);
+  if (!bot.canDigBlock(b)) throw new Error(`${block.name} は掘れない`);
+  await bot.tool.equipForBlock(b, { requireHarvest: true });
+  // 掘り切るまで待つ。途中で止められたら（持ち替え・押し出し）1 回だけやり直す
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await bot.dig(bot.blockAt(pos), true);
+      break;
+    } catch (e) {
+      if (attempt === 1 || !/abort|interrupt/i.test(e.message)) throw e;
+      await bot.waitForTicks(5);
+      if (bot.blockAt(pos)?.name !== block.name) break;
+    }
+  }
+  // ドロップを拾う（足元に落ちていれば歩き寄る）
+  await bot.waitForTicks(6);
+  for (let i = 0; i < 3; i++) {
+    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3);
+    if (!item) break;
+    await bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.5)).catch(() => {});
+    await bot.waitForTicks(4);
+  }
+}
+
 export async function collectWithTimeout(ctx, block, ms = COLLECT_TIMEOUT_MS) {
   const { bot } = ctx;
   let timer;
   try {
     return await Promise.race([
-      bot.collectBlock.collect(block, { ignoreNoPath: true }),
+      mineOne(ctx, block),
       new Promise((_, reject) => {
         timer = setTimeout(() => {
-          try { bot.collectBlock.cancelTask?.(); } catch {}
           try { bot.pathfinder.stop(); } catch {}
+          try { bot.stopDigging(); } catch {}
           reject(new Error(`${Math.round(ms / 1000)} 秒たっても掘り終わらない`));
         }, ms);
       }),
@@ -279,7 +315,7 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
       const seen = findVisibleBlocks(bot, ores, { maxDistance: 8, count: 4, visibleOnly: true });
       for (const b of seen) {
         abortable(ctx);
-        await bot.collectBlock.collect(b, { ignoreNoPath: true }).catch((e) => ctx.log.warn(e.message));
+        await collectWithTimeout(ctx, b).catch((e) => ctx.log.warn(e.message));
         got++;
       }
     }

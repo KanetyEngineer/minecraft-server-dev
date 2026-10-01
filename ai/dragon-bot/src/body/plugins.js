@@ -48,6 +48,9 @@ export function configureBody(bot) {
   mv.allow1by1towers = true;
   mv.allowFreeMotion = false;
   mv.dontCreateFlow = true; // 水や溶岩を流さないように掘る
+  // 掘る・置くは歩くより高コストにして、少し遠回りでも道があれば歩く（掘りながら進むと動きがぎこちなく、時間もかかる）
+  mv.digCost = 4;
+  mv.placeCost = 3;
   mv.scafoldingBlocks = SCAFFOLD_BLOCKS
     .map((n) => bot.registry.itemsByName[n]?.id)
     .filter((id) => id !== undefined);
