@@ -1,6 +1,7 @@
 // http://localhost:3007/ で今の状態を確認できる簡単なページ（ローカルのみ）
 import http from 'node:http';
 import { snapshot } from './world/perception.js';
+import { recentLog } from './log.js';
 
 export function startStatusServer(port, getAgent) {
   if (!port) return null;
@@ -22,11 +23,20 @@ export function startStatusServer(port, getAgent) {
       res.end(JSON.stringify(body, null, 2));
       return;
     }
+    if (req.url?.startsWith('/log')) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(recentLog().join('\n'));
+      return;
+    }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(`<!doctype html><meta charset="utf-8"><title>DragonBot</title>
 <style>body{font-family:system-ui,sans-serif;margin:16px;background:#111;color:#eee}pre{white-space:pre-wrap;background:#1c1c1c;padding:12px;border-radius:8px}</style>
 <h1>DragonBot の状態</h1><pre id="s">読み込み中…</pre>
-<script>async function t(){try{const r=await fetch('/state.json');document.getElementById('s').textContent=JSON.stringify(await r.json(),null,2)}catch(e){}}t();setInterval(t,2000)</script>`);
+<h2>ログ（直近 400 行、🧠 が AI の判断）</h2><pre id="l" style="max-height:60vh;overflow:auto">読み込み中…</pre>
+<script>
+async function t(){try{const r=await fetch('/state.json');document.getElementById('s').textContent=JSON.stringify(await r.json(),null,2)}catch(e){}}
+async function g(){try{const r=await fetch('/log.txt');const el=document.getElementById('l');const atEnd=el.scrollTop+el.clientHeight>=el.scrollHeight-20;el.textContent=await r.text();if(atEnd)el.scrollTop=el.scrollHeight}catch(e){}}
+t();g();setInterval(t,2000);setInterval(g,2000)</script>`);
   });
   server.listen(port, '127.0.0.1');
   return server;

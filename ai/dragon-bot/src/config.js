@@ -47,5 +47,6 @@ export function loadConfig() {
     dataDir: process.env.DATA_DIR || 'data',
     // ブラウザで現在の状態を見る簡易ダッシュボード（0 で無効）
     statusPort: num('STATUS_PORT', 3007),
+    logDir: process.env.LOG_DIR || 'logs',
   };
 }

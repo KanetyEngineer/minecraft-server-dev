@@ -7,9 +7,10 @@ import { Planner } from './brain/planner.js';
 import { ChatResponder } from './brain/chat.js';
 import { Agent } from './agent.js';
 import { startStatusServer } from './status.js';
-import { log } from './log.js';
+import { log, startLogFile } from './log.js';
 
 const cfg = loadConfig();
+startLogFile(cfg.logDir);
 const memory = new Memory(cfg.dataDir);
 const planner = new Planner(cfg);
 const chat = new ChatResponder(cfg, planner.client);
