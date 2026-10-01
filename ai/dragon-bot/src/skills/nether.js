@@ -1,0 +1,148 @@
+// ネザー関連とエンダーパール集め
+import {
+  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals,
+} from './common.js';
+import { count, findItem } from '../util/items.js';
+import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
+
+// ポータルに入り、次元が変わるのを待つ
+export async function walkIntoPortal(ctx, place, expectDim) {
+  const { bot } = ctx;
+  if (dim(ctx) === expectDim) return;
+  if (!place) throw new SkillError('ポータルの場所を覚えていない');
+  await travelTo(ctx, place.x, place.z, { range: 2 });
+  const portal = findVisibleBlocks(bot, ['nether_portal'], { maxDistance: 8, count: 1, visibleOnly: false })[0];
+  if (!portal) throw new SkillError('ポータルが見当たらない（壊れた？）');
+  await bot.pathfinder.goto(new goals.GoalBlock(portal.position.x, portal.position.y, portal.position.z)).catch(() => {});
+  for (let i = 0; i < 40; i++) {
+    abortable(ctx);
+    if (dim(ctx) === expectDim) {
+      await sleep(2000); // チャンク読み込み待ち
+      return;
+    }
+    await sleep(500);
+  }
+  throw new SkillError('次元が切り替わらなかった');
+}
+
+export async function enterNether(ctx) {
+  const { bot, memory } = ctx;
+  await walkIntoPortal(ctx, memory.getPlace('overworld_portal'), 'the_nether');
+  memory.setPlace('nether_portal', bot.entity.position, 'the_nether');
+  return 'ネザーに到着';
+}
+
+export async function returnThroughPortal(ctx) {
+  const { memory } = ctx;
+  if (dim(ctx) === 'the_nether') {
+    await walkIntoPortal(ctx, memory.getPlace('nether_portal'), 'overworld');
+    return 'オーバーワールドに戻った';
+  }
+  return 'ネザーにいないので何もしない';
+}
+
+// 要塞（ネザーレンガ）を見つけて、ブレイズを倒してロッドを集める
+export async function huntBlazes(ctx, { rods = 6 } = {}) {
+  const { bot, memory } = ctx;
+  if (dim(ctx) !== 'the_nether') throw new SkillError('ネザーにいない（enterNether が先）');
+  const rodCount = () => count(bot, 'blaze_rod');
+  let fortress = memory.getPlace('fortress');
+  for (let t = 0; !fortress && t < 60; t++) {
+    abortable(ctx);
+    const brick = findVisibleBlocks(bot, ['nether_bricks', 'nether_brick_fence'], { maxDistance: 64, count: 1 })[0];
+    if (brick) {
+      memory.setPlace('fortress', brick.position, 'the_nether');
+      fortress = memory.getPlace('fortress');
+      ctx.say?.('要塞みつけた！');
+      break;
+    }
+    await exploreStep(ctx, 48);
+  }
+  if (!fortress) throw new SkillError('要塞が見つからなかった');
+  await travelTo(ctx, fortress.x, fortress.z, { range: 4 });
+
+  for (let t = 0; rodCount() < rods && t < 80; t++) {
+    abortable(ctx);
+    const blaze = nearestEntityNamed(bot, ['blaze'], 32);
+    if (blaze) {
+      const reachable = Math.abs(blaze.position.y - bot.entity.position.y) < 3;
+      if (!reachable && findItem(bot, 'bow') && count(bot, 'arrow') > 0) {
+        await shootAt(ctx, blaze);
+      } else {
+        await attackEntity(ctx, blaze, { timeoutMs: 15000 });
+      }
+      await pickUpItems(ctx, 10);
+      continue;
+    }
+    // スポナーを探してその近くで待つ
+    const spawner = findVisibleBlocks(bot, ['spawner'], { maxDistance: 48, count: 1 })[0];
+    if (spawner) {
+      memory.setPlace('blaze_spawner', spawner.position, 'the_nether');
+      await goTo(ctx, spawner.position.x + 3, spawner.position.y, spawner.position.z + 3, 2).catch(() => {});
+      await sleep(4000);
+    } else {
+      await exploreStep(ctx, 24);
+    }
+  }
+  if (rodCount() < rods) throw new SkillError(`ブレイズロッド ${rodCount()}/${rods}`);
+  return `ブレイズロッド ${rodCount()} 本`;
+}
+
+export async function shootAt(ctx, entity, { shots = 4 } = {}) {
+  const { bot } = ctx;
+  if (!findItem(bot, 'bow') || count(bot, 'arrow') === 0) throw new SkillError('弓か矢がない');
+  for (let i = 0; i < shots && entity.isValid; i++) {
+    abortable(ctx);
+    await bot.equip(findItem(bot, 'bow'), 'hand');
+    bot.hawkEye.oneShot(entity, 'bow');
+    await sleep(1600);
+  }
+  return !entity.isValid;
+}
+
+// 金を渡してピグリンと物々交換（エンダーパール狙い）
+export async function barterWithPiglins(ctx, { pearls = 12 } = {}) {
+  const { bot } = ctx;
+  if (dim(ctx) !== 'the_nether') throw new SkillError('ネザーにいない');
+  // 金の防具を 1 つ着ていないと襲われる
+  const goldArmor = ['golden_helmet', 'golden_boots', 'golden_chestplate', 'golden_leggings'];
+  if (!bot.inventory.slots.slice(5, 9).some((s) => s && goldArmor.includes(s.name))) {
+    if (!goldArmor.some((n) => findItem(bot, n))) await craftItem(ctx, 'golden_boots', 1);
+    const g = goldArmor.map((n) => findItem(bot, n)).find(Boolean);
+    await bot.equip(g, g.name.includes('helmet') ? 'head' : g.name.includes('boots') ? 'feet' : g.name.includes('chest') ? 'torso' : 'legs');
+  }
+  const start = count(bot, 'ender_pearl');
+  for (let t = 0; count(bot, 'ender_pearl') - start < pearls && count(bot, 'gold_ingot') > 0 && t < 60; t++) {
+    abortable(ctx);
+    const piglin = nearestEntityNamed(bot, ['piglin'], 40);
+    if (!piglin) { await exploreStep(ctx, 32); continue; }
+    await goTo(ctx, piglin.position.x, piglin.position.y, piglin.position.z, 3).catch(() => {});
+    await smoothLookAt(bot, piglin.position.offset(0, 1, 0), ctx.cfg.human.turnSpeed);
+    await bot.toss(bot.registry.itemsByName.gold_ingot.id, null, 1);
+    await sleep(7000); // ピグリンが品定めする時間
+    await pickUpItems(ctx, 8);
+  }
+  return `エンダーパール +${count(bot, 'ender_pearl') - start}`;
+}
+
+// エンダーマンを倒してパールを集める（夜のオーバーワールドか歪んだ森）
+export async function huntEndermen(ctx, { pearls = 12 } = {}) {
+  const { bot } = ctx;
+  const start = count(bot, 'ender_pearl');
+  for (let t = 0; count(bot, 'ender_pearl') - start < pearls && t < 60; t++) {
+    abortable(ctx);
+    const em = nearestEntityNamed(bot, ['enderman'], 48);
+    if (!em) {
+      if (dim(ctx) === 'overworld' && bot.time.isDay) return `昼なのでエンダーマンが少ない（+${count(bot, 'ender_pearl') - start}）`;
+      await exploreStep(ctx, 40);
+      continue;
+    }
+    // 近づいて目を合わせ、向かってきたところを倒す
+    await goTo(ctx, em.position.x, em.position.y, em.position.z, 6).catch(() => {});
+    await smoothLookAt(bot, em.position.offset(0, 2.6, 0), ctx.cfg.human.turnSpeed);
+    await sleep(600);
+    await attackEntity(ctx, em, { timeoutMs: 25000 });
+    await pickUpItems(ctx, 8);
+  }
+  return `エンダーパール ${count(bot, 'ender_pearl')} 個`;
+}
