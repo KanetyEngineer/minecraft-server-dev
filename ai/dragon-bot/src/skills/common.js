@@ -305,6 +305,24 @@ export async function placeNear(ctx, itemName) {
       }
     }
   }
+  // 坑道の中などで周りが全部ふさがっているときは、横のブロックを 1 つ掘って場所を作る
+  for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const target = base.offset(x, 0, z);
+    const at = bot.blockAt(target);
+    const below = bot.blockAt(target.offset(0, -1, 0));
+    if (!at || at.boundingBox !== 'block' || !bot.canDigBlock(at) || !below || below.boundingBox !== 'block') continue;
+    if (isNextToLiquid(bot, target)) continue;
+    await bot.tool.equipForBlock(at, {}).catch(() => {});
+    await bot.dig(at).catch(() => {});
+    if (bot.blockAt(target)?.name !== 'air') continue;
+    await bot.equip(findItem(bot, itemName), 'hand');
+    try {
+      await bot.placeBlock(below, new Vec3(0, 1, 0));
+      return bot.blockAt(target);
+    } catch (e) {
+      ctx.log.warn(`設置失敗: ${e.message}`);
+    }
+  }
   throw new SkillError(`${itemName} を置ける場所がない`);
 }
 
