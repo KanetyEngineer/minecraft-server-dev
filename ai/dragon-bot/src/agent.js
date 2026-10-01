@@ -75,6 +75,25 @@ export class Agent {
     if (!bot.entity || this.reflexBusy) return;
     // 穴にこもってふたをしている間は、外の敵に反応して飛び出さない
     if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
+    // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）
+    const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
+    if (headBlock?.name === 'water' && bot.oxygenLevel !== undefined && bot.oxygenLevel < 8) {
+      this.reflexBusy = true;
+      try {
+        this.interrupt('息継ぎ');
+        log.warn(`酸素が少ない（${bot.oxygenLevel}/20）ので水面へ上がる`);
+        bot.setControlState('jump', true);
+        for (let t = 0; t < 120; t++) {
+          await bot.waitForTicks(1);
+          const h = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
+          if (h?.name !== 'water' && bot.oxygenLevel >= 18) break;
+        }
+      } finally {
+        bot.setControlState('jump', false);
+        this.reflexBusy = false;
+      }
+      return;
+    }
     const pos = bot.entity.position;
     const threat = bot.nearestEntity((e) => isHostile(e) && e.name !== 'ender_dragon' && e.position.distanceTo(pos) < 5);
     // クリーパーには近づかない（6 マス以内なら離れる）

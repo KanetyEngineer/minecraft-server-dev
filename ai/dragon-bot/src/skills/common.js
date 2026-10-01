@@ -219,7 +219,7 @@ export async function collectWithTimeout(ctx, block, ms = COLLECT_TIMEOUT_MS) {
   }
 }
 
-export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter, onMined, maxFails = 6 } = {}) {
+export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = true, maxExplore = 12, filter, onMined, maxFails = 6, avoidLiquid = true } = {}) {
   const { bot, cfg } = ctx;
   let mined = 0;
   let explored = 0;
@@ -227,7 +227,8 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
   while (mined < n) {
     abortable(ctx);
     const blocks = findVisibleBlocks(bot, names, { maxDistance, count: filter ? 24 : 8, visibleOnly: cfg.human.visibleOnly })
-      .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)));
+      // 水や溶岩に接したブロックは狙わない（水中の鉄鉱石に 40 秒ずつ粘って溺れたことがある）
+      .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)) && !(avoidLiquid && isNextToLiquid(bot, b.position)));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
