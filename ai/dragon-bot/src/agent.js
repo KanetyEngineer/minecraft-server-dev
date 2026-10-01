@@ -81,6 +81,8 @@ export class Agent {
     if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
     // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）
     const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
+    // 最後に息ができていた場所（頭が水の外で地面の上）を覚えておく。溺れそうなときの第一の逃げ先
+    if (headBlock && headBlock.name !== 'water' && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
     if (headBlock?.name === 'water' && bot.oxygenLevel !== undefined && bot.oxygenLevel < 8) {
       this.reflexBusy = true;
       try {
@@ -96,6 +98,16 @@ export class Agent {
           // 無ければ頭上のブロックを掘って空気を探す
           if (t === 20 && headWet()) {
             bot.setControlState('jump', false);
+            // まず、さっきまで息ができていた場所へ戻る（数秒前に通った道なので確実に行ける）
+            if (this.lastDryPos && this.lastDryPos.distanceTo(bot.entity.position) < 24) {
+              log.warn(`さっきまで息ができていた場所 (${this.lastDryPos.x}, ${this.lastDryPos.y}, ${this.lastDryPos.z}) へ戻る`);
+              await Promise.race([
+                bot.pathfinder.goto(new goals.GoalBlock(this.lastDryPos.x, this.lastDryPos.y, this.lastDryPos.z)).catch(() => {}),
+                sleep(8000),
+              ]);
+              try { bot.pathfinder.setGoal(null); } catch {}
+              if (!headWet()) { bot.setControlState('jump', true); continue; }
+            }
             const air = nearestAirPocket(bot, 8);
             if (air) {
               log.warn(`真上に出られないので空気のある所 (${air.x}, ${air.y}, ${air.z}) へ`);
