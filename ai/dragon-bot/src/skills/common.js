@@ -181,7 +181,8 @@ export async function mineOne(ctx, block, { reach = 4.5 } = {}) {
         bot.pathfinder.goto(new goals.GoalLookAtBlock(pos, bot.world, { reach })),
         new Promise((_, reject) => {
           timer = setTimeout(() => {
-            try { bot.pathfinder.stop(); } catch {}
+            // stop() は次の goto まで止めてしまう（Path was stopped）ので、目標を外すだけにする
+            try { bot.pathfinder.setGoal(null); } catch {}
             reject(new Error(`${block.name} (${pos.x}, ${pos.y}, ${pos.z}) に近づけない`));
           }, 12_000);
         }),
@@ -266,8 +267,11 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       }
       ctx.log.warn(`採掘失敗 ${blocks[0].name}: ${e.message}`);
       if (/tool|harvest/i.test(e.message)) throw new SkillError(`${blocks[0].name} を掘る道具がない`);
-      // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）
+      // 届かないブロックは外して、すぐ次の候補へ（同じブロックで固まらない）。原木なら同じ幹の上下もまとめて外す
       markUnreachable(ctx, blocks[0].position);
+      if (/近づけない|No path/.test(e.message) && isLog(blocks[0].name)) {
+        for (let dy = -4; dy <= 8; dy++) markUnreachable(ctx, blocks[0].position.offset(0, dy, 0));
+      }
       // 失敗が続く地形（崖の上の石など）では粘らず、呼び出し側の別の方法（掘り下がるなど）に任せる
       if (++fails >= maxFails) {
         ctx.log.warn(`採掘が ${fails} 回続けて失敗したので、この場所での採掘をやめる`);
