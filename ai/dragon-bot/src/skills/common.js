@@ -315,8 +315,15 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
       const seen = findVisibleBlocks(bot, ores, { maxDistance: 8, count: 4, visibleOnly: true });
       for (const b of seen) {
         abortable(ctx);
-        await collectWithTimeout(ctx, b).catch((e) => ctx.log.warn(e.message));
-        got++;
+        try {
+          await collectWithTimeout(ctx, b);
+          got++;
+        } catch (e) {
+          if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+          ctx.log.warn(e.message);
+          // ツルハシが壊れたら、掘れないまま掘り進まずに呼び出し側へ返す（作り直してもらう）
+          if (/tool|harvest/i.test(e.message)) return Math.max(got, count(bot, ores[0]) - start);
+        }
       }
     }
     di += Math.random() < 0.5 ? 1 : 3; // 左右どちらかに曲がる

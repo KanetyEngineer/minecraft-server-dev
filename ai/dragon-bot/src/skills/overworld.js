@@ -144,14 +144,30 @@ export async function gatherWood(ctx, { logs = 8 } = {}) {
 
 export async function getCobblestone(ctx, n) {
   const { bot } = ctx;
-  if (cobbleCount(bot) >= n) return;
-  // ツルハシなしで石を掘っても何も落ちず、経路探索も膨れるので先に止める
-  if (!PICKAXES.some((p) => findItem(bot, p))) throw new SkillError('ツルハシが無いので丸石を掘れない');
-  // 見えている石を掘る。無ければ少し掘り下がる。
-  await mineBlocks(ctx, COBBLE_SOURCES, n - cobbleCount(bot), { maxDistance: 24, maxExplore: 2 });
-  if (cobbleCount(bot) < n && PICKAXES.some((p) => findItem(bot, p))) {
-    const y = Math.floor(bot.entity.position.y);
-    await branchMine(ctx, COBBLE_SOURCES, n - cobbleCount(bot), y - 8, { length: 12 });
+  const hasPick = () => PICKAXES.some((p) => findItem(bot, p));
+  // 木のツルハシは 59 回で壊れるので、途中で壊れたらその場で作り直して続ける（木集めからやり直さない）
+  const ensurePick = async () => {
+    if (hasPick()) return true;
+    ctx.log.info('ツルハシが壊れたので木のツルハシを作り直す');
+    try {
+      await ensurePlanks(ctx, 3);
+      await craftItem(ctx, 'stick', 2);
+      await craftItem(ctx, 'wooden_pickaxe', 1);
+    } catch (e) {
+      ctx.log.warn(`ツルハシを作り直せなかった: ${e.message}`);
+    }
+    return hasPick();
+  };
+  for (let round = 0; round < 3 && cobbleCount(bot) < n; round++) {
+    abortable(ctx);
+    // ツルハシなしで石を掘っても何も落ちず、経路探索も膨れるので先に止める
+    if (!(await ensurePick())) throw new SkillError('ツルハシが無いので丸石を掘れない');
+    // 見えている石を掘る。無ければ少し掘り下がる。
+    await mineBlocks(ctx, COBBLE_SOURCES, n - cobbleCount(bot), { maxDistance: 24, maxExplore: 2 });
+    if (cobbleCount(bot) < n && (await ensurePick())) {
+      const y = Math.floor(bot.entity.position.y);
+      await branchMine(ctx, COBBLE_SOURCES, n - cobbleCount(bot), y - 8, { length: 12 });
+    }
   }
   if (cobbleCount(bot) < n) throw new SkillError(`丸石が足りない（${cobbleCount(bot)}/${n}）`);
 }
