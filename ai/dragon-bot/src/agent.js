@@ -111,6 +111,19 @@ export class Agent {
       return;
     }
     if (this.reflexBusy) return;
+    this.noticeDanger();
+    // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
+    const feetBlock = bot.blockAt(bot.entity.position.offset(0, 0.2, 0));
+    const web = [feetBlock, headBlock].find((b) => b?.name === 'cobweb');
+    if (web) {
+      this.reflexBusy = true;
+      try {
+        const sword = bot.inventory.items().find((i) => i.name.endsWith('_sword'));
+        if (sword) await bot.equip(sword, 'hand').catch(() => {});
+        await bot.dig(web, true).catch(() => {});
+      } finally { this.reflexBusy = false; }
+      return;
+    }
     // 穴にこもってふたをしている間は、外の敵に反応して飛び出さない
     if (this.current?.name === 'shelterForNight' && this.state.sheltered) return;
     const pos = bot.entity.position;
@@ -145,6 +158,8 @@ export class Agent {
     //（洞窟でスケルトンに壁を作っている間に、そばのドクグモに倒された）
     else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat
       && !(threat && threat.position.distanceTo(pos) < 3.5)) action = { kind: 'shield', from: archer };
+    // ドクグモは足が速く狭い所も通るので、逃げても追いつかれて毒を受け続ける。体力がよほど少なくなければ戦う
+    else if (threat && recentlyHurt && threat.name === 'cave_spider' && bot.health > 4) action = { kind: 'fight', target: threat };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
     else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
@@ -287,6 +302,23 @@ export class Agent {
       bot.setControlState('jump', true);
       setTimeout(() => bot.clearControlStates(), 1200);
     }
+  }
+
+  // 廃坑（ドクグモのスポナー、まとまったクモの巣）を見つけたら場所を記録する。近くでは掘らない（common.js の nearDanger）
+  noticeDanger() {
+    const { bot } = this;
+    if (Date.now() - (this.dangerScanAt ?? 0) < 3000) return;
+    this.dangerScanAt = Date.now();
+    const id = (n) => bot.registry.blocksByName[n]?.id;
+    const spawner = id('spawner') !== undefined ? bot.findBlock({ matching: id('spawner'), maxDistance: 16 }) : null;
+    const webs = id('cobweb') !== undefined ? bot.findBlocks({ matching: id('cobweb'), maxDistance: 10, count: 4 }) : [];
+    const at = spawner?.position ?? (webs.length >= 4 ? webs[0] : null);
+    if (!at) return;
+    const zones = (this.state.dangerZones ??= []);
+    if (zones.some((z) => z.distanceTo(at) < 16)) return;
+    zones.push(at.clone());
+    if (zones.length > 20) zones.shift();
+    log.warn(`廃坑を見つけた（${spawner ? 'スポナー' : 'クモの巣'} (${at.x}, ${at.y}, ${at.z})）。半径 24 マスでは掘らない`);
   }
 
   // 息ができる所まで逃げる。息ができるまで（最大 25 秒）は作業に戻さない

@@ -191,6 +191,24 @@ export function isUnreachable(ctx, pos) {
   return true;
 }
 
+// 廃坑など危険な場所（ドクグモのスポナーやクモの巣の多い所）。近くでは掘らない（agent.js が見つけて記録する）
+export const DANGER_RADIUS = 24;
+export function nearDanger(ctx, pos, r = DANGER_RADIUS) {
+  return (ctx.state?.dangerZones ?? []).some((z) => z.distanceTo(pos) < r);
+}
+
+// 危険な場所から離れる（遠ざかる向きに探索）
+export async function leaveDanger(ctx) {
+  const { bot } = ctx;
+  for (let k = 0; k < 4 && nearDanger(ctx, bot.entity.position); k++) {
+    abortable(ctx);
+    const z = ctx.state.dangerZones.reduce((a, b) => (a.distanceTo(bot.entity.position) < b.distanceTo(bot.entity.position) ? a : b));
+    const p = bot.entity.position;
+    const dx = p.x - z.x; const dz = p.z - z.z; const d = Math.hypot(dx, dz) || 1;
+    await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (dx / d) * 16, p.z + (dz / d) * 16, 3)).catch(() => {});
+  }
+}
+
 // 見えているブロックを掘って集める。見つからなければ探索する。
 //
 // 1 ブロックの採掘は自前で行う（collectBlock プラグインは、経路が無い・ドロップを拾えない場所で
@@ -277,7 +295,8 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
     abortable(ctx);
     const blocks = findVisibleBlocks(bot, names, { maxDistance, count: filter ? 24 : 8, visibleOnly: cfg.human.visibleOnly })
       // 水や溶岩に接したブロックは狙わない（水中の鉄鉱石に 40 秒ずつ粘って溺れたことがある）
-      .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)) && !(avoidLiquid && isNextToLiquid(bot, b.position)));
+      .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)) && !(avoidLiquid && isNextToLiquid(bot, b.position))
+        && !nearDanger(ctx, b.position));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
@@ -390,8 +409,14 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
     ctx.log.info('前に水没していた場所の近くなので、離れてから横掘りする');
     for (let k = 0; k < 3 && ctx.state.floodedAt.distanceTo(bot.entity.position) < 24; k++) await exploreStep(ctx, 24);
   }
+  // 廃坑（ドクグモ）の近くなら、離れてから掘る
+  if (nearDanger(ctx, bot.entity.position)) {
+    ctx.log.info('廃坑の近くなので、離れてから横掘りする');
+    await leaveDanger(ctx);
+  }
   for (let leg = 0; leg < 6 && got < n; leg++) {
     if (!(await ensurePickaxe(ctx))) break;
+    if (nearDanger(ctx, bot.entity.position)) { ctx.log.info('横掘りの先が廃坑の近くなので向きを変える'); await leaveDanger(ctx); }
     if (ctx.state.floodedAt && ctx.state.floodedAt.distanceTo(bot.entity.position) < 6) break;
     const [dx, dz] = dirs[di % 4];
     ctx.log.info(`ブランチマイニング ${leg + 1}/6 本目（y=${Math.floor(bot.entity.position.y)}、ここまで ${got}/${n} 個）`);
