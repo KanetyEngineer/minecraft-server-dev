@@ -8,6 +8,7 @@ import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
+import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 // ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
@@ -59,21 +60,29 @@ export class Agent {
       this.stopBody();
       this.reflexBusy = false;
     });
+    // ボットへのささやき（/msg DragonBot ...）は、先頭に ai が無くても指示として受け付ける
+    bot.on('whisper', (username, message) => {
+      if (username === bot.username) return;
+      this.handleAiCommand(username, parseAiCommand(message) ?? message, true).catch((e) => log.warn(`指示の処理に失敗: ${e.message}`));
+    });
     bot.on('chat', async (username, message) => {
       if (username === bot.username) return;
       this.chatLog.push({ username, message, at: Date.now() });
       this.chatLog = this.chatLog.slice(-10);
-      // 「ai 〜」「@DragonBot 〜」「!ai 〜」で始まるチャットはプレイヤーからの指示として扱う
-      const m = message.match(INSTRUCTION_RE);
-      if (m) { await this.takeInstruction(username, m[1].trim()); return; }
+      // 「@DragonBot 〜」も「ai 〜」と同じに扱う
+      let cmd = parseAiCommand(message.replace(new RegExp(`^\\s*@${bot.username}[\\s:：、,]+`, 'i'), 'ai '));
+      // サーバーにいるのが自分と相手の 2 人だけなら、「進捗報告して」のように先頭に ai が無くても、決まった指示には応じる
+      if (cmd === null && Object.keys(bot.players).length <= 2
+        && ['status', 'plan', 'come', 'stop', 'resume'].includes(classify(message.replace(new RegExp(bot.username, 'ig'), '')).kind)) {
+        cmd = message.replace(new RegExp(bot.username, 'ig'), '').trim();
+      }
+      if (cmd !== null) {
+        await this.handleAiCommand(username, cmd, false).catch((e) => log.warn(`指示の処理に失敗: ${e.message}`));
+        return;
+      }
       const ctx = `${dimensionOf(bot)}にいる。いまの作業: ${this.current?.name ?? '考え中'}`;
       const r = await this.chat.reply(bot, username, message, ctx);
       if (r) this.say(r);
-    });
-    // ささやき（/msg DragonBot 〜）は全部指示として扱う
-    bot.on('whisper', async (username, message) => {
-      if (username === bot.username) return;
-      await this.takeInstruction(username, message.replace(INSTRUCTION_RE, '$1').trim());
     });
   }
 
@@ -90,6 +99,41 @@ export class Agent {
   // 10 分以内の指示だけを有効とする
   pendingInstructions() {
     return this.instructions.filter((i) => Date.now() - i.at < 10 * 60_000);
+  }
+
+  // ゲーム内チャットの指示（ai 状況 / 来て / 止まれ / 再開 / やること / スキル名 / それ以外は会話）
+  async handleAiCommand(username, text, whisper) {
+    const { bot } = this;
+    const reply = (t) => (whisper ? bot.whisper(username, String(t).slice(0, 240)) : this.say(t));
+    const c = classify(text, Object.keys(SKILL_MAP));
+    log.brain(`💬 ${username} からの指示: 「${text}」 → ${c.kind}${c.skill ? ` ${c.skill}` : ''}`);
+    if (c.kind === 'help') return reply(`使い方: ${HELP}`);
+    if (c.kind === 'status') return reply(statusLine(bot, this.memory, this.current?.name) + (this.paused ? '（停止中）' : ''));
+    if (c.kind === 'plan') return reply(planLine(bot, this.memory));
+    if (c.kind === 'stop') {
+      this.paused = true;
+      this.order = null;
+      this.interrupt(`${username} の指示で停止`);
+      return reply('止まります。「ai 再開」で続けます');
+    }
+    if (c.kind === 'resume') {
+      this.paused = false;
+      return reply('再開します');
+    }
+    if (c.kind === 'come') {
+      this.order = { skill: 'comeToPlayer', args: { player: username } };
+      this.interrupt(`${username} に呼ばれた`);
+      return reply('今行きます');
+    }
+    if (c.kind === 'skill') {
+      this.order = { skill: c.skill, args: {} };
+      this.interrupt(`${username} の指示で ${c.skill}`);
+      return reply(`${c.skill} をやります`);
+    }
+    // 決まった形でない指示: LLM で判断しているときは、次の判断で最優先にする（takeInstruction）。
+    // ルールベースのときは自由な指示は理解できないので、今の状況と使い方を返す
+    if (this.planner?.client) return this.takeInstruction(username, c.text);
+    return reply(`ごめん、今は決まった指示しか分からない。${statusLine(bot, this.memory, this.current?.name)}（${HELP}）`);
   }
 
   interrupt(reason) {
@@ -469,6 +513,16 @@ export class Agent {
         if (this.memory.flag('dragonDefeated') && this.memory.flag('celebrated')) {
           log.info('🎉 エンダードラゴン討伐済み。待機します');
           await sleep(60_000);
+          continue;
+        }
+        // チャットで「止まれ」と言われている間は何もしない（反射は動く）
+        if (this.paused) { await sleep(1000); continue; }
+        // チャットで頼まれたこと（来て・スキル名）を、進捗表より先に 1 回やる
+        if (this.order) {
+          const order = this.order;
+          this.order = null;
+          log.brain(`[chat] ${order.skill}(${JSON.stringify(order.args)}) チャットの指示`);
+          await this.runSkill(order.skill, order.args);
           continue;
         }
         const snap = snapshot(this.bot, this.memory, this.cfg);

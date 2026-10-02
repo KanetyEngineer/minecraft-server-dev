@@ -104,3 +104,15 @@ export async function recoverItems(ctx) {
   ctx.memory.save();
   return `死亡地点のアイテムを回収（${got} 個）`;
 }
+
+// プレイヤーのそばへ行く（ゲーム内チャットの「ai 来て」）
+export async function comeToPlayer(ctx, { player } = {}) {
+  const { bot } = ctx;
+  const target = bot.players[player]?.entity;
+  if (!target) throw new SkillError(`${player} が見えない（近くにいない）`);
+  const p = target.position;
+  await travelTo(ctx, p.x, p.z, { range: 3 });
+  const t2 = bot.players[player]?.entity;
+  if (t2) await goTo(ctx, t2.position.x, t2.position.y, t2.position.z, 2).catch(() => {});
+  return `${player} のそばに来た`;
+}

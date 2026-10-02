@@ -84,6 +84,7 @@ export const SKILLS = [
   def('collectDrops', gen.collectDrops, '近くに落ちているアイテムを拾う。'),
   def('recoverItems', gen.recoverItems, '最後に死んだ場所へ戻ってアイテムを回収する。'),
   def('remember', gen.remember, '今いる場所に名前を付けて覚える、またはメモを残す。', { name: str('場所の名前'), note: str('メモ') }),
+  def('comeToPlayer', gen.comeToPlayer, 'プレイヤーのそばへ行く（呼ばれたとき）。', { player: str('プレイヤー名') }, ['player']),
   def('wait', gen.wait, '少し待つ（夜が明けるのを待つなど）。', { seconds: int('秒', 1, 120) }),
 ];
 
