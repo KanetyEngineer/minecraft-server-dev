@@ -7,6 +7,9 @@ on:
 jobs:
   decomp:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mc: ['1.21.1', '1.21.11']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -16,12 +19,12 @@ jobs:
       - name: genSources
         working-directory: research/decomp
         run: |
-          for v in 1.21.1 1.21.11; do
+          for v in ${{ matrix.mc }}; do
             gradle --no-daemon -q -Pmc=$v -Ploader=0.19.5 -Ploom_version=1.14-SNAPSHOT genSources
             J=$(find ~/.gradle/caches .gradle -name '*-sources.jar' -path "*${v}*" 2>/dev/null | grep -v client | head -1)
             echo "$v -> $J"; mkdir -p /tmp/s$v; (cd /tmp/s$v && unzip -oq "$J")
           done
       - name: dump
-        run: bash research/decomp/dump.sh > dump.txt; wc -l dump.txt
+        run: bash research/decomp/dump.sh ${{ matrix.mc }} > dump.txt; wc -l dump.txt
       - name: part1
         run: cat dump.txt

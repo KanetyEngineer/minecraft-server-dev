@@ -1,16 +1,20 @@
 #!/bin/bash
-A=/tmp/s1.21.1; B=/tmp/s1.21.11
-cd /tmp
-find s1.21.1 s1.21.11 -iname '*Potion*.java' -path '*projectile*' | sort
-for f in ThrowableProjectile ThrowableItemProjectile Projectile; do
-  diff -u $A/net/minecraft/world/entity/projectile/$f.java $B/net/minecraft/world/entity/projectile/$f.java | diffstat 2>/dev/null || diff $A/net/minecraft/world/entity/projectile/$f.java $B/net/minecraft/world/entity/projectile/$f.java | wc -l
-done
-echo "######## A ThrownPotion"; cat $A/net/minecraft/world/entity/projectile/ThrownPotion.java | grep -v '^import'
-echo "######## A ThrowableProjectile"; grep -v '^import' $A/net/minecraft/world/entity/projectile/ThrowableProjectile.java
-echo "######## A Entity portal"
-awk '/public Entity changeDimension/,/^    }$/' $A/net/minecraft/world/entity/Entity.java
-awk '/protected void handlePortal/,/^    }$/' $A/net/minecraft/world/entity/Entity.java
-awk '/public void setAsInsidePortal/,/^    }$/' $A/net/minecraft/world/entity/Entity.java
-awk '/public boolean canChangeDimensions/,/^    }$/' $A/net/minecraft/world/entity/Entity.java
-echo "######## A Projectile changeDimension etc"
-grep -n -E "changeDimension|restoreFrom|hasBeenShot|leftOwner|ownerUUID|cachedOwner" $A/net/minecraft/world/entity/projectile/Projectile.java
+V=$1; R=/tmp/s$V
+cd $R; echo "#### potion-ish projectile classes"; find . -path '*projectile*' -iname '*Potion*.java'
+E=net/minecraft/world/entity
+P=$E/projectile
+if [ "$V" = "1.21.1" ]; then
+python3 $GITHUB_WORKSPACE/research/decomp/extract.py $R \
+  $P/ThrownPotion.java:'*' $P/ThrowableProjectile.java:'*' \
+  $E/Entity.java:changeDimension,handlePortal,setAsInsidePortal,canChangeDimensions,restoreFrom,removeAfterChangingDimensions,isOnPortalCooldown,setPortalCooldown \
+  $P/Projectile.java:tick,restoreFrom,onHit,shoot \
+  net/minecraft/world/level/block/NetherPortalBlock.java:entityInside,getPortalDestination \
+  net/minecraft/world/entity/PortalProcessor.java:'*'
+else
+python3 $GITHUB_WORKSPACE/research/decomp/extract.py $R \
+  $P/AbstractThrownPotion.java:'*' $P/ThrowableProjectile.java:'*' \
+  $E/Entity.java:teleport,teleportCrossDimension,teleportSameDimension,handlePortal,setAsInsidePortal,canTeleport,canUsePortal,restoreFrom,removeAfterChangingDimensions,isOnPortalCooldown \
+  $P/Projectile.java:tick,restoreFrom,onHit,teleport \
+  net/minecraft/world/level/block/NetherPortalBlock.java:entityInside,getPortalDestination \
+  net/minecraft/world/entity/PortalProcessor.java:'*'
+fi
