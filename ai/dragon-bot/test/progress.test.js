@@ -205,7 +205,7 @@ test('夜・防具なしで地下にいるときは、地上に出る食料集�
 
 test('このランで 2 回以上死んでいたら、鉄の防具を必須にする（それまでは盾だけ）', () => {
   const geared = { iron_pickaxe: 1, iron_sword: 1, bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 };
-  const deaths = (n) => ({ ...fakeMemory(), data: { places: {}, notes: [], flags: {}, deaths: Array.from({ length: n }, () => ({ at: new Date().toISOString(), dimension: 'overworld' })) } });
+  const deaths = (n) => ({ ...fakeMemory(), data: { places: {}, notes: [], flags: {}, deaths: Array.from({ length: n }, () => ({ at: new Date(Date.now() - 10 * 60_000).toISOString(), dimension: 'overworld', recovered: true })) } });
   assert.equal(armorRequired(deaths(1)), false);
   assert.equal(armorRequired(deaths(2)), true);
   assert.equal(nextStep(fakeBot(geared), deaths(1)).skill, 'fillWaterBucket');
