@@ -10,6 +10,8 @@ import { materialList } from './building/blocks.js';
 import { Supplier } from './building/acquire.js';
 import { attackEntity, ensurePickaxe, pickUpItems, ascendToSurface } from './skills/common.js';
 import { shelterForNight } from './skills/shelter.js';
+import { gatherFood } from './skills/gather.js';
+import { FOODS as FOOD } from './util/items.js';
 import { dimensionOf } from './util/dim.js';
 import { sleep } from './body/humanize.js';
 import { findItem } from './util/items.js';
@@ -180,6 +182,8 @@ export class Agent {
     const { bot } = this;
     this.threatTimer = setInterval(() => {
       if (!bot.entity || this.threat || this.ctx.state.sheltered) return;
+      // 建築の途中で夜になったら、区切りを待たずに止めて穴にこもる（夜も建て続けて倒されていた）
+      if (this.job && !this.resting && this.needsShelter()) { this.abort('夜になった'); return; }
       const me = bot.entity.position;
       const e = bot.nearestEntity((x) => HOSTILE.has(x.name) && x.position.distanceTo(me) < (x.name === 'creeper' ? 7 : 5)
         && Math.abs(x.position.y - me.y) < 4);
@@ -280,7 +284,12 @@ export class Agent {
     while (!this.stopped) {
       if (this.threat) { await this.handleThreat(); continue; }
       if (this.deathAt) { await this.recoverDrops(); continue; }
-      if (this.job && cfg.shelterAtNight && dimensionOf(bot) === 'overworld' && (!bot.time.isDay || bot.health < 8)) {
+      if (this.job && this.needsHunting()) {
+        await this.settlePending();
+        await this.getFood();
+        continue;
+      }
+      if (this.job && this.needsShelter()) {
         await this.settlePending();
         await this.shelter();
         continue;
@@ -333,6 +342,34 @@ export class Agent {
     this.pending = null;
     if (this.controller && !this.controller.signal.aborted) this.controller.abort();
     await Promise.race([p, sleep(30_000)]);
+  }
+
+  needsShelter() {
+    const { bot, cfg } = this;
+    if (!cfg.shelterAtNight || dimensionOf(bot) !== 'overworld') return false;
+    // 体力の回復は満腹度 18 以上でないと起きないので、そうでなければ休んでも無駄（食べ物を探す方に回す）
+    return !bot.time.isDay || (bot.health < 8 && bot.food >= 18);
+  }
+
+  // 昼で、お腹が減っていて食べ物を持っていなければ、動物を狩って焼く（5 分おきに試す）
+  needsHunting() {
+    const { bot } = this;
+    if (!bot.time.isDay || bot.food >= 14) return false;
+    if (bot.inventory.items().some((i) => bot.autoEat?.foodsByName?.[i.name] || FOOD.has(i.name))) return false;
+    return !this.foodTriedAt || Date.now() - this.foodTriedAt > 5 * 60_000;
+  }
+
+  async getFood() {
+    this.foodTriedAt = Date.now();
+    this.status = '食べ物を集める';
+    this.controller = new AbortController();
+    const ctx = { ...this.ctx, signal: this.controller.signal };
+    log.info(`お腹が減って（満腹度 ${this.bot.food}）食べ物が無いので、動物を狩る`);
+    try {
+      log.info(await gatherFood(ctx, { amount: 8 }));
+    } catch (e) {
+      if (e.name !== 'AbortError') log.warn(`食べ物を集められなかった: ${e.message}`);
+    }
   }
 
   // 夜（または体力が少ないとき）は穴にこもって待つ（防具なしで夜に建てていると、スケルトンに倒されて素材を落としていた）
