@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, neutralizeSpawner } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, equipCheapestTool, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
@@ -173,6 +173,19 @@ export class Agent {
   async reflexTick() {
     const { bot } = this;
     if (!bot.entity) return;
+    // 窒息: 頭の位置が固いブロック（落ちてきた砂や砂利など）なら、何よりも先に掘る（掘り上がりの途中で 2 回窒息死した）
+    const headSolid = bot.blockAt(bot.entity.position.offset(0, 1.62, 0));
+    if (headSolid && headSolid.boundingBox === 'block' && !this.suffocBusy && bot.canDigBlock(headSolid)) {
+      this.suffocBusy = true;
+      try {
+        log.warn(`頭が ${headSolid.name} に埋まっているので掘る`);
+        await equipCheapestTool(bot, headSolid).catch(() => {});
+        await bot.dig(headSolid, true).catch(() => {});
+      } finally {
+        this.suffocBusy = false;
+      }
+      return;
+    }
     // 溶岩: 入ったら何よりも先に抜け出す（溶岩遊泳で死んだ）
     const lavaAt = (dy) => bot.blockAt(bot.entity.position.offset(0, dy, 0))?.name === 'lava';
     if ((bot.entity.isInLava || lavaAt(0.1) || lavaAt(1.2)) && !this.lavaBusy) {
