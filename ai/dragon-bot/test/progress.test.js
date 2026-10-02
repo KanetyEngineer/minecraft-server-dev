@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Vec3 } from 'vec3';
 import { armorRequired, nextStep, milestones } from '../src/brain/progress.js';
 import { SKILL_MAP } from '../src/skills/index.js';
 import { fakeBot, fakeMemory } from './fakebot.js';
@@ -188,8 +189,8 @@ test('直前に「原木が足りない」で失敗していたら、道具が�
 test('地下にいるときは、夜でも穴にこもらず作業を続ける', () => {
   const mk = (skyLight) => {
     const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, white_bed: 1 }, { isDay: false });
-    b.entity = { position: { offset: () => ({}) } };
-    b.blockAt = () => ({ skyLight });
+    b.entity = { position: new Vec3(0, 20, 0) };
+    b.blockAt = (q) => (q.y >= 22 ? { skyLight, boundingBox: 'block', name: 'stone' } : { skyLight, boundingBox: 'empty', name: 'cave_air' });
     return b;
   };
   assert.equal(nextStep(mk(15), fakeMemory()).skill, 'shelterForNight'); // 地上の夜
@@ -198,8 +199,8 @@ test('地下にいるときは、夜でも穴にこもらず作業を続ける',
 
 test('夜・防具なしで地下にいるときは、地上に出る食料集めを選ばず、地下でできる鉄集めをする（体力が少なければ穴で休む）', () => {
   const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1 }, { isDay: false });
-  b.entity = { position: { offset: () => ({}) } };
-  b.blockAt = () => ({ skyLight: 0 });
+  b.entity = { position: new Vec3(0, 20, 0) };
+  b.blockAt = (q) => (q.y >= 22 ? { skyLight: 0, boundingBox: 'block', name: 'stone' } : { skyLight: 0, boundingBox: 'empty', name: 'cave_air' });
   assert.equal(nextStep(b, fakeMemory()).skill, 'getIronGear');
   b.health = 12;
   assert.equal(nextStep(b, fakeMemory()).skill, 'shelterForNight');
@@ -254,4 +255,12 @@ test('鉄インゴットがあれば、食料より先に鉄の道具と防具�
   const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, iron_ingot: 40 });
   const s = nextStep(b, fakeMemory());
   assert.deepEqual([s.skill, s.args], ['getIronGear', { armor: false }]);
+});
+
+test('森の木の下（空の光は弱いが、上は葉だけ）は地下とみなさない', async () => {
+  const { isUnderground } = await import('../src/brain/progress.js');
+  const b = fakeBot({});
+  b.entity = { position: new Vec3(0, 70, 0) };
+  b.blockAt = (q) => (q.y >= 74 && q.y <= 76 ? { skyLight: 2, boundingBox: 'block', name: 'dark_oak_leaves' } : { skyLight: 2, boundingBox: 'empty', name: 'air' });
+  assert.equal(isUnderground(b), false);
 });

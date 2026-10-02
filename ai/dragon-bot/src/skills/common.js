@@ -1156,9 +1156,24 @@ export async function neutralizeSpawner(ctx, spawner) {
 
 // 地下（空の光が届かない場所）にいたら、階段状に掘り上がって地上に出る。
 // 動物探しや木集めなど地上でやる作業の前に使う（地下から遠くの地上へは経路が見つからず、その場で固まっていた）
+// 頭の上に空があるか（葉や原木はさえぎらないものとみなす）。
+// 森の木の下は空の光が弱く、地上なのに「地下にいる」と判断して掘り上がろうとし、動けなくなっていた
+export function openSkyAbove(bot, maxUp = 48) {
+  const p = bot.entity?.position?.floored();
+  if (!p) return false;
+  for (let dy = 2; dy <= maxUp; dy++) {
+    const b = bot.blockAt(p.offset(0, dy, 0));
+    if (!b) return true; // 読み込み範囲の外（空）
+    if (b.boundingBox !== 'block') continue;
+    if (/_leaves$|_log$|_wood$|vine|mangrove_roots|azalea/.test(b.name)) continue;
+    return false;
+  }
+  return true;
+}
+
 export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   const { bot } = ctx;
-  const sky = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floored())?.skyLight ?? 15;
+  const sky = () => (openSkyAbove(bot) ? 15 : (bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floored())?.skyLight ?? 15));
   if (sky() >= 12) return false;
   ctx.log.info(`地下にいるので地上へ掘り上がる（y=${Math.floor(bot.entity.position.y)}）`);
   // まず洞窟の通路を歩いて上へ向かう（ツルハシが無いと石を掘るのは非常に遅いので、歩ける道があればそちらが速い）

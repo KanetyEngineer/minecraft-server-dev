@@ -63,7 +63,15 @@ export function elapsedMinutes(memory) {
 export function isUnderground(bot) {
   if (dimensionOf(bot) !== 'overworld' || typeof bot.blockAt !== 'function' || !bot.entity?.position) return false;
   const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
-  return typeof head?.skyLight === 'number' && head.skyLight <= 3;
+  if (!(typeof head?.skyLight === 'number' && head.skyLight <= 3)) return false;
+  // 森の木の下も空の光が弱いので、上に固いブロック（葉・原木以外）があるときだけ地下とみなす
+  const p = bot.entity.position.floored();
+  for (let dy = 2; dy <= 48; dy++) {
+    const b = bot.blockAt(p.offset(0, dy, 0));
+    if (!b) return false;
+    if (b.boundingBox === 'block' && !/_leaves$|_log$|_wood$|vine/.test(b.name)) return true;
+  }
+  return false;
 }
 
 export function dimensionOf(bot) {
