@@ -301,7 +301,9 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
     const blocks = findVisibleBlocks(bot, names, { maxDistance, count: filter ? 24 : 8, visibleOnly: cfg.human.visibleOnly })
       // 水や溶岩に接したブロックは狙わない（水中の鉄鉱石に 40 秒ずつ粘って溺れたことがある）
       .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)) && !(avoidLiquid && isNextToLiquid(bot, b.position))
-        && !nearDanger(ctx, b.position));
+        && !nearDanger(ctx, b.position)
+        // 建築範囲のブロックは素材として掘らない（建てた丸石の床や原木の柱を掘って素材にしていた）
+        && !ctx.isBuildPos?.(b.position));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;

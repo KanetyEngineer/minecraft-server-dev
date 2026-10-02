@@ -55,6 +55,7 @@ export class Builder {
     this.layer = 0;
     this.selfPlacing = false;
     ctx.isBuildPos = (p) => this.inBox(p);
+    ctx.leaveBuildArea = () => this.leaveArea();
   }
 
   get bot() { return this.ctx.bot; }
@@ -147,6 +148,28 @@ export class Builder {
     if (!far()) return;
     this.log.info(`建築現場 (${Math.floor(c.x)}, ${Math.floor(c.z)}) へ戻る`);
     await travelTo(this.ctx, c.x, c.z, { range: 6 });
+  }
+
+  // 建築範囲（と周り 3 マス）の外の地面へ出る。穴ごもりや採掘で建物を掘らないように使う
+  async leaveArea(margin = 3) {
+    const { bot } = this;
+    const p = bot.entity.position;
+    if (!this.nearBox(p.floored(), margin)) return;
+    const o = this.origin;
+    // いちばん近い辺の外側へ
+    const cands = [
+      [o.x - margin - 3, p.z], [o.x + this.size.x + margin + 3, p.z],
+      [p.x, o.z - margin - 3], [p.x, o.z + this.size.z + margin + 3],
+    ].sort((a, b) => Math.hypot(a[0] - p.x, a[1] - p.z) - Math.hypot(b[0] - p.x, b[1] - p.z));
+    this.log.info('建築範囲の外へ出る');
+    for (const [x, z] of cands.slice(0, 2)) {
+      const ok = await Promise.race([
+        bot.pathfinder.goto(new goals.GoalNearXZ(x, z, 2)).then(() => true, (e) => { if (e.name === 'AbortError') throw e; return false; }),
+        sleep(40_000).then(() => false),
+      ]);
+      try { bot.pathfinder.setGoal(null); } catch {}
+      if (ok && !this.nearBox(bot.entity.position.floored(), margin)) return;
+    }
   }
 
   // 空気のはずのマスにある固いブロック（地形・木）をどける

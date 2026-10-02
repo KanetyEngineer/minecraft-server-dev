@@ -110,7 +110,7 @@ export async function gatherWood(ctx, { logs = 8 } = {}) {
       const me = bot.entity.position;
       const [k, pos] = [...tree.entries()].sort((a, b) => a[1].distanceTo(me) - b[1].distanceTo(me))[0];
       const block = bot.blockAt(pos);
-      if (!block || !isLog(block.name)) { tree.delete(k); continue; }
+      if (!block || !isLog(block.name) || ctx.isBuildPos?.(pos)) { tree.delete(k); continue; }
       try {
         await collectWithTimeout(ctx, block);
         onMined(block);

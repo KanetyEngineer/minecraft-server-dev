@@ -384,6 +384,8 @@ export class Agent {
     const ctx = { ...this.ctx, signal: this.controller.signal };
     this.resting = true;
     try {
+      // 建物の上で穴を掘らないよう、範囲の外へ出てからこもる（建てた所に穴を開けていた）
+      if (this.builder) await this.builder.leaveArea().catch(() => {});
       const r = await shelterForNight(ctx, { untilHealed: healing });
       log.info(r);
       // 穴から出る（ふたは掘ってある。足元にブロックを積んで上がる）

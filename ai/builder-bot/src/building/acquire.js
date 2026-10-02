@@ -272,6 +272,8 @@ export class Supplier {
     const { bot, ctx } = this;
     const before = count(bot, name);
     const got = () => count(bot, name) - before;
+    // 建物の上や中から掘り始めると、掘り下がり・横掘りで建てた所を壊すので、範囲の外へ出てから掘る
+    await ctx.leaveBuildArea?.();
     // 掘るのに道具が要るブロックなら、その道具をそろえる（鉄鉱石なら石のツルハシ以上）
     const reg = bot.registry;
     const tools = sources.map((s) => reg.blocksByName[s]?.harvestTools).filter(Boolean);
