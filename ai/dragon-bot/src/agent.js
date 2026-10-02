@@ -452,6 +452,20 @@ export class Agent {
         clearTimeout(this.dropTimer);
         this.dropTimer = setTimeout(() => { mv.maxDropDown = 4; }, 30_000);
       }
+      // 水に浮いたまま動けないとき（地下の水たまりなど。pathfinder が水から上がる道を作れず止まっていた）は、
+      // 一番近い陸の方を向いて、泳ぎながらジャンプで岸に上がる
+      if (bot.entity.isInWater || bot.blockAt(p)?.name === 'water') {
+        const land = this.findLandAwayFrom(p.offset(0, 0, 0));
+        if (land) {
+          log.info(`水から上がれないので、岸 (${land.x}, ${land.y}, ${land.z}) へ泳いで上がる`);
+          bot.lookAt(new Vec3(land.x + 0.5, land.y + 1, land.z + 0.5), true).catch(() => {});
+          bot.setControlState('forward', true);
+          bot.setControlState('jump', true);
+          bot.setControlState('sprint', true);
+          setTimeout(() => bot.clearControlStates(), 3000);
+          return;
+        }
+      }
       // 少しランダムに歩いて引っかかりを外す
       const yaw = Math.random() * Math.PI * 2;
       bot.look(yaw, 0, true).catch(() => {});
