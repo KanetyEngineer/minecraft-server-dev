@@ -23,13 +23,16 @@ test('ポータルを作ったらネザーへ、ロッドが集まったらパ�
   const mem = fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 } });
   const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
   assert.equal(nextStep(armored(fakeBot(base)), mem).skill, 'enterNether');
-  assert.equal(nextStep(armored(fakeBot({ ...base, blaze_rod: 6 })), mem).skill, 'huntEndermen');
+  // 昼のオーバーワールドにはエンダーマンがいないので、ネザーへパールを探しに行く
+  assert.equal(nextStep(armored(fakeBot({ ...base, blaze_rod: 6 })), mem).skill, 'enterNether');
   const s = nextStep(armored(fakeBot({ ...base, blaze_rod: 6, ender_pearl: 12 })), mem);
   assert.deepEqual([s.skill, s.args], ['craftTo', { item: 'ender_eye', count: 12 }]);
 });
 
 test('エンドではクリスタル → ドラゴン', () => {
-  assert.equal(nextStep(fakeBot({}, { dimension: 'minecraft:the_end' }), fakeMemory()).skill, 'destroyEndCrystals');
+  assert.equal(nextStep(fakeBot({ bow: 1, arrow: 32 }, { dimension: 'minecraft:the_end' }), fakeMemory()).skill, 'destroyEndCrystals');
+  // 弓が無ければクリスタルは壊さずにドラゴン戦（ベッド爆破）
+  assert.equal(nextStep(fakeBot({}, { dimension: 'minecraft:the_end' }), fakeMemory()).skill, 'fightDragon');
   assert.equal(nextStep(fakeBot({}, { dimension: 'the_end' }), fakeMemory({}, { crystalsDestroyed: true })).skill, 'fightDragon');
 });
 
@@ -142,4 +145,21 @@ test('防具の無い夜は、死亡地点の回収より穴にこもるのが�
   const m = fakeMemory(); m.data.deaths = [{ x: 0, y: 64, z: 0, dimension: 'overworld', at: new Date().toISOString() }];
   assert.equal(nextStep(fakeBot({}, { isDay: false }), m).skill, 'shelterForNight');
   assert.equal(nextStep(fakeBot({}, { isDay: true }), m).skill, 'recoverItems');
+});
+test('ネザーでロッドがそろったら、パールは 交易 → エンダーマン狩り → 廃要塞の金、の順。最近失敗したものは飛ばす', () => {
+  const nether = { dimension: 'the_nether' };
+  const now = Date.now();
+  assert.equal(nextStep(fakeBot({ blaze_rod: 6, gold_ingot: 10 }, nether), fakeMemory()).skill, 'barterWithPiglins');
+  assert.equal(nextStep(fakeBot({ blaze_rod: 6 }, nether), fakeMemory()).skill, 'huntEndermen');
+  assert.equal(nextStep(fakeBot({ blaze_rod: 6 }, nether), fakeMemory({}, { huntEndermenFailAt: now })).skill, 'raidBastionGold');
+  assert.equal(nextStep(fakeBot({ blaze_rod: 6 }, nether), fakeMemory({}, { huntEndermenFailAt: now, raidBastionGoldFailAt: now })).skill, 'returnThroughPortal');
+  assert.equal(nextStep(fakeBot({ blaze_rod: 6, ender_pearl: 12 }, nether), fakeMemory()).skill, 'returnThroughPortal');
+});
+
+test('弓と矢が集まらなければ、30 分は弓なしで要塞探しへ進む', () => {
+  const armored = (b) => { b.inventory.slots = [{ name: 'iron_helmet' }, { name: 'iron_chestplate' }, { name: 'iron_leggings' }]; return b; };
+  const base = { diamond_pickaxe: 1, iron_sword: 1, water_bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1, ender_eye: 12 };
+  const mem = (flags) => fakeMemory({ overworld_portal: { x: 0, y: 64, z: 0 } }, flags);
+  assert.equal(nextStep(armored(fakeBot(base)), mem({})).skill, 'makeBowAndArrows');
+  assert.equal(nextStep(armored(fakeBot(base)), mem({ makeBowAndArrowsFailAt: Date.now() })).skill, 'locateStronghold');
 });

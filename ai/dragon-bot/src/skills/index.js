@@ -14,10 +14,22 @@ function countFailures(name, run) {
   return async (ctx, args) => {
     try {
       const r = await run(ctx, args);
-      ctx.memory.setFlag(`Fails`, 0);
+      ctx.memory.setFlag(`${name}Fails`, 0);
       return r;
     } catch (e) {
-      if (!ctx.signal?.aborted) ctx.memory.setFlag(`Fails`, (ctx.memory.flag(`Fails`) ?? 0) + 1);
+      if (!ctx.signal?.aborted) ctx.memory.setFlag(`${name}Fails`, (ctx.memory.flag(`${name}Fails`) ?? 0) + 1);
+      throw e;
+    }
+  };
+}
+
+// 失敗した時刻を記憶に残す（進捗表が、最近失敗した方法を避けて別の方法を選ぶため）
+function noteFailAt(name, run) {
+  return async (ctx, args) => {
+    try {
+      return await run(ctx, args);
+    } catch (e) {
+      if (!ctx.signal?.aborted) ctx.memory.setFlag(`${name}FailAt`, Date.now());
       throw e;
     }
   };
@@ -34,7 +46,7 @@ export const SKILLS = [
   def('gatherFood', ow.gatherFood, '動物を狩って肉を集め、かまどで焼く。', { amount: int('目標の食料数', 1, 64) }),
   def('getIronGear', ow.getIronGear, '鉄を掘って精錬し、鉄のツルハシ・剣・バケツ（armor=true なら防具一式と盾も）を作る。', { armor: { type: 'boolean' } }),
   def('mineDiamonds', ow.mineDiamonds, 'Y=-58 付近でブランチマイニングしてダイヤを掘り、ダイヤのツルハシ（余れば剣）を作る。', { count: int('掘るダイヤの数', 1, 20) }),
-  def('makeBowAndArrows', ow.makeBowAndArrows, 'クモ/クモの巣から糸、砂利から火打石、ニワトリから羽を集めて弓と矢を作る。エンドクリスタル破壊に必須。', { arrows: int('目標の矢の数', 4, 128) }),
+  def('makeBowAndArrows', noteFailAt('makeBowAndArrows', ow.makeBowAndArrows), 'クモ/クモの巣から糸、砂利から火打石、ニワトリから羽を集めて弓と矢を作る。エンドクリスタル破壊に必須。', { arrows: int('目標の矢の数', 4, 128) }),
   def('fillWaterBucket', ow.fillWaterBucket, '水源をバケツでくむ。'),
   def('collectObsidian', ow.collectObsidian, '溶岩溜まりに水をかけて黒曜石を作り、ダイヤのツルハシで掘る。', { count: int('黒曜石の数', 1, 20) }),
   def('castNetherPortal', countFailures('castNetherPortal', portal.castNetherPortal), 'RTA 式: 溶岩溜まりの横で、溶岩バケツと水バケツを使って黒曜石を 1 つずつ作りネザーゲートを建てる（ダイヤ不要。水入りバケツ・空バケツ・丸石 30 個が必要）。'),
@@ -46,9 +58,9 @@ export const SKILLS = [
   def('enterNether', nether.enterNether, '覚えているネザーポータルからネザーへ入る。'),
   def('returnThroughPortal', nether.returnThroughPortal, 'ネザーからポータルを通ってオーバーワールドに戻る。'),
   def('huntBlazes', nether.huntBlazes, 'ネザー要塞を探し、ブレイズを倒してブレイズロッドを集める。', { rods: int('目標のロッド数', 1, 16) }),
-  def('raidBastionGold', nether.raidBastionGold, '砦の遺跡（廃要塞）を探し、金ブロックや金を掘って金インゴットを集める（ピグリン交易の元手）。', { ingots: int('目標の金インゴット数', 8, 128) }),
-  def('barterWithPiglins', nether.barterWithPiglins, '金インゴットを投げてピグリンと物々交換し、エンダーパールを狙う。', { pearls: int('目標のパール数', 1, 16) }),
-  def('huntEndermen', nether.huntEndermen, 'エンダーマンを倒してエンダーパールを集める。ネザーで歪んだ森が見つかっていれば、ボートに乗せて捕まえてから倒す。', { pearls: int('目標のパール数', 1, 16) }),
+  def('raidBastionGold', noteFailAt('raidBastionGold', nether.raidBastionGold), '砦の遺跡（廃要塞）を探し、金ブロックや金を掘って金インゴットを集める（ピグリン交易の元手）。', { ingots: int('目標の金インゴット数', 8, 128) }),
+  def('barterWithPiglins', noteFailAt('barterWithPiglins', nether.barterWithPiglins), '金インゴットを投げてピグリンと物々交換し、エンダーパールを狙う。', { pearls: int('目標のパール数', 1, 16) }),
+  def('huntEndermen', noteFailAt('huntEndermen', nether.huntEndermen), 'エンダーマンを倒してエンダーパールを集める。ネザーで歪んだ森が見つかっていれば、ボートに乗せて捕まえてから倒す。', { pearls: int('目標のパール数', 1, 16) }),
   def('locateStronghold', sh.locateStronghold, 'エンダーアイを 2〜3 回投げて三角測量し、要塞の位置を推定する（オーバーワールド）。'),
   def('findEndPortal', sh.findEndPortal, '推定位置まで移動し、掘り下がって要塞とエンドポータルの部屋を探す。'),
   def('activateEndPortal', sh.activateEndPortal, 'エンドポータルの枠にエンダーアイをはめて起動し、ジ・エンドへ入る。'),

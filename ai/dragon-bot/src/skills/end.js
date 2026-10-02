@@ -77,38 +77,50 @@ async function breakCage(ctx, crystal) {
   await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (p.x - crystal.position.x), p.z + (p.z - crystal.position.z) + 12, 3)).catch(() => {});
 }
 
-// ベッド爆破（RTA の定番）: 着地中のドラゴンの頭の近くにベッドを置き、間にブロックを挟んでから使う。
-// エンドではベッドは使うと爆発する。自分も巻き込まれないよう、体力が十分なときだけ行う。
+// ベッド爆破（RTA の定番）: 着地中のドラゴンの頭の近くにベッドを置いて使う（エンドではベッドは使うと爆発する）。
+// - 着地中のドラゴンは一番近いプレイヤーの方へ頭を向けるので、頭は「胴体の中心から自分の方へ約 6 マス」にある。
+//   そこで、胴体から 8 マス離れて立ち、2 マス先（= 頭の真下あたり）にベッドを置く。
+//   胴体の近くで爆発させると、頭以外の部位はダメージが 1/4 になり、ほとんど効かない。
+// - 爆発の威力は 5。頭まで 1 マスなら約 30 ダメージ（ドラゴンの体力は 200）。
+// - 自分も 2 マスの距離で巻き込まれるので、ベッドと自分の間に 2 段の壁（足と目の高さ）を置いてから起爆する。
+//   壁があれば爆風はほぼ届かない。ベッドの操作は壁越しでもできる。
 async function bedBomb(ctx, dragon, center) {
   const { bot } = ctx;
   const bed = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
-  if (!bed || bot.health < 14) return false;
-  const head = dragon.position;
-  // 自分はドラゴンから 4〜5 マス離れた位置に立つ
-  const dx = bot.entity.position.x - head.x; const dz = bot.entity.position.z - head.z;
+  if (!bed || bot.health < 12) return false;
+  const body = dragon.position;
+  const dx = bot.entity.position.x - body.x; const dz = bot.entity.position.z - body.z;
   const d = Math.hypot(dx, dz) || 1;
-  await bot.pathfinder.goto(new goals.GoalNear(head.x + (dx / d) * 4.5, center.y + 1, head.z + (dz / d) * 4.5, 1)).catch(() => {});
-  // ドラゴン側の 2 マス先の地面にベッドを置く
+  // 胴体から 8 マス、自分のいる側に立つ
+  await bot.pathfinder.goto(new goals.GoalNear(body.x + (dx / d) * 8, center.y + 1, body.z + (dz / d) * 8, 1)).catch(() => {});
+  if (!dragon.isValid) return false;
   const p = bot.entity.position.floored();
-  const ux = Math.round(-dx / d); const uz = Math.round(-dz / d);
+  // ドラゴンの方向を 4 方向に丸める（ベッドと壁をマス目に置くため）
+  const tx = body.x - bot.entity.position.x; const tz = body.z - bot.entity.position.z;
+  const [ux, uz] = Math.abs(tx) > Math.abs(tz) ? [Math.sign(tx), 0] : [0, Math.sign(tz)];
   const floor = bot.blockAt(p.offset(ux * 2, -1, uz * 2));
-  if (!floor || floor.boundingBox !== 'block') return false;
+  const above = bot.blockAt(p.offset(ux * 2, 0, uz * 2));
+  if (!floor || floor.boundingBox !== 'block' || !above || above.boundingBox !== 'empty') return false;
   await bot.equip(bed, 'hand');
   await smoothLookAt(bot, floor.position.offset(0.5, 1, 0.5), 60);
   try { await bot.placeBlock(floor, new Vec3(0, 1, 0)); } catch { return false; }
   const placedBed = bot.blockAt(floor.position.offset(0, 1, 0));
   if (!placedBed || !placedBed.name.endsWith('_bed')) return false;
-  // 爆風よけ: 目の高さに 1 ブロック挟む
-  const shield = bot.inventory.items().find((i) => ['cobblestone', 'end_stone', 'obsidian', 'cobbled_deepslate'].includes(i.name));
-  if (shield) {
-    const wallPos = p.offset(ux, 1, uz);
-    const ref = bot.blockAt(wallPos.offset(0, -1, 0));
-    if (ref && ref.boundingBox === 'block') {
-      await bot.equip(shield, 'hand');
-      await bot.placeBlock(ref, new Vec3(0, 1, 0)).catch(() => {});
-    }
+  // 爆風よけの壁: 自分とベッドの間に、足と目の高さの 2 段
+  const wallItem = () => bot.inventory.items().find((i) => ['end_stone', 'cobblestone', 'cobbled_deepslate', 'obsidian', 'dirt', 'netherrack'].includes(i.name));
+  let wall = 0;
+  for (const dy of [0, 1]) {
+    const item = wallItem();
+    const ref = bot.blockAt(p.offset(ux, dy - 1, uz));
+    const spot = bot.blockAt(p.offset(ux, dy, uz));
+    if (!item || !ref || ref.boundingBox !== 'block' || !spot || spot.boundingBox !== 'empty') continue;
+    await bot.equip(item, 'hand');
+    if (await bot.placeBlock(ref, new Vec3(0, 1, 0)).then(() => true).catch(() => false)) wall++;
   }
+  // 壁が作れず体力にも余裕がなければ、起爆せずベッドは残しておく（次の着地で使える）
+  if (wall === 0 && bot.health < 16) return false;
   await bot.activateBlock(placedBed).catch(() => {});
+  ctx.log?.info?.(`ベッド爆破（壁 ${wall} 段）`);
   return true;
 }
 
@@ -161,8 +173,12 @@ export async function fightDragon(ctx, { minutes = 15 } = {}) {
       // 着地中: 近づいて頭を剣で殴る
       const sword = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword'].map((n) => findItem(bot, n)).find(Boolean);
       if (sword) await bot.equip(sword, 'hand');
-      await bot.pathfinder.goto(new goals.GoalNear(dragon.position.x, center.y + 1, dragon.position.z, 3)).catch(() => {});
-      await smoothLookAt(bot, dragon.position.offset(0, 2, 0), 60);
+      // 着地中は頭が自分の方を向くので、胴体から自分の方へ約 6 マスの所が頭。その手前まで行って頭を殴る
+      const bx = bot.entity.position.x - dragon.position.x; const bz = bot.entity.position.z - dragon.position.z;
+      const bd = Math.hypot(bx, bz) || 1;
+      const head = dragon.position.offset((bx / bd) * 6, 1.5, (bz / bd) * 6);
+      await bot.pathfinder.goto(new goals.GoalNear(head.x + (bx / bd) * 2, center.y + 1, head.z + (bz / bd) * 2, 1)).catch(() => {});
+      await smoothLookAt(bot, head, 60);
       hitDragonHead(bot, dragon);
       await sleep(650); // 攻撃のクールダウン
     } else if (findItem(bot, 'bow') && count(bot, 'arrow') > 0 && dragon.position.distanceTo(bot.entity.position) < 64) {

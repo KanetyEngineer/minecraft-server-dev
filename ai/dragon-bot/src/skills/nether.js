@@ -162,6 +162,7 @@ export async function barterWithPiglins(ctx, { pearls = 12 } = {}) {
     await sleep(7000); // ピグリンが品定めする時間
     await pickUpItems(ctx, 8);
   }
+  if (count(bot, 'ender_pearl') === start) throw new SkillError('交易でパールが出なかった');
   return `エンダーパール +${count(bot, 'ender_pearl') - start}`;
 }
 
@@ -184,7 +185,12 @@ export async function huntEndermen(ctx, { pearls = 12 } = {}) {
     abortable(ctx);
     const em = nearestEntityNamed(bot, ['enderman'], 48);
     if (!em) {
-      if (dim(ctx) === 'overworld' && bot.time.isDay) return `昼なのでエンダーマンが少ない（+${count(bot, 'ender_pearl') - start}）`;
+      if (dim(ctx) === 'overworld' && bot.time.isDay) {
+        const got = count(bot, 'ender_pearl') - start;
+        // 何も取れずに「成功」で返すと、同じ行動を繰り返してしまう
+        if (got === 0) throw new SkillError('昼なのでエンダーマンがいない（ネザーで探す）');
+        return `昼なのでエンダーマンが少ない（+${got}）`;
+      }
       await exploreStep(ctx, 40);
       continue;
     }
@@ -200,6 +206,7 @@ export async function huntEndermen(ctx, { pearls = 12 } = {}) {
     await attackEntity(ctx, em, { timeoutMs: 25000 });
     await pickUpItems(ctx, 8);
   }
+  if (count(bot, 'ender_pearl') === start) throw new SkillError('エンダーマンからパールが取れなかった');
   return `エンダーパール ${count(bot, 'ender_pearl')} 個`;
 }
 

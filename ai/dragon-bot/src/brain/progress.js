@@ -68,8 +68,11 @@ export function nextStep(bot, memory) {
   if (death && !death.recovered && !unsafeNight && death.dimension === dim && Date.now() - Date.parse(death.at) < 4 * 60_000) {
     return { skill: 'recoverItems', args: {} };
   }
+  // 最近（既定 15 分以内）失敗した方法は避けて、別の方法を選ぶ
+  const failedRecently = (name, min = 15) => Date.now() - (memory.flag?.(`${name}FailAt`) ?? 0) < min * 60_000;
   if (dim === 'the_end') {
-    if (!m.crystalsDestroyed) return { skill: 'destroyEndCrystals', args: {} };
+    // 弓が無ければクリスタルは壊さず、ベッド爆破と着地中の剣で倒す（RTA のゼロサイクルもクリスタルを壊さない）
+    if (!m.crystalsDestroyed && has(bot, 'bow') && count(bot, 'arrow') >= 10) return { skill: 'destroyEndCrystals', args: {} };
     return { skill: 'fightDragon', args: {} };
   }
   if (dim === 'the_nether') {
@@ -79,7 +82,14 @@ export function nextStep(bot, memory) {
       return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     }
     if (!m.blazeRods) return { skill: 'huntBlazes', args: { rods: Math.ceil(c.eyesNeeded / 2) } };
-    if (!m.enderPearls && count(bot, 'gold_ingot') >= 8) return { skill: 'barterWithPiglins', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
+    // パール: ネザーのエンダーマンは昼夜に関係なく湧く（オーバーワールドは夜だけ）。
+    // 交易（金があれば）→ エンダーマン狩り（歪んだ森を探しながら）→ 廃要塞で金集め、の順に、最近失敗したものを飛ばして試す
+    if (!m.enderPearls) {
+      const need = c.eyesNeeded - c.pearls - c.eyes;
+      if (count(bot, 'gold_ingot') >= 8 && !failedRecently('barterWithPiglins')) return { skill: 'barterWithPiglins', args: { pearls: need } };
+      if (!failedRecently('huntEndermen')) return { skill: 'huntEndermen', args: { pearls: need } };
+      if (!failedRecently('raidBastionGold', 30)) return { skill: 'raidBastionGold', args: { ingots: 32 } };
+    }
     return { skill: 'returnThroughPortal', args: {} };
   }
 
@@ -130,11 +140,17 @@ export function nextStep(bot, memory) {
   }
   if (!m.enderEyes) {
     if (!m.blazeRods) return { skill: 'enterNether', args: {} };
-    if (!m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
+    if (!m.enderPearls) {
+      // 昼のオーバーワールドにはエンダーマンがほとんどいないので、ネザーへ探しに行く（ネザーで全部失敗した直後は地上で探す）
+      const netherTried = failedRecently('huntEndermen') && (count(bot, 'gold_ingot') < 8 || failedRecently('barterWithPiglins')) && failedRecently('raidBastionGold', 30);
+      if (!netherTried && !night) return { skill: 'enterNether', args: {} };
+      return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
+    }
     return { skill: 'craftTo', args: { item: 'ender_eye', count: c.eyesNeeded } };
   }
-  // 弓と矢はエンドのクリスタル用なので、要塞に向かう前にそろえる
-  if (!m.bow || !m.arrows) return { skill: 'makeBowAndArrows', args: { arrows: 32 } };
+  // 弓と矢はエンドのクリスタル用なので、要塞に向かう前にそろえる。
+  // ただし集まらなければ（30 分以内に失敗していれば）弓なしで進む（クリスタルは壊さずベッド爆破で倒す）
+  if ((!m.bow || !m.arrows) && !failedRecently('makeBowAndArrows', 30)) return { skill: 'makeBowAndArrows', args: { arrows: 32 } };
   if (!m.strongholdLocated) return { skill: 'locateStronghold', args: {} };
   if (!m.endPortalFound) return { skill: 'findEndPortal', args: {} };
   // エンドのドラゴン戦（ベッド爆破）用に、ベッドを 7 個持ってから入る（RTA の目安。羊が見つからなければ飛ばす）
