@@ -402,10 +402,16 @@ export class Agent {
     if (this.bedTriedAt && Date.now() - this.bedTriedAt < 10 * 60_000) return;
     this.bedTriedAt = Date.now();
     log.info('夜に寝るためのベッドを用意する');
-    await this.builder.supplier.ensure('white_bed', 1).catch((e) => {
-      if (e.name === 'AbortError') throw e;
-      log.warn(`ベッドを用意できなかった: ${e.message}`);
-    });
+    // 羊を探して現場から遠くまで歩き回らないよう、3 分で打ち切る（建築ごと中断し、次の周回では 10 分間ベッドを探さない）
+    const timer = setTimeout(() => this.abort('ベッドの用意に時間がかかるので後回しにする'), 3 * 60_000);
+    try {
+      await this.builder.supplier.ensure('white_bed', 1).catch((e) => {
+        if (e.name === 'AbortError') throw e;
+        log.warn(`ベッドを用意できなかった: ${e.message}`);
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async waitFor(ms) {

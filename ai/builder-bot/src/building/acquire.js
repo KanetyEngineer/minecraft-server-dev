@@ -29,7 +29,7 @@ const NATURAL = new Set([
   'stone', 'deepslate', 'cobblestone', 'andesite', 'diorite', 'granite', 'tuff', 'calcite', 'dripstone_block',
   'sandstone', 'red_sandstone', 'terracotta', 'snow_block', 'snow', 'ice', 'packed_ice', 'blue_ice', 'pumpkin', 'melon',
   'sugar_cane', 'cactus', 'bamboo', 'kelp', 'kelp_plant', 'red_mushroom', 'brown_mushroom', 'moss_block', 'obsidian',
-  'amethyst_cluster', 'sea_pickle', 'short_grass', 'fern', 'vine', 'lily_pad', 'cobweb', 'glow_lichen', 'netherrack',
+  'amethyst_cluster', 'sea_pickle', 'short_grass', 'fern', 'vine', 'lily_pad', 'glow_lichen', 'netherrack',
   ...FLOWERS,
 ]);
 const isNatural = (n) => NATURAL.has(n) || /(_log|_stem|_ore|_leaves)$/.test(n) || /_terracotta$/.test(n);
@@ -402,12 +402,12 @@ export class Supplier {
     const mobs = MOB_DROPS.find((m) => m.re.test(name))?.mobs ?? [];
     const start = count(bot, name);
     let explored = 0;
-    while (count(bot, name) - start < n && explored < 20) {
+    while (count(bot, name) - start < n && explored < 8) {
       abortable(ctx);
       // 白い羊毛は白い羊だけを狙う（羊の色はメタデータ 17 番の下位 4 ビット、0x10 は毛を刈られた印）
       const woolOk = (e) => name !== 'white_wool' || e.name !== 'sheep' || typeof e.metadata?.[17] !== 'number' || (e.metadata[17] & 0x1f) === 0;
       const target = bot.nearestEntity((e) => mobs.includes(e.name) && woolOk(e) && e.position.distanceTo(bot.entity.position) < 48);
-      if (!target) { explored++; this.log.info(`${mobs[0]} を探して歩く（${explored}/20）`); await exploreStep(ctx); continue; }
+      if (!target) { explored++; this.log.info(`${mobs[0]} を探して歩く（${explored}/8）`); await exploreStep(ctx); continue; }
       await attackEntity(ctx, target, { timeoutMs: 20_000 });
       await pickUpItems(ctx, 6).catch(() => {});
     }
