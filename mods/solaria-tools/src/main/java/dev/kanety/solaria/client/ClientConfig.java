@@ -17,6 +17,8 @@ public final class ClientConfig {
     /** Project shown on the HUD; empty = every plan you take part in. */
     public String hudProject = "";
     public int hudMaxLines = 6;
+    /** Warn before placing a non-schematic block where an observer is looking. */
+    public boolean observerGuard = true;
 
     private static ClientConfig instance = new ClientConfig();
 

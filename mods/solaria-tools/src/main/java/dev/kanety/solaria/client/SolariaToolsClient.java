@@ -38,6 +38,7 @@ public class SolariaToolsClient implements ClientModInitializer {
             }
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientBuildState.reset());
+        ObserverGuard.register();
         HudElementRegistry.addLast(SolariaTools.id("build_hud"), BuildHud::render);
 
         if (FabricLoader.getInstance().isModLoaded("xaeroworldmap")) {

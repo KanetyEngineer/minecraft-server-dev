@@ -150,10 +150,14 @@ public class BuildScreen extends Screen {
     private void initMaterials(ClientBuildState.Project p, int cx) {
         List<ClientBuildState.Material> rows = materialRows(p);
         String me = me();
+        java.util.Map<String, ChestTrackerBridge.Found> remembered = ChestTrackerBridge.find(p);
         int n = visibleRows();
         for (int i = 0; i < n && scroll + i < rows.size(); i++) {
             ClientBuildState.Material m = rows.get(scroll + i);
             int y = listTop + i * ROW;
+            ChestTrackerBridge.Found f = remembered.get(m.item());
+            String ct = f == null ? "" : "\nChest Tracker の記憶（倉庫以外）: " + f.count() + "（最寄り "
+                    + f.nearest().getX() + " " + f.nearest().getY() + " " + f.nearest().getZ() + "）";
             boolean mine = m.assignee() != null && m.assignee().uuid().equals(me);
             String cmd = (mine ? "bp unclaim " : "bp claim ") + p.name() + " " + m.item();
             addRenderableWidget(Button.builder(Component.literal(mine ? "外す" : "担当"), b -> run(cmd))
@@ -161,7 +165,7 @@ public class BuildScreen extends Screen {
                     .tooltip(Tooltip.create(Component.literal(itemName(m.item()) + "\n必要 " + m.req() + "（" + stacks(m.req()) + "）"
                             + "\n設置済み " + m.placed() + "\n倉庫 " + m.stock() + "\n参加者の手持ち " + m.held()
                             + "\n残り " + m.remaining() + "（" + stacks(m.remaining()) + "）"
-                            + "\n担当 " + (m.assignee() == null ? "なし" : m.assignee().name()))))
+                            + "\n担当 " + (m.assignee() == null ? "なし" : m.assignee().name()) + ct)))
                     .build());
         }
     }
@@ -225,6 +229,14 @@ public class BuildScreen extends Screen {
             ClientConfig.save();
             rebuildWidgets();
         }).bounds(x2, y, w, 18).build());
+        y += 22;
+        addRenderableWidget(Button.builder(Component.literal("オブザーバー前の誤設置警告: " + (cfg.observerGuard ? "ON" : "OFF")), b -> {
+            cfg.observerGuard = !cfg.observerGuard;
+            ClientConfig.save();
+            rebuildWidgets();
+        }).bounds(cx, y, w * 2 + 6, 18)
+                .tooltip(Tooltip.create(Component.literal("Litematica の設計図と違うブロックを、オブザーバーが見ている場所に置こうとすると止めて警告します。3秒以内にもう一度置くと設置されます。")))
+                .build());
         y += 30;
         addRenderableWidget(Button.builder(Component.literal("この建築計画を削除"), b -> minecraft.setScreen(new ConfirmScreen(ok -> {
             if (ok) run("bp delete " + p.name());
@@ -297,6 +309,7 @@ public class BuildScreen extends Screen {
 
     private void renderMaterials(GuiGraphics g, ClientBuildState.Project p, int cx) {
         List<ClientBuildState.Material> rows = materialRows(p);
+        java.util.Map<String, ChestTrackerBridge.Found> remembered = ChestTrackerBridge.find(p);
         if (rows.isEmpty()) {
             g.drawString(font, onlyMine ? "あなたの担当の材料はありません" : "材料はありません", cx, listTop + 4, 0xFFAAAAAA, true);
             return;
@@ -313,6 +326,8 @@ public class BuildScreen extends Screen {
             g.renderItem(stack(m.item()), cx + 1, y + 1);
             g.drawString(font, font.plainSubstrByWidth(itemName(m.item()), nameW), cx + 20, y + 5, 0xFFFFFFFF, true);
             String rem = m.remaining() == 0 ? "そろった" : "あと " + stacks(m.remaining());
+            ChestTrackerBridge.Found f = remembered.get(m.item());
+            if (f != null && m.remaining() > 0) rem = "箱に" + f.count() + " " + rem;
             g.drawString(font, rem, barX - 4 - font.width(rem), y + 5, m.remaining() == 0 ? 0xFF7FFF7F : 0xFFFFFFFF, true);
             bar(g, barX, y + 3, barW, 12, m.req() == 0 ? 1 : (double) m.placed() / m.req(), m.progress(),
                     (m.placed() + m.stock() + m.held()) + "/" + m.req());
@@ -349,7 +364,7 @@ public class BuildScreen extends Screen {
     private void renderSettings(GuiGraphics g, ClientBuildState.Project p, int cx) {
         int y = listTop + 22 + 26;
         g.drawString(font, "区画の分け方（変えると区画の担当はリセット）", cx, y, 0xFFDDDDDD, true);
-        y = listTop + 22 + 26 + 38 + 30 + 26;
+        y = listTop + 22 + 26 + 38 + 22 + 30 + 26;
         StringBuilder members = new StringBuilder();
         for (ClientBuildState.Person m : p.members()) members.append(members.isEmpty() ? "" : ", ").append(m.name());
         g.drawString(font, font.plainSubstrByWidth("作成者: " + p.owner() + "   参加者: " + (members.isEmpty() ? "なし" : members), right - cx), cx, y, 0xFFDDDDDD, true);
