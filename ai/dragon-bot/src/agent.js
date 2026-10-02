@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, neutralizeSpawner } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
@@ -229,6 +229,23 @@ export class Agent {
         bot.setControlState('forward', false);
         this.reflexBusy = false;
         this.airBusy = false;
+      }
+      return;
+    }
+    // 溶岩: 入ったら何よりも先に抜け出す（溶岩遊泳で死んだ）
+    const lavaAt = (dy) => bot.blockAt(bot.entity.position.offset(0, dy, 0))?.name === 'lava';
+    if ((bot.entity.isInLava || lavaAt(0.1) || lavaAt(1.2)) && !this.lavaBusy) {
+      this.lavaBusy = true;
+      this.stopBody();
+      this.reflexBusy = true;
+      try {
+        this.interrupt('溶岩');
+        log.warn('溶岩に入った。すぐ抜け出す');
+        await this.escapeLava();
+      } finally {
+        bot.clearControlStates();
+        this.reflexBusy = false;
+        this.lavaBusy = false;
       }
       return;
     }
@@ -484,6 +501,106 @@ export class Agent {
   //   2. さっきまで息ができていた場所へ戻る（数秒前に通った道）
   //   3. 近くの空気のある所（洞窟の空気も含む）へ泳ぐ
   //   4. 頭上のブロックを掘って上がる（水中では掘るのが遅いので最後の手段）
+  // 溶岩から抜け出す:
+  //   1. 水入りバケツがあれば足元に水を置く（周りの溶岩が黒曜石・丸石になり、火も消える。置いた水は後で汲み直す）
+  //   2. 一番近い、溶岩でない足場へ向いて、ダッシュとジャンプで直接進む（pathfinder は溶岩の中からの経路を作れない）
+  async escapeLava() {
+    const { bot } = this;
+    const inLava = () => bot.entity.isInLava || ['lava'].includes(bot.blockAt(bot.entity.position.offset(0, 0.1, 0))?.name);
+    let poured = null;
+    const bucket = bot.inventory.items().find((i) => i.name === 'water_bucket');
+    if (bucket && dimensionOf(bot) !== 'the_nether') {
+      try {
+        await bot.equip(bucket, 'hand');
+        await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+        bot.activateItem();
+        poured = bot.entity.position.floored();
+        log.info('足元に水を置いて溶岩を固めた');
+        await bot.waitForTicks(4);
+      } catch (e) {
+        log.warn(`水を置けなかった: ${e.message}`);
+      }
+    }
+    // 溶岩でない足場（固いブロックの上、足と頭が溶岩でも固くもない）で一番近い所
+    const safe = () => {
+      const me = bot.entity.position;
+      let best = null;
+      for (let dx = -5; dx <= 5; dx++) for (let dz = -5; dz <= 5; dz++) for (let dy = -1; dy <= 2; dy++) {
+        const p = me.floored().offset(dx, dy, dz);
+        const g = bot.blockAt(p.offset(0, -1, 0)); const a = bot.blockAt(p); const b = bot.blockAt(p.offset(0, 1, 0));
+        if (!g || g.boundingBox !== 'block' || !a || !b) continue;
+        if ([a, b].some((x) => x.name === 'lava' || x.boundingBox === 'block')) continue;
+        const d = p.offset(0.5, 0, 0.5).distanceTo(me) + Math.max(0, dy) * 0.5;
+        if (!best || d < best.d) best = { p, d };
+      }
+      return best?.p ?? null;
+    };
+    // 水が無ければ: 一番近い足場の方向の隣のマス（足の高さ）にブロックを置いて段を作り、そこへ上がる（溶岩は置いたブロックに置き換わる）。
+    // 上がったら溶岩の外なので、残りは半シフトで橋をかけて渡る。
+    // （溶岩の中ではジャンプが 0.5 マスほどしか上がらず、自分の足元には置けなかった）
+    if (inLava() && cheapBlock(bot)) {
+      try {
+        const me = bot.entity.position.floored();
+        let dir = null;
+        for (let r = 1; r <= 6 && !dir; r++) {
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const g = bot.blockAt(me.offset(dx * r, -1, dz * r)); const a = bot.blockAt(me.offset(dx * r, 0, dz * r));
+            if (g && g.boundingBox === 'block' && a && (a.boundingBox === 'block' || a.name !== 'lava')) { dir = [dx, dz]; break; }
+          }
+        }
+        dir ??= [1, 0];
+        const step = me.offset(dir[0], 0, dir[1]);
+        const ref = bot.blockAt(step.offset(0, -1, 0));
+        if (bot.blockAt(step)?.name === 'lava' && ref && ref.boundingBox === 'block') {
+          await bot.equip(cheapBlock(bot), 'hand');
+          await bot._placeBlockWithOptions(ref, new Vec3(0, 1, 0), { swingArm: 'right', forceLook: true });
+          log.info('溶岩の中で、隣に段を作った');
+        }
+        // 段（か陸）へ上がる
+        await bot.lookAt(step.offset(0.5, 1.6, 0.5), true);
+        bot.setControlState('forward', true);
+        bot.setControlState('jump', true);
+        // ジャンプの頂点で一瞬「溶岩の外」になるので、段の上に立てたか（足が 1 段上で地面の上）で判断する
+        const onStep = () => bot.entity.onGround && bot.entity.position.y >= me.y + 0.9 && !inLava();
+        for (let t = 0; t < 40 && !onStep(); t++) await bot.waitForTicks(1);
+        bot.clearControlStates();
+        if (onStep()) {
+          log.info('溶岩から段に上がった');
+          const ctx = { bot, state: this.state, log, signal: undefined };
+          const n = await halfShiftBridge(ctx, { dx: dir[0], dz: dir[1], length: 6 });
+          if (n) log.info(`溶岩の上を半シフトで渡った（${n} 個）`);
+        }
+      } catch (e) {
+        log.warn(`溶岩の中で段を作れなかった: ${e.message}`);
+      } finally {
+        bot.clearControlStates();
+      }
+    }
+    const deadline = Date.now() + 6000;
+    while (inLava() && Date.now() < deadline && bot.health > 0) {
+      const to = safe();
+      if (to) await bot.lookAt(to.offset(0.5, 1.2, 0.5), true).catch(() => {});
+      bot.setControlState('forward', true);
+      bot.setControlState('sprint', true);
+      bot.setControlState('jump', true);
+      await bot.waitForTicks(2);
+    }
+    bot.clearControlStates();
+    if (!inLava()) log.info('溶岩から抜け出した');
+    // 置いた水を汲み直す（バケツを持ち歩くため）
+    if (poured && bot.inventory.items().some((i) => i.name === 'bucket')) {
+      const w = bot.findBlock({ matching: bot.registry.blocksByName.water.id, maxDistance: 4, useExtraInfo: (b) => b.metadata === 0 });
+      if (w) {
+        try {
+          await bot.equip(bot.inventory.items().find((i) => i.name === 'bucket'), 'hand');
+          await bot.lookAt(w.position.offset(0.5, 0.5, 0.5), true);
+          bot.activateItem();
+          await bot.waitForTicks(4);
+        } catch {}
+      }
+    }
+  }
+
   async escapeWater() {
     const { bot } = this;
     const headWet = () => isWetBlock(bot.blockAt(bot.entity.position.offset(0, 1.6, 0)));
