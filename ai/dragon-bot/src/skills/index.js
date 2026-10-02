@@ -44,7 +44,7 @@ export const SKILLS = [
   // --- 大きな目標（中身は既存プラグインの組み合わせ）---
   def('gatherWood', ow.gatherWood, '木を切って原木を集める。最初なら作業台と木のツルハシも作る。', { logs: int('集める原木の数', 1, 64) }),
   def('makeTools', ow.makeTools, '木または石の道具一式（ツルハシ・剣・斧・シャベル）とかまどを作る。', { tier: { type: 'string', enum: ['wooden', 'stone'] } }),
-  def('gatherFood', ow.gatherFood, '動物を狩って肉を集め、かまどで焼く。', { amount: int('目標の食料数', 1, 64) }),
+  def('gatherFood', noteFailAt('gatherFood', ow.gatherFood), '動物を狩って肉を集め、かまどで焼く。', { amount: int('目標の食料数', 1, 64) }),
   def('getIronGear', ow.getIronGear, '鉄を掘って精錬し、鉄のツルハシ・剣・バケツ（armor=true なら防具一式と盾も）を作る。', { armor: { type: 'boolean' } }),
   def('mineDiamonds', ow.mineDiamonds, 'Y=-58 付近でブランチマイニングしてダイヤを掘り、ダイヤのツルハシ（余れば剣）を作る。', { count: int('掘るダイヤの数', 1, 20) }),
   def('makeBowAndArrows', noteFailAt('makeBowAndArrows', ow.makeBowAndArrows), 'クモ/クモの巣から糸、砂利から火打石、ニワトリから羽を集めて弓と矢を作る。エンドクリスタル破壊に必須。', { arrows: int('目標の矢の数', 4, 128) }),

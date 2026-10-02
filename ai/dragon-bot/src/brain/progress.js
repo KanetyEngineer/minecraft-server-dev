@@ -198,7 +198,8 @@ function nextStepRaw(bot, memory) {
   }
   // 食料集めで目標に届かなかった直後は、5 以上あれば 10 分は先へ進む（近くに動物がいないのに食料集めを繰り返していた）
   const foodRetry = (memory.flag?.('foodRetryAt') ?? 0) > Date.now() && c.food >= 5;
-  if (!m.food && !foodRetry) return { skill: 'gatherFood', args: { amount: 12 } };
+  // 動物が見つからず食料集めに失敗した直後（10 分）は、蓄えが少なくても先へ進む（昼の間ずっと動物を探し続け、夕方に倒された）
+  if (!m.food && !foodRetry && !failedRecently('gatherFood', 10)) return { skill: 'gatherFood', args: { amount: 12 } };
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
   const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
