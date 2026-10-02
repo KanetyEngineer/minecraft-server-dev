@@ -7,7 +7,7 @@
 // 溶岩は 1.5 秒ほどで流れ始めるので、溶岩を置いたらすぐに水を置く。
 // 角の 4 つは何のブロックでもよいので丸石を置く。最後に中の丸石などを片付けて火打石で着火する。
 import {
-  SkillError, abortable, goTo, travelTo, mineBlocks, craftItem, placeNear, pillarUp, pillarDown, Vec3,
+  SkillError, abortable, goTo, travelTo, mineBlocks, craftItem, placeNear, pillarUp, pillarDown, Vec3, exploreStep, ascendToSurface,
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep } from '../body/humanize.js';
@@ -132,7 +132,18 @@ export async function castNetherPortal(ctx) {
     await travelTo(ctx, known.x, known.z, { range: 6 }).catch((e) => { if (e.name === 'AbortError') throw e; });
     pool = findPool();
   }
-  if (pool.length < 3) throw new SkillError('溶岩溜まり（源 3 つ以上）が見つからない');
+  if (pool.length < 3) {
+    // 見える範囲に無ければ、地上に出て歩いて探す（地表の溶岩溜まりは平原・砂漠・サバンナに多い）。
+    // 歩いている間に perception が溶岩溜まりを lava_pool として覚えるので、次回は直行できる。
+    ctx.log.info('溶岩溜まりが見当たらないので地表を探す');
+    await ascendToSurface(ctx).catch((e) => { if (e.name === 'AbortError') throw e; });
+    for (let t = 0; t < 8 && pool.length < 3; t++) {
+      abortable(ctx);
+      await exploreStep(ctx, 40);
+      pool = findPool();
+    }
+  }
+  if (pool.length < 3) throw new SkillError('溶岩溜まり（源 3 つ以上）が見つからない（地表を 8 回歩いて探した）');
   const origin = findSite(bot, pool[0].position);
   if (!origin) throw new SkillError('溶岩溜まりの近くに平らな場所がない');
   const { x: ox, y: oy, z: oz } = origin;
