@@ -666,7 +666,8 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
   let gaveUp = false;
   try {
     const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
-    if (bedItem && covered) {
+    // ふたが置けなくても寝てみる（近くに敵がいなければ寝られる。ふたが無いからと寝ずに朝まで 7 分待っていた）
+    if (bedItem) {
       const slept = await sleepInShelter(ctx, feet, bedItem).catch((e) => {
         if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
         ctx.log.warn(`寝られなかった、朝まで待つ: ${e.message}`);
