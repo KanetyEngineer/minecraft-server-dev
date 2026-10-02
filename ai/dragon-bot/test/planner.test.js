@@ -68,3 +68,14 @@ test('必須引数が無ければエラー、enum 外は捨てる', () => {
   assert.deepEqual(sanitizeArgs(SKILL_MAP.makeTools, { tier: 'netherite' }), {});
   assert.deepEqual(sanitizeArgs(SKILL_MAP.craft, { item: 'bow', count: '3', extra: 1 }), { item: 'bow', count: 3 });
 });
+
+test('プレイヤーからの指示は最優先として指示文に入る', async () => {
+  const seen = [];
+  const p = new Planner(cfg, { client: mockClient({
+    stop_reason: 'tool_use',
+    content: [{ type: 'tool_use', id: 't1', name: 'gatherWood', input: { logs: 8 } }],
+  }, seen) });
+  await p.decide({ ...input(), instructions: [{ username: 'kanetyyy', text: '木を集めて', at: Date.now() }] });
+  assert.match(seen[0].messages[0].content, /プレイヤーからの指示/);
+  assert.match(seen[0].messages[0].content, /kanetyyy.*木を集めて/);
+});

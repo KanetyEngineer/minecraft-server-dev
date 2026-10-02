@@ -19,11 +19,11 @@ export class Planner {
     return !!this.client && this.failStreak < 5;
   }
 
-  async decide({ bot, memory, snapshot, history, chatLog, banned = [] }) {
+  async decide({ bot, memory, snapshot, history, chatLog, banned = [], instructions = [] }) {
     const hint = nextStep(bot, memory);
     if (!this.usingLLM) return { ...hint, hint, source: 'rules', thought: '（ルールベース）進捗表の次の項目' };
     try {
-      const d = await this.askClaude({ snapshot, history, chatLog, hint, banned });
+      const d = await this.askClaude({ snapshot, history, chatLog, hint, banned, instructions });
       d.hint = hint;
       this.failStreak = 0;
       return d;
@@ -34,7 +34,7 @@ export class Planner {
     }
   }
 
-  buildRequest({ snapshot, history, chatLog, hint, banned }) {
+  buildRequest({ snapshot, history, chatLog, hint, banned, instructions = [] }) {
     const text = [
       '## 今の状況',
       '```json',
@@ -44,6 +44,7 @@ export class Planner {
       history.length ? history.map((h) => `- ${h.skill}(${JSON.stringify(h.args)}) → ${h.ok ? '成功' : '失敗'}: ${h.result}`).join('\n') : '- まだ何もしていない',
       '## 最近のチャット',
       chatLog.length ? chatLog.map((c) => `- ${c.username}: ${c.message}`).join('\n') : '- なし',
+      instructions.length ? `## プレイヤーからの指示（最優先。指示に合うスキルを選び、やり終えたら通常の流れに戻る）\n${instructions.map((i) => `- ${i.username}（${Math.round((Date.now() - i.at) / 60_000)} 分前）: ${i.text}`).join('\n')}` : '',
       '## 進捗表からのおすすめの次の一手（参考）',
       `${hint.skill}(${JSON.stringify(hint.args)})`,
       banned?.length ? `## 今は使えないスキル（ループ検知で一時禁止）\n${banned.join(', ')}` : '',

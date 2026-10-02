@@ -10,6 +10,9 @@ import { log } from './log.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
+// ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
+// （バニラの鯖では「/ai」のような独自コマンドは本人にエラーが返るだけでボットには届かないので、先頭に ai を付ける）
+export const INSTRUCTION_RE = /^\s*(?:\/?ai|@?dragonbot|!ai)[\s:：、,]+(.+)$/i;
 const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack', 'gatherFood']);
 
 export class Agent {
@@ -17,6 +20,7 @@ export class Agent {
     Object.assign(this, { bot, cfg, memory, planner, chat });
     this.history = [];
     this.chatLog = [];
+    this.instructions = []; // プレイヤーからの指示（チャット「ai 〜」やささやき）
     this.current = null; // { name, controller, startedAt }
     this.lastHurtAt = 0;
     this.running = false;
@@ -59,10 +63,33 @@ export class Agent {
       if (username === bot.username) return;
       this.chatLog.push({ username, message, at: Date.now() });
       this.chatLog = this.chatLog.slice(-10);
+      // 「ai 〜」「@DragonBot 〜」「!ai 〜」で始まるチャットはプレイヤーからの指示として扱う
+      const m = message.match(INSTRUCTION_RE);
+      if (m) { await this.takeInstruction(username, m[1].trim()); return; }
       const ctx = `${dimensionOf(bot)}にいる。いまの作業: ${this.current?.name ?? '考え中'}`;
       const r = await this.chat.reply(bot, username, message, ctx);
       if (r) this.say(r);
     });
+    // ささやき（/msg DragonBot 〜）は全部指示として扱う
+    bot.on('whisper', async (username, message) => {
+      if (username === bot.username) return;
+      await this.takeInstruction(username, message.replace(INSTRUCTION_RE, '$1').trim());
+    });
+  }
+
+  // プレイヤーの指示: 覚えておいて次の判断で最優先にし、今の作業を中断して判断をやり直す
+  async takeInstruction(username, text) {
+    if (!text) return;
+    log.info(`📣 ${username} の指示: ${text}`);
+    this.instructions.push({ username, text, at: Date.now() });
+    this.instructions = this.instructions.slice(-3);
+    this.say(`了解、「${text.slice(0, 40)}」やってみる`);
+    this.interrupt(`${username} の指示`);
+  }
+
+  // 10 分以内の指示だけを有効とする
+  pendingInstructions() {
+    return this.instructions.filter((i) => Date.now() - i.at < 10 * 60_000);
   }
 
   interrupt(reason) {
@@ -447,6 +474,7 @@ export class Agent {
         const snap = snapshot(this.bot, this.memory, this.cfg);
         let decision = await this.planner.decide({
           bot: this.bot, memory: this.memory, snapshot: snap, history: this.history.slice(-12), chatLog: this.chatLog.slice(-5),
+          instructions: this.pendingInstructions(),
           banned: this.loopGuard.bannedSkills(),
         });
         // ループ検知で禁止中のスキルが選ばれたら、進捗表の案か探索に差し替える
