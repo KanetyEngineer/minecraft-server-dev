@@ -76,6 +76,14 @@ const SURFACE_SKILLS = new Set(['gatherFood', 'gatherWood', 'makeBed', 'lootVill
 
 // 夜・防具なしのときは、地上に出るスキルを選ばず穴で休む（地下で作業していて、次の食料集めで夜の地上に出てスケルトンに撃たれた）。
 // 地下でできる作業（鉄集めなど）はそのまま続ける
+// 短時間に何度も死んでいるなら、鉄の防具（3 点以上）を必須にする。
+// RTA では防具を省くが、このランでは 30 分で 5 回（すべて防具なし）死んだ。死ぬたびに持ち物と 5〜10 分を失うので、
+// 鉄 15〜24 個で防具を作ってから進むほうが結局速い
+export function armorRequired(memory, now = Date.now()) {
+  const deaths = memory.data?.deaths ?? [];
+  return deaths.filter((d) => now - Date.parse(d.at) < 60 * 60_000).length >= 2;
+}
+
 export function nextStep(bot, memory) {
   const step = nextStepRaw(bot, memory);
   const night = bot.time && !bot.time.isDay;
@@ -165,9 +173,11 @@ function nextStepRaw(bot, memory) {
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
   const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
-  if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: false } };
-  // 鉄の防具一式（鉄 24 個）は RTA では作らない。盾だけ必ず作り、防具は余った鉄があるときだけ（getIronGear の中で）作る
-  if (!m.shield) return { skill: 'getIronGear', args: { armor: false } };
+  // 鉄の防具一式（鉄 24 個）は RTA では作らない。盾だけ必ず作り、防具は余った鉄があるときだけ（getIronGear の中で）作る。
+  // ただし、このランで何度も死んでいるなら防具も必須にする（armorRequired）
+  const wantArmor = !m.armor && armorRequired(memory);
+  if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: wantArmor } };
+  if (!m.shield || wantArmor) return { skill: 'getIronGear', args: { armor: wantArmor } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
   if (!m.netherPortal) {
     // ネザーの板材ではボートを作れないので、歪んだ森でのエンダーマン捕獲用に 1 つ持っていく

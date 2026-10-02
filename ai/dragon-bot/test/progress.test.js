@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextStep, milestones } from '../src/brain/progress.js';
+import { armorRequired, nextStep, milestones } from '../src/brain/progress.js';
 import { SKILL_MAP } from '../src/skills/index.js';
 import { fakeBot, fakeMemory } from './fakebot.js';
 
@@ -201,4 +201,18 @@ test('夜・防具なしで地下にいるときは、地上に出る食料集�
   b.entity = { position: { offset: () => ({}) } };
   b.blockAt = () => ({ skyLight: 0 });
   assert.equal(nextStep(b, fakeMemory()).skill, 'shelterForNight');
+});
+
+test('このランで 2 回以上死んでいたら、鉄の防具を必須にする（それまでは盾だけ）', () => {
+  const geared = { iron_pickaxe: 1, iron_sword: 1, bucket: 1, cooked_beef: 20, shield: 1, white_bed: 1 };
+  const deaths = (n) => ({ ...fakeMemory(), data: { places: {}, notes: [], flags: {}, deaths: Array.from({ length: n }, () => ({ at: new Date().toISOString(), dimension: 'overworld' })) } });
+  assert.equal(armorRequired(deaths(1)), false);
+  assert.equal(armorRequired(deaths(2)), true);
+  assert.equal(nextStep(fakeBot(geared), deaths(1)).skill, 'fillWaterBucket');
+  assert.deepEqual(nextStep(fakeBot(geared), deaths(2)), { skill: 'getIronGear', args: { armor: true } });
+  // 鉄の道具を作る段階から、防具の分まで鉄を集める
+  assert.deepEqual(nextStep(fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, white_bed: 1 }), deaths(2)), { skill: 'getIronGear', args: { armor: true } });
+  // 1 時間より前の死亡は数えない
+  const old = deaths(0); old.data.deaths = [{ at: new Date(Date.now() - 2 * 3600_000).toISOString() }, { at: new Date(Date.now() - 2 * 3600_000).toISOString() }];
+  assert.equal(armorRequired(old), false);
 });
