@@ -938,10 +938,13 @@ export async function pillarUp(ctx, height = 2) {
     await bot.equip(item, 'hand');
     await bot.look(bot.entity.yaw, -Math.PI / 2, true);
     const below = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    const y0 = bot.entity.position.y;
     bot.setControlState('jump', true);
-    await bot.waitForTicks(6);
+    // 足が 1 マス以上上がるまで待ってから置く。置くときは振り向かない（なめらかに振り向いている間に着地して、
+    // 自分のいる場所には置けず「柱を積めない」になっていた）
+    for (let t = 0; t < 10 && bot.entity.position.y < y0 + 1.0; t++) await bot.waitForTicks(1);
     try {
-      await bot.placeBlock(below, new Vec3(0, 1, 0));
+      await bot._placeBlockWithOptions(below, new Vec3(0, 1, 0), { swingArm: 'right', forceLook: true });
       placed++;
     } catch {
       // 置けなかったら打ち切り
