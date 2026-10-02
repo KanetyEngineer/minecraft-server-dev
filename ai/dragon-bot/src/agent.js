@@ -533,11 +533,23 @@ export class Agent {
     if (!bot.entity || bot.currentWindow || bot.inventory.emptySlotCount() > 4) return;
     const plan = dropPlan(bot.inventory.items());
     if (plan.length === 0) return;
+    const before = bot.inventory.emptySlotCount();
     for (const { name, count } of plan) {
       const id = bot.registry.itemsByName[name]?.id;
       if (id !== undefined && count > 0) await bot.toss(id, null, count).catch(() => {});
     }
-    log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
+    // 本当に空きが増えたときだけ「捨てた」と記録する（同期がずれていると捨てられず、同じ記録が並んでいた）
+    if (bot.inventory.emptySlotCount() > before) log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
+    else {
+      log.warn('いらない物を捨てられなかった（持ち物の同期がずれているかも）');
+      this.slotErrors = (this.slotErrors ?? []).filter((t) => Date.now() - t < 5 * 60_000);
+      this.slotErrors.push(Date.now());
+      if (this.slotErrors.length >= 2) {
+        this.slotErrors = [];
+        log.warn('持ち物の同期がずれているので、いったん入り直す');
+        bot.quit('持ち物の同期をやり直す');
+      }
+    }
   }
 
   // 盾を持っているのに左手に無ければ持たせる（死んで拾い直したときなど、盾を構えられず矢とノックバックを受けていた）
@@ -851,6 +863,17 @@ export class Agent {
     // 「原木が足りない」で失敗したら、進捗表が次に木集めを選ぶよう記録する（道具はあるので木集めが選ばれず、同じ失敗を繰り返していた）
     if (!entry.ok && /原木が足りない/.test(entry.result)) this.memory.setFlag('needWoodAt', Date.now());
     if (entry.ok && name === 'gatherWood') this.memory.setFlag('needWoodAt', 0);
+    // 持ち物の同期がずれると（作業台の窓のずれの後など）、クラフトも捨てるのも「updateSlot did not fire」で失敗し続ける。
+    // 5 分以内に 2 回起きたら、いったん切断して入り直し、持ち物をサーバーから受け取り直す（自動で再接続する）
+    if (!entry.ok && /updateSlot.*did not fire/.test(entry.result)) {
+      this.slotErrors = (this.slotErrors ?? []).filter((t) => Date.now() - t < 5 * 60_000);
+      this.slotErrors.push(Date.now());
+      if (this.slotErrors.length >= 2) {
+        this.slotErrors = [];
+        log.warn('持ち物の同期がずれているので、いったん入り直す');
+        this.bot.quit('持ち物の同期をやり直す');
+      }
+    }
     // 食料集めが目標（蓄え 10）に届かなかったら、しばらく繰り返さない（進捗表が 5 以上なら先へ進む）
     if (name === 'gatherFood' && foodPoints(this.bot) < 10) this.memory.setFlag('foodRetryAt', Date.now() + 10 * 60_000);
     this.history.push(entry);
