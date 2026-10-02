@@ -137,6 +137,13 @@ export async function crossByBoat(ctx, x, z) {
 // 探索: 前回と近い向きに 24〜40 ブロック歩く。行き止まりなら向きを変える。
 // 探索の向きを決める: 8 方向の先（8〜40 マス）の地表を見て、水が少なく木の葉が多い方を選ぶ。
 // 今の向きを少し優先して、ふらふらしないようにする（海辺のスポーンで沖へ出ていき、ドラウンドに倒されていた）
+// ボットの名前から決まる「好きな向き」（ラジアン）。ボットごとに違う向きへ散らばる
+export function favoriteHeading(bot) {
+  let h = 0;
+  for (const ch of String(bot.username ?? '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ((h % 360) / 360) * Math.PI * 2;
+}
+
 export function chooseExploreHeading(bot, current) {
   const p = bot.entity.position.floored();
   const surface = (x, z) => {
@@ -160,6 +167,8 @@ export function chooseExploreHeading(bot, current) {
       else score += 1;
     }
     if (current !== undefined) score += Math.cos(h - current) * 1.5; // 今の向きに近いほど少し得点
+    // ボットごとの「好きな向き」と、毎回のゆらぎ（同じ場所にいる何体ものボットが、そろって同じ向きへ歩いていた）
+    score += Math.cos(h - favoriteHeading(bot)) * 2 + Math.random() * 2;
     if (!best || score > best.score) best = { h, score };
   }
   return best ? best.h : current;

@@ -18,9 +18,10 @@ if (startDiscordLog({ botToken: process.env.DISCORD_BOT_TOKEN, channelId: proces
 const memory = new Memory(cfg.dataDir);
 const planner = new Planner(cfg);
 // チーム（TEAM_DIR のフォルダで仲間と状態を共有する）。役割は ROLE（leader / food / iron）
-const team = new Team({ dir: cfg.teamDir, name: cfg.username, role: cfg.role });
-setTeamContext({ role: cfg.role, team });
-log.info(`役割: ${cfg.role}（${ROLES[cfg.role] ?? '不明'}）`);
+// ROLE=solo のときは独立して動く（チームの情報を共有せず、1 体でエンドラ討伐を目指す）
+const team = cfg.role === 'solo' ? null : new Team({ dir: cfg.teamDir, name: cfg.username, role: cfg.role });
+setTeamContext({ role: cfg.role === 'solo' ? 'leader' : cfg.role, team });
+log.info(`役割: ${cfg.role}（${cfg.role === 'solo' ? '独立して動く' : ROLES[cfg.role] ?? '不明'}）`);
 const chat = new ChatResponder(cfg, planner.client);
 let agent = null;
 let stopping = false;

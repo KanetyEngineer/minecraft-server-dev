@@ -93,6 +93,7 @@ export const SKILLS = [
     to: str('渡す相手の名前'),
     items: { type: 'array', items: { type: 'object', properties: { item: str('アイテム名'), count: int('数', 1, 64) }, required: ['item', 'count'] } },
   }, ['to', 'items']),
+  def('spreadOut', gen.spreadOut, '始めに、ほかのボットと別の方向へ 50〜90 ブロック離れる。'),
   def('comeToPlayer', gen.comeToPlayer, 'プレイヤーのそばへ行く（呼ばれたとき）。', { player: str('プレイヤー名') }, ['player']),
   def('wait', gen.wait, '少し待つ（夜が明けるのを待つなど）。', { seconds: int('秒', 1, 120) }),
 ];

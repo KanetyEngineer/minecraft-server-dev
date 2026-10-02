@@ -188,3 +188,14 @@ export async function deliverItems(ctx, { to, items = [] } = {}) {
   ctx.say?.(`${to} に ${given.join('、')} を渡した`);
   return `${to} に ${given.join('、')} を渡した`;
 }
+
+// 始めに、ボットごとの「好きな向き」へ 50〜90 ブロック離れる（同じ場所で始めた何体ものボットが、同じ木や動物を取り合わないように）
+export async function spreadOut(ctx) {
+  const { bot } = ctx;
+  const h = favoriteHeading(bot) + (Math.random() - 0.5) * 0.6;
+  const d = 50 + Math.random() * 40;
+  const p = bot.entity.position;
+  await travelTo(ctx, p.x + Math.cos(h) * d, p.z + Math.sin(h) * d, { range: 6 }).catch(() => {});
+  ctx.memory.setFlag('spreadDone', Date.now());
+  return `散らばった（${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.z)}）`;
+}
