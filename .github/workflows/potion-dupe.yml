@@ -1,0 +1,42 @@
+name: potion-dupe
+on:
+  push:
+    paths: ['mods/potion-dupe/**', '.github/workflows/potion-dupe.yml']
+  pull_request:
+    paths: ['mods/potion-dupe/**', '.github/workflows/potion-dupe.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '9.2.1' }
+      - name: Build
+        working-directory: mods/potion-dupe
+        run: gradle --no-daemon build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: potion-dupe
+          path: mods/potion-dupe/build/libs/*.jar
+      - name: Publish jar to potion-dupe-dist branch
+        if: github.event_name == 'push'
+        run: |
+          JAR=$(ls mods/potion-dupe/build/libs/*.jar | grep -v sources | head -1)
+          mkdir /tmp/dist && cp "$JAR" /tmp/dist/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin potion-dupe-dist || true
+          if git rev-parse --verify origin/potion-dupe-dist >/dev/null 2>&1; then
+            git switch -C potion-dupe-dist origin/potion-dupe-dist
+          else
+            git switch --orphan potion-dupe-dist
+          fi
+          git rm -rfq . >/dev/null 2>&1 || true
+          cp /tmp/dist/*.jar .
+          echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD.txt
+          git add -A && git commit -qm "potion-dupe build ${GITHUB_SHA::7}" && git push origin potion-dupe-dist
