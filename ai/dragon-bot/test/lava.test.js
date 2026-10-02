@@ -40,3 +40,48 @@ test('経路探索: 溶岩のとなりのマスは高コスト、離れていれ
   assert.equal(lavaEdgeCost(bot, bot.blockAt(new Vec3(4, 64, 0))), 0);
   assert.equal(lavaEdgeCost(bot, { safe: false }), 0); // pathfinder のダミーブロック（position 無し）
 });
+
+// 経路探索用の速い版: 状態 ID だけを読む小さな世界
+function stateWorld() {
+  const LAVA_ID = 100; const STONE = 1; const AIR = 0;
+  const lava = new Set();
+  for (let x = -2; x <= 1; x++) for (let z = -2; z <= 2; z++) lava.add(`${x},63,${z}`);
+  let reads = 0;
+  const bot = {
+    registry: { blocksByName: { lava: { id: 50, minStateId: LAVA_ID, maxStateId: LAVA_ID + 15 } } },
+    entity: { position: new Vec3(0.5, 64, 0.5) },
+    world: { getBlockStateId: (p) => { reads++; return lava.has(`${p.x},${p.y},${p.z}`) ? LAVA_ID + 3 : (p.y <= 63 ? STONE : AIR); } },
+    lavaNear: true,
+    findBlocks() { return this.lavaNear ? [new Vec3(0, 63, 0)] : []; },
+  };
+  return { bot, reads: () => reads };
+}
+
+test('経路探索の速い版: 溶岩のとなりは高コスト、同じマスは覚えて読み直さない', async () => {
+  const { makeLavaEdgeCost } = await import('../src/skills/lava.js');
+  const { bot, reads } = stateWorld();
+  let t = 0;
+  const cost = makeLavaEdgeCost(bot, { now: () => t });
+  assert.equal(cost({ position: new Vec3(2, 64, 0) }), 25);
+  assert.equal(cost({ position: new Vec3(4, 64, 0) }), 0);
+  assert.equal(cost({ safe: false }), 0);
+  const n = reads();
+  assert.equal(cost({ position: new Vec3(4, 64, 0) }), 0);
+  assert.equal(cost({ position: new Vec3(2, 64, 0) }), 25);
+  assert.equal(reads(), n, '2 回目は覚えた答えを使う');
+});
+
+test('経路探索の速い版: 近くに溶岩が無ければ、ブロックを 1 つも読まずに 0', async () => {
+  const { makeLavaEdgeCost } = await import('../src/skills/lava.js');
+  const { bot, reads } = stateWorld();
+  bot.lavaNear = false;
+  let t = 0;
+  const cost = makeLavaEdgeCost(bot, { now: () => t, refreshMs: 1000 });
+  assert.equal(cost({ position: new Vec3(2, 64, 0) }), 0);
+  assert.equal(reads(), 0);
+  // 溶岩が見つかるようになったら、調べ直す時刻のあとから効く
+  bot.lavaNear = true;
+  assert.equal(cost({ position: new Vec3(2, 64, 0) }), 0, 'まだ調べ直していない');
+  t = 1500;
+  assert.equal(cost({ position: new Vec3(2, 64, 0) }), 25);
+});

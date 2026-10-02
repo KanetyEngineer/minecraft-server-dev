@@ -36,6 +36,54 @@ export function lavaEdgeCost(bot, block) {
   return lavaBeside(bot, block.position) ? 25 : 0;
 }
 
+// 経路探索用の速い版。lavaEdgeCost は経路の 1 マスごとに周りの 8 ブロックを Block オブジェクトとして読み、
+// 経路探索が 2〜3 倍重くなっていた（ボットがまともに歩けず、20 秒で 8 マスしか進まなかった原因の一つ）。
+// - 近く（nearRadius）に溶岩が 1 つも無ければ、何も読まずに 0 を返す（溶岩の有無は refreshMs ごとに、
+//   チャンクの区画ごとの「使われているブロックの一覧」で調べるので軽い）
+// - 調べるときもブロックの状態 ID だけを読み、Block オブジェクトを作らない
+// - 同じマスの答えは覚えておく（覚えた数が増えすぎたら、溶岩の有無を調べ直すときに忘れる）
+export function makeLavaEdgeCost(bot, { cost = 25, nearRadius = 64, refreshMs = 3000, now = () => Date.now() } = {}) {
+  const ids = [];
+  for (const name of LAVA) {
+    const b = bot.registry?.blocksByName?.[name];
+    if (b) ids.push(b.id);
+  }
+  const states = new Set();
+  for (const name of LAVA) {
+    const b = bot.registry?.blocksByName?.[name];
+    if (b) for (let st = b.minStateId; st <= b.maxStateId; st++) states.add(st);
+  }
+  let checkedAt = -Infinity;
+  let near = true;
+  const cache = new Map();
+  const p = new Vec3(0, 0, 0);
+  const lavaAt = (x, y, z) => { p.x = x; p.y = y; p.z = z; return states.has(bot.world.getBlockStateId(p)); };
+  return (block) => {
+    const pos = block?.position;
+    if (!pos || states.size === 0) return 0;
+    const t = now();
+    if (t - checkedAt > refreshMs) {
+      checkedAt = t;
+      cache.clear();
+      try {
+        near = typeof bot.findBlocks !== 'function' || !bot.entity
+          || bot.findBlocks({ matching: ids, maxDistance: nearRadius, count: 1 }).length > 0;
+      } catch { near = true; }
+    }
+    if (!near) return 0;
+    const key = `${pos.x},${pos.y},${pos.z}`;
+    const hit = cache.get(key);
+    if (hit !== undefined) return hit;
+    let v = 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (lavaAt(pos.x + dx, pos.y, pos.z + dz) || lavaAt(pos.x + dx, pos.y - 1, pos.z + dz)) { v = cost; break; }
+    }
+    if (cache.size > 200_000) cache.clear();
+    cache.set(key, v);
+    return v;
+  };
+}
+
 // 真下を見てバケツを使う（水入りバケツなら水を置く、空のバケツなら回収）
 export async function useBucketDown(bot, name) {
   const b = findItem(bot, name);

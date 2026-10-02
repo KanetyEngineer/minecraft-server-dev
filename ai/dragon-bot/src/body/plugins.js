@@ -6,7 +6,7 @@ import toolPkg from 'mineflayer-tool';
 import armorManager from 'mineflayer-armor-manager';
 import hawkeyePkg from 'minecrafthawkeye';
 import { loader as autoEat } from 'mineflayer-auto-eat';
-import { lavaEdgeCost } from '../skills/lava.js';
+import { makeLavaEdgeCost } from '../skills/lava.js';
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -55,6 +55,34 @@ function loadArmorManagerSafely(bot) {
   });
 }
 
+// 掘れるうちで一番安い道具を返す（無ければ fastestTool の答え）。経路探索は候補のマスを調べるたびに呼ぶので、
+// ブロックの種類ごとに答えを覚えておき、持ち物が変わったら忘れる（毎回 18 通りを調べ直していた）
+const TIERS = ['wooden', 'stone', 'golden', 'iron', 'diamond', 'netherite'];
+export function makeCheapestTool(bot, fastestTool) {
+  let cache = new Map();
+  const forget = () => { cache = new Map(); };
+  bot.inventory?.on?.('updateSlot', forget);
+  bot.on?.('heldItemChanged', forget);
+  return (block) => {
+    // ブロックが読み込まれていない（null）ことがある。そのまま digTime を呼ぶとボットごと落ちていた
+    if (!block || typeof block.digTime !== 'function') return null;
+    if (cache.has(block.type)) return cache.get(block.type);
+    const items = bot.inventory.items();
+    const hand = block.digTime(null, false, false, false);
+    let pick = null;
+    for (const tier of TIERS) {
+      for (const kind of ['pickaxe', 'shovel', 'axe']) {
+        const it = items.find((i) => i.name === `${tier}_${kind}`);
+        if (it && block.canHarvest(it.type) && block.digTime(it.type, false, false, false) < hand) { pick = it; break; }
+      }
+      if (pick) break;
+    }
+    pick ??= fastestTool(block);
+    cache.set(block.type, pick);
+    return pick;
+  };
+}
+
 // spawn 後に呼ぶ。移動ルールを「普通のプレイヤーができること」に合わせる。
 export function configureBody(bot) {
   const mv = new Movements(bot);
@@ -73,28 +101,15 @@ export function configureBody(bot) {
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
   // 溶岩のとなりを通るマスは高コストにして、少し遠回りでも溶岩から離れた道を選ぶ（滑り・ノックバックで落ちない）
-  mv.exclusionAreasStep.push((block) => lavaEdgeCost(bot, block));
+  // （近くに溶岩が無いときは何も読まない速い版。前の版は経路探索を 2〜3 倍重くして、ボットが滑らかに歩けなかった）
+  mv.exclusionAreasStep.push(makeLavaEdgeCost(bot));
   // クモの巣は通らない（廃坑の毒グモスポナーの周りに多く、はまると毒グモに囲まれる）
   const cobweb = bot.registry.blocksByName.cobweb?.id;
   if (cobweb !== undefined) mv.blocksToAvoid.add(cobweb);
   bot.pathfinder.setMovements(mv);
   // 経路の途中で掘るときも、掘れるうちで一番安い道具を使う（pathfinder は一番速い道具＝鉄のツルハシを選び、
   // 移動中に石を掘って鉄のツルハシを使い潰していた）
-  const fastestTool = bot.pathfinder.bestHarvestTool;
-  const TIERS = ['wooden', 'stone', 'golden', 'iron', 'diamond', 'netherite'];
-  bot.pathfinder.bestHarvestTool = (block) => {
-    // ブロックが読み込まれていない（null）ことがある。そのまま digTime を呼ぶとボットごと落ちていた
-    if (!block || typeof block.digTime !== 'function') return null;
-    const items = bot.inventory.items();
-    const hand = block.digTime(null, false, false, false);
-    for (const tier of TIERS) {
-      for (const kind of ['pickaxe', 'shovel', 'axe']) {
-        const it = items.find((i) => i.name === `${tier}_${kind}`);
-        if (it && block.canHarvest(it.type) && block.digTime(it.type, false, false, false) < hand) return it;
-      }
-    }
-    return fastestTool(block);
-  };
+  bot.pathfinder.bestHarvestTool = makeCheapestTool(bot, bot.pathfinder.bestHarvestTool);
   // 採掘プラグイン（collectblock）や各スキルが使う bot.tool.equipForBlock も、掘れるうちで一番安い道具を持つようにする
   //（一番速い鉄のツルハシで石を掘り続けて使い潰し、鉄のツルハシを失っていた）。
   // ダイヤが要る黒曜石などは、安い道具では掘れない（canHarvest が false）ので、自然に鉄・ダイヤが選ばれる
