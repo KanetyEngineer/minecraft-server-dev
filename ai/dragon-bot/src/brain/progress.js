@@ -118,7 +118,14 @@ export function nextStep(bot, memory) {
   if (typeof bot.health === 'number' && bot.health <= 8) return { skill: 'shelterForNight', args: { untilHealed: true } };
   if (night) {
     if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
-    return { skill: 'shelterForNight', args: {} };
+    // ベッドがあれば穴の中で寝て朝にする（寝られなかった直後は飛ばす）。
+    // 寝られなくても、石の道具があって体力があれば穴にこもらず作業を続ける（夜に 7 分待つのは大きなロス。敵は反射で対処する）
+    const hasBedNow = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
+    const sleepFailed = Date.now() - (memory.flag('sleepFailAt') ?? 0) < 10 * 60_000;
+    const canWork = m.stoneTools && (typeof bot.health !== 'number' || bot.health >= 12);
+    if (hasBedNow && !sleepFailed) return { skill: 'shelterForNight', args: {} };
+    if (!canWork) return { skill: 'shelterForNight', args: {} };
+    // 作業可能: 昼と同じ進め方に進む
   }
   // ツルハシを失っても原木が 3 本以上あれば、木集めに戻らずそのまま道具を作る（makeTools が木のツルハシから作る）
   if (!m.woodenTools && c.logs < 3) return { skill: 'gatherWood', args: { logs: 8 } };

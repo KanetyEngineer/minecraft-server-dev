@@ -656,6 +656,7 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
   ctx.log.info(`🌙 穴にこもって朝を待つ（ふた ${covered ? 'あり' : 'なし'}）`);
   ctx.state.sheltered = covered; // ふたがある間は反射で飛び出さない（agent.js）
   const start = Date.now();
+  let gaveUp = false;
   try {
     const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
     if (bedItem && covered) {
@@ -665,8 +666,14 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
         return false;
       });
       if (slept) ctx.log.info('🛏 ベッドで寝て朝になった');
+      // 寝られなかった（近くに敵がいる など）: 体力があれば朝まで待たず作業に戻る（夜に 7 分待つのは大きなロス）
+      else if (!untilHealed && bot.health >= 12) {
+        ctx.memory.setFlag('sleepFailAt', Date.now());
+        ctx.log.info('寝られなかったので、穴を出て作業を続ける');
+        gaveUp = true;
+      }
     }
-    while (keepWaiting(start)) {
+    while (!gaveUp && keepWaiting(start)) {
       abortable(ctx);
       await sleep(2000);
     }
@@ -680,6 +687,7 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
     await bot.dig(lid, true).catch(() => {});
   }
   if (untilHealed) return `穴で休んで体力 ${Math.round(bot.health)}/20 まで回復`;
+  if (gaveUp) return '寝られなかったので作業に戻る';
   return bot.time.isDay ? '朝まで穴で過ごした' : '待ちきれず出た';
 }
 

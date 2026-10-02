@@ -163,3 +163,18 @@ test('弓と矢が集まらなければ、30 分は弓なしで要塞探しへ�
   assert.equal(nextStep(armored(fakeBot(base)), mem({})).skill, 'makeBowAndArrows');
   assert.equal(nextStep(armored(fakeBot(base)), mem({ makeBowAndArrowsFailAt: Date.now() })).skill, 'locateStronghold');
 });
+test('夜でも寝られないとき、石の道具と体力があれば穴にこもらず作業を続ける', () => {
+  const night = { isDay: false };
+  const tools = { stone_pickaxe: 1, stone_sword: 1 };
+  // ベッドがあれば穴で寝る
+  assert.equal(nextStep(fakeBot({ ...tools, white_bed: 1 }, night), fakeMemory()).skill, 'shelterForNight');
+  // 寝られなかった直後はベッドがあっても作業へ
+  assert.equal(nextStep(fakeBot({ ...tools, white_bed: 1 }, night), fakeMemory({}, { sleepFailAt: Date.now() })).skill, 'gatherFood');
+  // ベッドが無くても道具と体力があれば作業へ
+  assert.equal(nextStep(fakeBot(tools, night), fakeMemory({}, { bedRetryAt: Date.now() + 60_000 })).skill, 'gatherFood');
+  // 体力が少なければ穴にこもる
+  const weak = fakeBot(tools, night); weak.health = 10;
+  assert.equal(nextStep(weak, fakeMemory()).skill, 'shelterForNight');
+  // 道具が無ければ穴にこもる
+  assert.equal(nextStep(fakeBot({}, night), fakeMemory()).skill, 'shelterForNight');
+});
