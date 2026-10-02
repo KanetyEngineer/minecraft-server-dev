@@ -195,3 +195,10 @@ test('地下にいるときは、夜でも穴にこもらず作業を続ける',
   assert.equal(nextStep(mk(15), fakeMemory()).skill, 'shelterForNight'); // 地上の夜
   assert.notEqual(nextStep(mk(0), fakeMemory()).skill, 'shelterForNight'); // 地下の夜
 });
+
+test('夜・防具なしで地下にいるときは、地上に出る食料集めを選ばず穴で休む', () => {
+  const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1 }, { isDay: false });
+  b.entity = { position: { offset: () => ({}) } };
+  b.blockAt = () => ({ skyLight: 0 });
+  assert.equal(nextStep(b, fakeMemory()).skill, 'shelterForNight');
+});

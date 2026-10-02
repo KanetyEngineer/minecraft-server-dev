@@ -71,7 +71,23 @@ export function dimensionOf(bot) {
 
 // ルールベースの進め方: 上から順に、まだ満たしていない最初の項目に対応するスキルを返す。
 // skill と args は skills/index.js に登録された名前と同じ。
+// 地上でやるスキル（地下にいても、まず地上に出てから行う）
+const SURFACE_SKILLS = new Set(['gatherFood', 'gatherWood', 'makeBed', 'lootVillage', 'fillWaterBucket', 'useRuinedPortal', 'huntEndermen']);
+
+// 夜・防具なしのときは、地上に出るスキルを選ばず穴で休む（地下で作業していて、次の食料集めで夜の地上に出てスケルトンに撃たれた）。
+// 地下でできる作業（鉄集めなど）はそのまま続ける
 export function nextStep(bot, memory) {
+  const step = nextStepRaw(bot, memory);
+  const night = bot.time && !bot.time.isDay;
+  if (night && dimensionOf(bot) === 'overworld' && SURFACE_SKILLS.has(step.skill) && step.skill !== 'huntEndermen') {
+    const m = milestones(bot, memory);
+    const weak = typeof bot.health === 'number' && bot.health < 16;
+    if (!m.armor && (isUnderground(bot) || weak)) return { skill: 'shelterForNight', args: {} };
+  }
+  return step;
+}
+
+function nextStepRaw(bot, memory) {
   const m = milestones(bot, memory);
   const dim = dimensionOf(bot);
   const c = m._counts;
