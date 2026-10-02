@@ -1,8 +1,8 @@
 // AI の思考ログ（🧠 判断、🛠 スキルの開始と結果、警告）を Discord のチャンネルへ送る。
 // .env の DISCORD_BOT_TOKEN と DISCORD_CHANNEL_ID が両方あるときだけ動く。
-// 数秒ごとにまとめて 1 通にし、同じ行の連続は回数だけ数える（レート制限と通知の洪水を避ける）。
+// 1 分ごとにまとめて送り、同じ行の連続は回数だけ数える（レート制限と通知の洪水を避ける）。
 const API = 'https://discord.com/api/v10';
-const FLUSH_MS = 5000;
+const FLUSH_MS = 60_000; // 1 分ごとにまとめて送る
 const MAX_LEN = 1900; // Discord の上限 2000 文字からコードブロック分を引いた値
 const MAX_QUEUE = 300;
 
@@ -82,8 +82,8 @@ export async function flush() {
   lastBody = null;
   sending = true;
   try {
-    // 1 回の flush で送るのは最大 3 通（溜まっていれば次の回へ）
-    for (let i = 0; i < 3 && queue.length && discordEnabled(); i++) await post(takeChunk());
+    // 1 回の flush で送るのは最大 5 通（溜まっていれば次の回へ）
+    for (let i = 0; i < 5 && queue.length && discordEnabled(); i++) await post(takeChunk());
   } catch {
     // ネットワークの失敗はログを止めない
   } finally {
