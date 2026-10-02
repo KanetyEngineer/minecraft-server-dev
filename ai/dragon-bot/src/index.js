@@ -8,9 +8,11 @@ import { ChatResponder } from './brain/chat.js';
 import { Agent } from './agent.js';
 import { startStatusServer } from './status.js';
 import { log, startLogFile } from './log.js';
+import { startDiscordLog } from './discord.js';
 
 const cfg = loadConfig();
 startLogFile(cfg.logDir);
+if (startDiscordLog({ botToken: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID })) log.info('AI の思考ログを Discord へ送る');
 const memory = new Memory(cfg.dataDir);
 const planner = new Planner(cfg);
 const chat = new ChatResponder(cfg, planner.client);

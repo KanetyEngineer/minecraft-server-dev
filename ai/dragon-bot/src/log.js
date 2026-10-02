@@ -2,6 +2,7 @@
 // 直近分は状態ページ（http://localhost:3007/）の下部と /log.txt で見られる。
 import fs from 'node:fs';
 import path from 'node:path';
+import { queueDiscord } from './discord.js';
 
 const t = () => new Date().toISOString().slice(11, 19);
 const RECENT_MAX = 400;
@@ -24,7 +25,7 @@ export function recentLog(n = RECENT_MAX) {
 
 const fmt = (a) => a.map((x) => (x instanceof Error ? (x.stack ?? x.message) : typeof x === 'string' ? x : JSON.stringify(x))).join(' ');
 
-function emit(method, prefix, a) {
+function emit(method, prefix, a, toDiscord = false) {
   const line = `[${t()}] ${prefix}${fmt(a)}`;
   console[method](line);
   recent.push(line);
@@ -34,8 +35,8 @@ function emit(method, prefix, a) {
 
 export const log = {
   info: (...a) => emit('log', '', a),
-  warn: (...a) => emit('warn', '警告: ', a),
-  error: (...a) => emit('error', 'エラー: ', a),
-  brain: (...a) => emit('log', '🧠 ', a),
-  skill: (...a) => emit('log', '🛠 ', a),
+  warn: (...a) => emit('warn', '警告: ', a, true),
+  error: (...a) => emit('error', 'エラー: ', a, true),
+  brain: (...a) => emit('log', '🧠 ', a, true),
+  skill: (...a) => emit('log', '🛠 ', a, true),
 };
