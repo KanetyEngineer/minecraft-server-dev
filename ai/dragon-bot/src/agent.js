@@ -91,7 +91,9 @@ export class Agent {
     const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
     // 最後に息ができていた場所（頭が水の外で地面の上）を覚えておく。溺れそうなときの第一の逃げ先
     if (headBlock && headBlock.name !== 'water' && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
-    if (headBlock?.name === 'water' && bot.oxygenLevel !== undefined && bot.oxygenLevel < 8 && !this.airBusy) {
+    // 頭の位置のブロック名では判定しない（昆布・海草・泡の柱の中だと water 以外の名前になり、反応せずに溺れていた）。
+    // 酸素は水に潜っているときだけ減るので、酸素の値だけで判定する
+    if (bot.oxygenLevel !== undefined && bot.oxygenLevel !== null && bot.oxygenLevel < 8 && !this.airBusy) {
       this.airBusy = true;
       this.stopBody(); // 戦闘などほかの反射の動きも止める
       this.reflexBusy = true;
@@ -100,7 +102,8 @@ export class Agent {
         log.warn(`酸素が少ない（${bot.oxygenLevel}/20）ので水面へ上がる`);
         this.state.floodedAt = bot.entity.position.clone(); // 水没した場所として覚え、横掘りで戻らない
         bot.setControlState('jump', true);
-        const headWet = () => bot.blockAt(bot.entity.position.offset(0, 1.6, 0))?.name === 'water';
+        const WET = new Set(['water', 'kelp', 'kelp_plant', 'seagrass', 'tall_seagrass', 'bubble_column']);
+        const headWet = () => { const h = bot.blockAt(bot.entity.position.offset(0, 1.6, 0)); return !!h && (WET.has(h.name) || h.getProperties?.().waterlogged === true); };
         for (let t = 0; t < 120; t++) {
           await bot.waitForTicks(1);
           if (!headWet() && bot.oxygenLevel >= 18) break;
