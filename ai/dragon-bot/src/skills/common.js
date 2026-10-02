@@ -394,6 +394,7 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
     if (!(await ensurePickaxe(ctx))) break;
     if (ctx.state.floodedAt && ctx.state.floodedAt.distanceTo(bot.entity.position) < 6) break;
     const [dx, dz] = dirs[di % 4];
+    ctx.log.info(`ブランチマイニング ${leg + 1}/6 本目（y=${Math.floor(bot.entity.position.y)}、ここまで ${got}/${n} 個）`);
     for (let s = 0; s < length && got < n; s += 4) {
       abortable(ctx);
       const p = bot.entity.position.floored();

@@ -282,7 +282,8 @@ async function ensureIronIngots(ctx, n) {
         await craftItem(ctx, 'stick', 8).catch(() => {});
         if (count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate') >= 6) await craftItem(ctx, 'stone_pickaxe', 2).catch(() => {});
         // y=16 まで降りると 50 段以上かかり 10 分の制限に届くので、鉄がまだ多い y=24 で掘る
-        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 24);
+        // 鉄鉱石は y=16 付近がいちばん多い（1.18 以降の分布）
+        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 16);
       }
     } finally {
       if (mv && prevDrop !== undefined) mv.maxDropDown = prevDrop;
@@ -299,7 +300,14 @@ async function ensureIronIngots(ctx, n) {
 export async function getIronGear(ctx, { armor = false } = {}) {
   const { bot } = ctx;
   if (!findItem(bot, 'stone_pickaxe') && !findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) {
-    await makeTools(ctx, { tier: 'stone' });
+    // ツルハシが壊れて作り直す木も無いときは、先に木を集める
+    //（「原木が足りない」で失敗を繰り返し、進捗表は木の道具があるとみなして木集めを選ばなかった）
+    await makeTools(ctx, { tier: 'stone' }).catch(async (e) => {
+      if (!/原木が足りない/.test(e.message)) throw e;
+      ctx.log.info('ツルハシを作り直す木が無いので、先に木を集める');
+      await gatherWood(ctx, { logs: 6 });
+      await makeTools(ctx, { tier: 'stone' });
+    });
   }
   const want = [];
   if (!findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) want.push(['iron_pickaxe', 3]);
