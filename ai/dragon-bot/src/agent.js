@@ -231,7 +231,6 @@ export class Agent {
     this.noticeDanger();
     this.equipShieldIfLoose();
     this.emergencyEat();
-    this.dropJunkIfFull();
     // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
     const feetBlock = bot.blockAt(bot.entity.position.offset(0, 0.2, 0));
     const web = [feetBlock, headBlock].find((b) => b?.name === 'cobweb');
@@ -514,25 +513,17 @@ export class Agent {
 
   // 持ち物がほぼいっぱい（空き 4 以下）なら、いらない物を捨てる（いっぱいだと掘った鉱石を拾えない）。
   // 丸石・土などは足場や柱に使うので、決めた数だけ残す
-  dropJunkIfFull() {
+  // スキルとスキルの間に呼ぶ（作業中に捨てると、クラフトなどの持ち物の操作とぶつかって失敗した）
+  async dropJunkIfFull() {
     const { bot } = this;
-    if (Date.now() - (this.junkCheckAt ?? 0) < 5000 || bot.currentWindow || bot.targetDigBlock || bot.autoEat?.isEating) return;
-    this.junkCheckAt = Date.now();
-    if (bot.inventory.emptySlotCount() > 4) return;
+    if (!bot.entity || bot.currentWindow || bot.inventory.emptySlotCount() > 4) return;
     const plan = dropPlan(bot.inventory.items());
     if (plan.length === 0) return;
-    this.reflexBusy = true;
-    (async () => {
-      try {
-        for (const { name, count } of plan) {
-          const id = bot.registry.itemsByName[name]?.id;
-          if (id !== undefined && count > 0) await bot.toss(id, null, count).catch(() => {});
-        }
-        log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
-      } finally {
-        this.reflexBusy = false;
-      }
-    })();
+    for (const { name, count } of plan) {
+      const id = bot.registry.itemsByName[name]?.id;
+      if (id !== undefined && count > 0) await bot.toss(id, null, count).catch(() => {});
+    }
+    log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
   }
 
   // 盾を持っているのに左手に無ければ持たせる（死んで拾い直したときなど、盾を構えられず矢とノックバックを受けていた）
@@ -785,6 +776,7 @@ export class Agent {
           await sleep(60_000);
           continue;
         }
+        await this.dropJunkIfFull().catch(() => {});
         // チャットで「止まれ」と言われている間は何もしない（反射は動く）
         if (this.paused) { await sleep(1000); continue; }
         // チャットで頼まれたこと（来て・スキル名）を、進捗表より先に 1 回やる
