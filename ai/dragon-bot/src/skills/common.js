@@ -1142,10 +1142,11 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   {
     const towerUntil = Date.now() + 180_000;
     const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-    for (let attempt = 0; attempt < 4 && sky() < 12 && Date.now() < towerUntil && cheapBlock(bot); attempt++) {
+    // 足場のブロックは、掘り上がりながら掘った石（落ちてきた物）を使う。最初に持っていなくてもよい
+    for (let attempt = 0; attempt < 4 && sky() < 12 && Date.now() < towerUntil; attempt++) {
       let stuck = 0;
       let reason = '';
-      while (sky() < 12 && Date.now() < towerUntil && cheapBlock(bot) && stuck < 3) {
+      while (sky() < 12 && Date.now() < towerUntil && stuck < 3) {
         abortable(ctx);
         // 体力が減ってきたら（落ちてきた砂で窒息など）やめる
         if (bot.health < 10) { reason = '体力が減った'; stuck = 3; break; }
@@ -1168,6 +1169,9 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
           await bot.waitForTicks(3);
         }
         if (stuck >= 3) break;
+        // 掘った石が落ちてきて拾われるのを少し待つ（それを足場に使う）
+        for (let t = 0; t < 10 && !cheapBlock(bot); t++) await bot.waitForTicks(1);
+        if (!cheapBlock(bot)) { reason = '足場のブロックが無い'; stuck = 3; break; }
         const y0 = bot.entity.position.y;
         const placed = await pillarUp(ctx, 1).catch(() => 0);
         if (!placed || bot.entity.position.y < y0 + 0.5) stuck++; else stuck = 0;
