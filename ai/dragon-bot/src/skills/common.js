@@ -34,6 +34,7 @@ export async function goNearBlock(ctx, block, range = 2) {
 // 長距離移動: 一度に遠くを目指すと経路計算が重いので、64 ブロックずつ区切って進む。
 export async function travelTo(ctx, x, z, { step = 64, range = 3 } = {}) {
   const { bot } = ctx;
+  let boatFailed = false;
   for (let i = 0; i < 200; i++) {
     abortable(ctx);
     const p = bot.entity.position;
@@ -42,13 +43,17 @@ export async function travelTo(ctx, x, z, { step = 64, range = 3 } = {}) {
     const d = Math.hypot(dx, dz);
     if (d <= range + 1) return;
     const k = Math.min(1, step / d);
-    if (ctx.allowBoat !== false && waterAhead(bot, dx / d, dz / d, Math.min(d, step)) >= 20) {
+    // ボートで渡るのは、ボートか材料の木材があるときだけ（無いのに毎回作ろうとして失敗を繰り返していた）。
+    // 一度失敗したら、この移動の間はボートを使わず泳ぐ
+    const canBoat = () => bot.inventory.items().some((it) => /_boat$/.test(it.name) || /_planks$|_log$/.test(it.name));
+    if (ctx.allowBoat !== false && !boatFailed && canBoat() && waterAhead(bot, dx / d, dz / d, Math.min(d, step)) >= 20) {
       try {
         await crossByBoat(ctx, x, z);
         continue;
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        ctx.log.warn(`ボート移動に失敗: ${e.message}`);
+        ctx.log.warn(`ボート移動に失敗（この移動では泳ぐ）: ${e.message}`);
+        boatFailed = true;
       }
     }
     try {
