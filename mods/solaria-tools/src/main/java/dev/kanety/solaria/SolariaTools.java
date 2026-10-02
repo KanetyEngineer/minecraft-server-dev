@@ -1,7 +1,7 @@
 package dev.kanety.solaria;
 
-import dev.kanety.solaria.build.BuildCommand;
-import dev.kanety.solaria.build.BuildManager;
+import dev.kanety.solaria.plan.BuildCommand;
+import dev.kanety.solaria.plan.BuildManager;
 import dev.kanety.solaria.net.BuildSyncPayload;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
