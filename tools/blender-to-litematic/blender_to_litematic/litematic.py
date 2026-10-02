@@ -59,21 +59,28 @@ def bits_for_palette(n):
     return max(2, (n - 1).bit_length())
 
 
-def pack_indices(flat, bits):
-    """Litematica の LitematicaBitArray と同じ詰め方 (値が long の境界をまたぐ)。"""
-    flat = np.asarray(flat, dtype=np.uint64)
+def pack_indices(flat, bits, chunk=1 << 22):
+    """Litematica の LitematicaBitArray と同じ詰め方 (値が long の境界をまたぐ)。
+
+    各値を下位ビットから並べたビット列を作り、64 ビットずつ long にする。
+    (ビット列の i*bits+j 番目 = 値 i のビット j、long k のビット m = ビット列の 64k+m 番目)"""
+    flat = np.asarray(flat)
     n = flat.size
     nlongs = (n * bits + 63) // 64
-    out = np.zeros(nlongs + 1, dtype=np.uint64)
-    start = np.arange(n, dtype=np.uint64) * np.uint64(bits)
-    word = (start >> np.uint64(6)).astype(np.int64)
-    off = start & np.uint64(63)
-    np.bitwise_or.at(out, word, flat << off)
-    spill = (off + np.uint64(bits)) > np.uint64(64)
-    if spill.any():
-        shift = np.uint64(64) - off[spill]
-        np.bitwise_or.at(out, word[spill] + 1, flat[spill] >> shift)
-    return out[:nlongs].view(np.int64)
+    out = np.zeros(nlongs, dtype=np.uint64)
+    shifts = np.arange(bits, dtype=np.uint32)
+    step = chunk - chunk % 64  # 64 個ずつ区切ればビット列も 64 の倍数で区切れる
+    for start in range(0, n, step):
+        part = flat[start:start + step].astype(np.uint32)
+        stream = ((part[:, None] >> shifts) & 1).astype(np.uint8).reshape(-1)
+        packed = np.packbits(stream, bitorder="little")
+        pad = (-len(packed)) % 8
+        if pad:
+            packed = np.concatenate([packed, np.zeros(pad, dtype=np.uint8)])
+        words = packed.view("<u8")
+        first = start * bits // 64
+        out[first:first + len(words)] = words
+    return out.view(np.int64)
 
 
 def unpack_indices(longs, bits, n):
@@ -117,7 +124,7 @@ def build_nbt(grid, palette, name="Schematic", author="", description="",
         "Position": _pos(0, 0, 0),
         "Size": _pos(sx, sy, sz),
         "BlockStatePalette": nbt.List([_palette_entry(p) for p in palette], nbt.TAG_COMPOUND),
-        "BlockStates": nbt.LongArray(int(v) for v in longs),
+        "BlockStates": nbt.LongArray.from_numpy(np.asarray(longs, dtype=np.int64)),
         "TileEntities": nbt.List([], nbt.TAG_COMPOUND),
         "Entities": nbt.List([], nbt.TAG_COMPOUND),
         "PendingBlockTicks": nbt.List([], nbt.TAG_COMPOUND),

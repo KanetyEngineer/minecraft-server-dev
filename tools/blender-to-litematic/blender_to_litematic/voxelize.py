@@ -54,6 +54,12 @@ def sample_triangles(tris, spacing=DEFAULT_SPACING, max_points=2_000_000):
             yield tri_index, np.tile(bary, (len(sel), 1)), pts
 
 
+def _group_sum(inv, values, n):
+    """inv ごとに values (P, C) を足し合わせる (np.add.at より速い)"""
+    return np.stack([np.bincount(inv, weights=values[:, c], minlength=n)
+                     for c in range(values.shape[1])], axis=1)
+
+
 class VoxelAccumulator:
     """点と色を受け取り、ボクセルごとの色を求める。
 
@@ -90,8 +96,7 @@ class VoxelAccumulator:
             pair, cnt = np.unique(keys * nb + blocks, return_counts=True)
             self._votes.append((pair, cnt))
         uniq, inv = np.unique(keys, return_inverse=True)
-        sums = np.zeros((len(uniq), 3))
-        np.add.at(sums, inv, lin)
+        sums = _group_sum(inv, lin, len(uniq))
         counts = np.bincount(inv, minlength=len(uniq)).astype(np.float64)
         self._keys.append(uniq)
         self._sums.append(sums)
@@ -106,8 +111,7 @@ class VoxelAccumulator:
         sums = np.concatenate(self._sums)
         counts = np.concatenate(self._counts)
         uniq, inv = np.unique(keys, return_inverse=True)
-        tot = np.zeros((len(uniq), 3))
-        np.add.at(tot, inv, sums)
+        tot = _group_sum(inv, sums, len(uniq))
         cnt = np.bincount(inv, weights=counts, minlength=len(uniq))
         mean = tot / cnt[:, None]
         rgb = png.linear_to_srgb(mean) * 255.0

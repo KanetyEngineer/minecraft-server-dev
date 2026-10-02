@@ -7,7 +7,7 @@
 bl_info = {
     "name": "Blender to Litematic",
     "author": "kanety",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (4, 2, 0),
     "location": "3D ビュー > サイドバー > Litematic",
     "description": "メッシュを Minecraft のブロックに変換して .litematic で書き出す",

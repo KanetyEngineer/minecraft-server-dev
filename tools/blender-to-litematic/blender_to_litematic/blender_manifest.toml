@@ -1,7 +1,7 @@
-schema_version = "1.0.0"
+schema_version = "1.0.1"
 
 id = "blender_to_litematic"
-version = "1.0.0"
+version = "1.0.1"
 name = "Blender to Litematic"
 tagline = "Convert meshes into Minecraft blocks and export Litematica schematics"
 maintainer = "kanety"

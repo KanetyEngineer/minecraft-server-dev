@@ -65,6 +65,17 @@ class IntArray(list):
 class LongArray(list):
     tag = TAG_LONG_ARRAY
 
+    @classmethod
+    def from_numpy(cls, arr):
+        """大きな配列を Python の int に変換せずに持つ (書き出しが速い)"""
+        obj = cls()
+        obj.array = arr
+        return obj
+
+    def __len__(self):
+        a = getattr(self, "array", None)
+        return len(a) if a is not None else super().__len__()
+
 
 class List(list):
     """TAG_List. 空リストでも型が必要なので elem_type を持つ。"""
@@ -112,7 +123,11 @@ def _write_payload(out, tag, value):
     elif tag == TAG_INT_ARRAY:
         out.write(struct.pack(f">i{len(value)}i", len(value), *value))
     elif tag == TAG_LONG_ARRAY:
-        out.write(struct.pack(f">i{len(value)}q", len(value), *value))
+        out.write(struct.pack(">i", len(value)))
+        if hasattr(value, "array"):
+            out.write(value.array.astype(">i8").tobytes())  # numpy 配列はまとめて書く
+        else:
+            out.write(struct.pack(f">{len(value)}q", *value))
     elif tag == TAG_LIST:
         out.write(struct.pack(">bi", value.elem_type, len(value)))
         for item in value:
@@ -134,7 +149,8 @@ def dumps(root, name="", compress=True):
     _write_str(out, name)
     _write_payload(out, TAG_COMPOUND, root)
     data = out.getvalue()
-    return gzip.compress(data) if compress else data
+    # 圧縮率よりも速さを優先 (既定の 9 は大きな設計図で数秒かかる)
+    return gzip.compress(data, compresslevel=6) if compress else data
 
 
 def save(path, root, name=""):

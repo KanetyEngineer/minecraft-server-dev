@@ -64,7 +64,7 @@ def convert(tris, color_fn, matcher, out_path, options=None, progress=None):
             names.append(block)
         return name_index[block]
 
-    grid = np.zeros(dims, dtype=np.int64)
+    grid = np.zeros(dims, dtype=np.int32)
     if len(coords):
         matched = voted if voted is not None else matcher.match(rgb)
         lut = np.array([idx_of(b) for b in matcher.block_ids], dtype=np.int64)
@@ -79,8 +79,9 @@ def convert(tris, color_fn, matcher, out_path, options=None, progress=None):
                 litematic.parse_block_state(options.interior_block)))
 
     # 使われなかったブロックをパレットから外して詰め直す
-    used = np.unique(grid)
-    remap = np.zeros(len(names), dtype=np.int64)
+    counts_all = np.bincount(grid.reshape(-1), minlength=len(names))
+    used = np.nonzero(counts_all)[0]
+    remap = np.zeros(len(names), dtype=np.int32)
     remap[used] = np.arange(len(used))
     grid = remap[grid]
     names = [names[i] for i in used]
@@ -90,7 +91,8 @@ def convert(tris, color_fn, matcher, out_path, options=None, progress=None):
 
     litematic.write(out_path, grid, names, name=options.name, author=options.author,
                     description=options.description, data_version=options.data_version)
-    counts = np.bincount(grid.reshape(-1), minlength=len(names))
+    counts = np.zeros(len(names), dtype=np.int64)
+    counts[(remap[used] + (0 if used[0] == 0 else 1))] = counts_all[used]
     return Result(
         dims=dims,
         block_counts={names[i]: int(c) for i, c in enumerate(counts) if i > 0 and c},
