@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, equipCheapestTool, neutralizeSpawner } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, equipCheapestTool, chooseExploreHeading, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf, milestones } from './brain/progress.js';
 import { leaderNeeds } from './team.js';
@@ -496,7 +496,18 @@ export class Agent {
       // 水に浮いたまま動けないとき（地下の水たまりなど。pathfinder が水から上がる道を作れず止まっていた）は、
       // 一番近い陸の方を向いて、泳ぎながらジャンプで岸に上がる
       if (bot.entity.isInWater || bot.blockAt(p)?.name === 'water') {
-        const land = this.findLandAwayFrom(p.offset(0, 0, 0));
+        // 12 マス以内に陸が無ければ（海の真ん中）、最後に陸にいた場所か、陸の多い向きへ泳ぐ
+        //（木が無くなったスポーン近くから探索に出て海に入り、陸が見えずに 20 秒ごとに止まっては同じことを繰り返していた）
+        let land = this.findLandAwayFrom(p.offset(0, 0, 0));
+        if (!land) {
+          const dry = this.lastDryPos && this.lastDryPos.distanceTo(p) < 300 ? this.lastDryPos : null;
+          if (dry) land = { x: dry.x, y: dry.y, z: dry.z };
+          else {
+            const h = chooseExploreHeading(bot, bot.entity.yaw);
+            land = { x: Math.round(p.x + Math.cos(h) * 40), y: Math.round(p.y), z: Math.round(p.z + Math.sin(h) * 40) };
+          }
+          log.info(`海の上で陸が見えないので、(${land.x}, ${land.z}) の方へ泳ぐ`);
+        }
         if (land) {
           log.info(`水から上がれないので、岸 (${land.x}, ${land.y}, ${land.z}) へ泳いで上がる`);
           // 反射として 4 秒間ほかの行動を止める（止めないと次のスキルの pathfinder がすぐ操作を消し、1 秒も泳げていなかった）
@@ -505,7 +516,8 @@ export class Agent {
           (async () => {
             try {
               try { bot.pathfinder.setGoal(null); } catch {}
-              for (let t = 0; t < 40 && (bot.entity.isInWater || bot.blockAt(bot.entity.position)?.name === 'water'); t++) {
+              // 最大 10 秒泳ぐ（4 秒では岸に着かず、同じ岸へ何度も泳ぎ直していた）
+              for (let t = 0; t < 100 && (bot.entity.isInWater || bot.blockAt(bot.entity.position)?.name === 'water'); t++) {
                 await bot.lookAt(target, true).catch(() => {});
                 bot.setControlState('forward', true);
                 bot.setControlState('jump', true);
