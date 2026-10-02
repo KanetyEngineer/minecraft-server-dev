@@ -284,7 +284,9 @@ export class Agent {
     // ドクグモは足が速く狭い所も通るので、逃げても追いつかれて毒を受け続ける。体力がよほど少なくなければ戦う
     else if (threat && recentlyHurt && threat.name === 'cave_spider' && bot.health > 4) action = { kind: 'fight', target: threat };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
-    else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
+    // 槍を持ったゾンビ（1.21.11）はリーチが長く、柱の上にいても届くので、柱は積まずに剣と盾で戦う（柱の上で倒された）
+    else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end'
+      && !/_spear$/.test(threat.heldItem?.name ?? '')) action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
     if (!action) return;
 

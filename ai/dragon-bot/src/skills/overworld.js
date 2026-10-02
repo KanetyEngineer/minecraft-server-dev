@@ -411,13 +411,19 @@ export async function fillWaterBucket(ctx) {
   for (let t = 0; t < 10 && !src(); t++) await exploreStep(ctx);
   const water = src();
   if (!water) throw new SkillError('水源が見つからない');
-  await goNearBlock(ctx, water, 3);
-  await bot.equip(findItem(bot, 'bucket'), 'hand');
-  await smoothLookAt(bot, water.position.offset(0.5, 0.8, 0.5), ctx.cfg.human.turnSpeed);
-  bot.activateItem();
-  await sleep(500);
-  if (!findItem(bot, 'water_bucket')) throw new SkillError('水をくめなかった');
-  return '水入りバケツ入手';
+  // 水源の上の面をまっすぐ見てバケツを使う。届かない・見えていないと汲めないので、近づき直して 3 回まで試す
+  //（遠くから見て使い、何度も「水をくめなかった」になっていた）
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const w = attempt === 0 ? water : (src() ?? water);
+    await goNearBlock(ctx, w, 2).catch(() => {});
+    await bot.equip(findItem(bot, 'bucket'), 'hand');
+    await bot.lookAt(w.position.offset(0.5, 0.9, 0.5), true);
+    await bot.waitForTicks(2);
+    bot.activateItem();
+    for (let t = 0; t < 15 && !findItem(bot, 'water_bucket'); t++) await bot.waitForTicks(1);
+    if (findItem(bot, 'water_bucket')) return '水入りバケツ入手';
+  }
+  throw new SkillError('水をくめなかった');
 }
 
 // 溶岩溜まりに水をかけて黒曜石にし、ダイヤのツルハシで掘る
