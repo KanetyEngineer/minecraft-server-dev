@@ -93,6 +93,20 @@ export function configureBody(bot) {
     }
     return fastestTool(block);
   };
+  // 採掘プラグイン（collectblock）や各スキルが使う bot.tool.equipForBlock も、掘れるうちで一番安い道具を持つようにする
+  //（一番速い鉄のツルハシで石を掘り続けて使い潰し、鉄のツルハシを失っていた）。
+  // ダイヤが要る黒曜石などは、安い道具では掘れない（canHarvest が false）ので、自然に鉄・ダイヤが選ばれる
+  if (bot.tool?.equipForBlock) {
+    const bestTool = bot.tool.equipForBlock.bind(bot.tool);
+    bot.tool.equipForBlock = async (block, opts = {}) => {
+      const cheap = block ? bot.pathfinder.bestHarvestTool(block) : null;
+      if (cheap && block.canHarvest(cheap.type)) {
+        if (bot.heldItem?.name !== cheap.name) await bot.equip(cheap, 'hand');
+        return;
+      }
+      return bestTool(block, opts);
+    };
+  }
   bot.on('spawn', () => tuneMovementsForDimension(bot));
   tuneMovementsForDimension(bot);
   // 掘削・塔積み込みの経路探索は範囲を絞らないとノードが膨れ、ヒープ不足で落ちる。

@@ -570,6 +570,7 @@ export class Agent {
         log.info(`非常食に ${emergency.name} を食べた（満腹度 ${bot.food}）`);
       } catch (e) {
         log.warn(`非常食を食べられなかった: ${e.message}`);
+        this.eatCheckAt = Date.now() + 60_000; // 1 分は試さない（4 秒ごとに失敗を繰り返していた）
       } finally {
         this.reflexBusy = false;
       }
