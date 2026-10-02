@@ -34,6 +34,12 @@
 | `/potiondupe legacyPhysics true\|false` | tick 順・ハチミツ・当たり余白を 1.21.1 に |
 | `/potiondupe reload` | 設定ファイルを読み直す |
 
+## 動作確認・注意
+
+- Minecraft 1.21.11 + Fabric Loader 0.19.5 + Fabric API 0.141.6 で、ゲートに入った tick に床へ当たるポーションが「こちらで割れる＋向こうにコピー」になることを確認済み（オフでは向こうへ移るだけ）。farm ワールドのコピーも 1.21.11 で読み込め、投げたポーション 680 個が残っていた。
+- 1.21.2 以降は無人だと 60 秒で tick が止まる（`pause-when-empty-seconds`）。無人で動かすなら `-1` に。
+- 公開版: https://github.com/KanetyEngineer/potion-dupe-restore/releases/latest
+
 ## ビルド
 
 GitHub Actions（`.github/workflows/potion-dupe.yml`）でビルドし、jar を `potion-dupe-dist` ブランチに置きます。手元では Gradle 9.2 以上で `gradle build`。
