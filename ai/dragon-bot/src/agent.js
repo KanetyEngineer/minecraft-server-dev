@@ -569,13 +569,15 @@ export class Agent {
     if (!bot.entity || bot.currentWindow || bot.inventory.emptySlotCount() > 4) return;
     const plan = dropPlan(bot.inventory.items());
     if (plan.length === 0) return;
-    const before = bot.inventory.emptySlotCount();
+    const total = () => plan.reduce((a, p) => a + bot.inventory.items().filter((i) => i.name === p.name).reduce((b, i) => b + i.count, 0), 0);
+    const before = total();
     for (const { name, count } of plan) {
       const id = bot.registry.itemsByName[name]?.id;
       if (id !== undefined && count > 0) await bot.toss(id, null, count).catch(() => {});
     }
-    // 本当に空きが増えたときだけ「捨てた」と記録する（同期がずれていると捨てられず、同じ記録が並んでいた）
-    if (bot.inventory.emptySlotCount() > before) log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
+    // 本当に減ったときだけ「捨てた」と記録する（同期がずれていると捨てられず、同じ記録が並んでいた）。
+    // スタックの一部だけ捨てると空きマスは増えないので、空きではなく個数で確かめる
+    if (total() < before) log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
     else {
       log.warn('いらない物を捨てられなかった（持ち物の同期がずれているかも）');
       this.slotErrors = (this.slotErrors ?? []).filter((t) => Date.now() - t < 5 * 60_000);
