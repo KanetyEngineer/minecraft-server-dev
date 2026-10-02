@@ -1,8 +1,8 @@
 // AI の思考ログ（🧠 判断、🛠 スキルの開始と結果、警告）を Discord のチャンネルへ送る。
 // .env の DISCORD_BOT_TOKEN と DISCORD_CHANNEL_ID が両方あるときだけ動く。
-// 1 分ごとにまとめて送り、同じ行の連続は回数だけ数える（レート制限と通知の洪水を避ける）。
+// ログが出るたびにすぐ送り、同じ行の連続は回数だけ数える（レート制限と通知の洪水を避ける）。
 const API = 'https://discord.com/api/v10';
-const FLUSH_MS = 60_000; // 1 分ごとにまとめて送る
+const FLUSH_MS = 1000; // ログが出たらすぐ送る（1 秒以内に出た行は 1 通にまとめ、Discord の送信制限を超えないようにする）
 const MAX_LEN = 1900; // Discord の上限 2000 文字からコードブロック分を引いた値
 const MAX_QUEUE = 300;
 
