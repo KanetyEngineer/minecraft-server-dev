@@ -131,9 +131,39 @@ export async function crossByBoat(ctx, x, z) {
 }
 
 // 探索: 前回と近い向きに 24〜40 ブロック歩く。行き止まりなら向きを変える。
+// 探索の向きを決める: 8 方向の先（8〜40 マス）の地表を見て、水が少なく木の葉が多い方を選ぶ。
+// 今の向きを少し優先して、ふらふらしないようにする（海辺のスポーンで沖へ出ていき、ドラウンドに倒されていた）
+export function chooseExploreHeading(bot, current) {
+  const p = bot.entity.position.floored();
+  const surface = (x, z) => {
+    for (let y = p.y + 12; y >= p.y - 8; y--) {
+      const b = bot.blockAt(new Vec3(x, y, z));
+      if (!b) return null; // 読み込まれていない
+      if (b.name === 'air' || b.name === 'cave_air' || b.boundingBox === 'empty' && b.name !== 'water') continue;
+      return b;
+    }
+    return null;
+  };
+  let best = null;
+  for (let k = 0; k < 8; k++) {
+    const h = (k / 8) * Math.PI * 2;
+    let score = 0;
+    for (const dist of [8, 16, 24, 32, 40]) {
+      const b = surface(Math.round(p.x + Math.cos(h) * dist), Math.round(p.z + Math.sin(h) * dist));
+      if (!b) continue;
+      if (b.name === 'water' || b.name === 'kelp' || b.name === 'seagrass' || b.name === 'kelp_plant') score -= 3;
+      else if (b.name.endsWith('_leaves') || isLog(b.name)) score += 2;
+      else score += 1;
+    }
+    if (current !== undefined) score += Math.cos(h - current) * 1.5; // 今の向きに近いほど少し得点
+    if (!best || score > best.score) best = { h, score };
+  }
+  return best ? best.h : current;
+}
+
 export async function exploreStep(ctx, distance = 32) {
   const { bot } = ctx;
-  ctx.state.heading = (ctx.state.heading ?? Math.random() * Math.PI * 2) + (Math.random() - 0.5) * 0.8;
+  ctx.state.heading = chooseExploreHeading(bot, ctx.state.heading) + (Math.random() - 0.5) * 0.4;
   const p = bot.entity.position;
   const d = distance * (0.75 + Math.random() * 0.5);
   const tx = p.x + Math.cos(ctx.state.heading) * d;
