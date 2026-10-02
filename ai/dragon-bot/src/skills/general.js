@@ -89,7 +89,17 @@ export async function recoverItems(ctx) {
   try {
     await travelTo(ctx, d.x, d.z, { range: 2 });
     await goTo(ctx, d.x, d.y, d.z, 1).catch(() => {});
-    await pickUpItems(ctx, 10);
+    // 落とした物は数マス散らばるので、死亡地点のまわり 16 マスに落ちている物が無くなるまで拾い続ける
+    //（1 回拾っただけで「回収済み」にして、鉄インゴット 64 個などを置いてきた）
+    const center = new Vec3(d.x, d.y, d.z);
+    const dropsLeft = () => Object.values(ctx.bot.entities)
+      .filter((e) => (e.name === 'item' || e.name === 'item_stack') && e.position.distanceTo(center) < 16);
+    for (let round = 0; round < 8; round++) {
+      await pickUpItems(ctx, 16);
+      if (dropsLeft().length === 0) break;
+      const next = dropsLeft().sort((a, b) => a.position.distanceTo(ctx.bot.entity.position) - b.position.distanceTo(ctx.bot.entity.position))[0];
+      await goTo(ctx, next.position.x, next.position.y, next.position.z, 1).catch(() => {});
+    }
   } catch (e) {
     if (ctx.bot.entity.position.distanceTo(new Vec3(d.x, d.y, d.z)) > 8) throw e; // 遠くで止まったなら次回また向かう
   }
