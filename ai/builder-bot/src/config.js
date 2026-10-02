@@ -42,6 +42,8 @@ export function loadConfig() {
     prepareTools: bool('BUILD_PREPARE_TOOLS', true),
     // 夜は穴にこもって朝を待つ（false なら夜も建て続ける）
     shelterAtNight: bool('BUILD_SHELTER_AT_NIGHT', true),
+    // 昼のうちにベッドを作っておき、夜は穴の中で寝る
+    useBed: bool('BUILD_USE_BED', true),
     // 1 回にそろえる素材の手間の上限（原木 1 本 ≒ 1。これを超える量はチェストに入れてもらう）
     gatherBudget: num('BUILD_GATHER_BUDGET', 800),
     // 素材を探すチェストの範囲（建築範囲の端からのブロック数）

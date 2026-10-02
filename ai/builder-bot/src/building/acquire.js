@@ -404,7 +404,9 @@ export class Supplier {
     let explored = 0;
     while (count(bot, name) - start < n && explored < 20) {
       abortable(ctx);
-      const target = bot.nearestEntity((e) => mobs.includes(e.name) && e.position.distanceTo(bot.entity.position) < 48);
+      // 白い羊毛は白い羊だけを狙う（羊の色はメタデータ 17 番の下位 4 ビット、0x10 は毛を刈られた印）
+      const woolOk = (e) => name !== 'white_wool' || e.name !== 'sheep' || typeof e.metadata?.[17] !== 'number' || (e.metadata[17] & 0x1f) === 0;
+      const target = bot.nearestEntity((e) => mobs.includes(e.name) && woolOk(e) && e.position.distanceTo(bot.entity.position) < 48);
       if (!target) { explored++; this.log.info(`${mobs[0]} を探して歩く（${explored}/20）`); await exploreStep(ctx); continue; }
       await attackEntity(ctx, target, { timeoutMs: 20_000 });
       await pickUpItems(ctx, 6).catch(() => {});

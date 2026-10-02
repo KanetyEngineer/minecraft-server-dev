@@ -294,6 +294,7 @@ export class Agent {
       // 固まっていた処理が後で動き出しても、合図が中断のままなので次の確認で止まる（settlePending で決着を待つ）
       const work = (async () => {
         if (!this.builder) await this.prepare();
+        await this.ensureBed();
         this.status = `建築中: ${path.basename(this.job.file)}`;
         return this.builder.run();
       })();
@@ -352,6 +353,19 @@ export class Agent {
     } finally {
       this.resting = false;
     }
+  }
+
+  // 昼のうちにベッドを用意しておく（夜は穴の中で寝て朝にする。羊が見つからなければ 10 分おきに試す）
+  async ensureBed() {
+    const { bot, cfg } = this;
+    if (!cfg.useBed || !bot.time.isDay || bot.inventory.items().some((i) => i.name.endsWith('_bed'))) return;
+    if (this.bedTriedAt && Date.now() - this.bedTriedAt < 10 * 60_000) return;
+    this.bedTriedAt = Date.now();
+    log.info('夜に寝るためのベッドを用意する');
+    await this.builder.supplier.ensure('white_bed', 1).catch((e) => {
+      if (e.name === 'AbortError') throw e;
+      log.warn(`ベッドを用意できなかった: ${e.message}`);
+    });
   }
 
   async waitFor(ms) {
