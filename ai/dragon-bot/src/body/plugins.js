@@ -25,6 +25,32 @@ export function loadPlugins(bot) {
   bot.loadPlugin(hawkeyePkg.default ?? hawkeyePkg);
   bot.loadPlugin(autoEat);
   trackOwnAir(bot);
+  keepOffBlockFaces(bot);
+}
+
+// 壁にぴったり付いた位置をサーバーに送らない。
+// mineflayer の物理は、壁にぶつかると体の端がブロックの面とちょうど同じ座標（x = 1999.7 → 端が 2000.0）になる。
+// Paper はこれを「ブロックにめり込んだ」と見なして動きを取り消し、毎ティック元の位置へ戻す。
+// そのため 1 段の段差を登るジャンプが通らず、自然の地形ではボットがほとんど進めなかった。
+// 送る座標だけを面から 0.0001 マス離す（ボット自身の物理はそのまま）
+export function keepOffBlockFaces(bot) {
+  const EPS = 1e-6;
+  const GAP = 1e-4;
+  const off = (c) => {
+    const f = c - Math.floor(c);
+    if (Math.abs(f - 0.7) < EPS) return c - GAP; // +側の面に付いている
+    if (Math.abs(f - 0.3) < EPS) return c + GAP; // -側の面に付いている
+    return c;
+  };
+  const write = bot._client.write.bind(bot._client);
+  bot._client.write = (name, params) => {
+    if ((name === 'position' || name === 'position_look') && params && typeof params.x === 'number') {
+      const x = off(params.x);
+      const z = off(params.z);
+      if (x !== params.x || z !== params.z) params = { ...params, x, z };
+    }
+    return write(name, params);
+  };
 }
 
 // 自分の酸素だけを見る。
