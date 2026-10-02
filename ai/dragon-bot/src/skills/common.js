@@ -732,12 +732,25 @@ export async function smelt(ctx, input, n) {
     await furnace.putInput(inItem.id, null, n);
     let taken = 0;
     const deadline = Date.now() + (n * 10 + 20) * 1000;
+    let refills = 0;
     while (taken < n && Date.now() < deadline) {
       abortable(ctx);
       await sleep(1500);
       if (furnace.outputItem()) {
         const out = await furnace.takeOutput();
         taken += out?.count ?? 0;
+      }
+      // 使用中に燃料が切れたら補充する（燃料欄が空で、燃えている分もほぼ尽き、まだ材料が残っているとき）
+      const left = furnace.inputItem()?.count ?? 0;
+      if (left > 0 && !furnace.fuelItem() && (furnace.fuel ?? 0) <= 0.05 && refills < 5) {
+        const add = pickFuel(bot, input, left);
+        if (!add) {
+          ctx.log.warn(`かまどの燃料が切れたが、補充する燃料が無い（残り ${left} 個）`);
+          break;
+        }
+        await furnace.putFuel(bot.registry.itemsByName[add.name].id, null, add.count);
+        refills++;
+        ctx.log.info(`かまどの燃料が切れたので ${add.name} を ${add.count} 個補充した（残り ${left} 個）`);
       }
     }
     return taken;
@@ -1016,4 +1029,16 @@ export async function equipCheapestTool(bot, block, { requireHarvest = false } =
     }
   }
   return bot.tool.equipForBlock(block, { requireHarvest });
+}
+
+// 補充用の燃料を選ぶ: 石炭・木炭 → 板材 → 原木（焼く材料そのものは除く）。left 個焼ける分の数を返す
+function pickFuel(bot, input, left) {
+  for (const [name, per] of FUELS) {
+    const have = count(bot, name);
+    if (have > 0) return { name, count: Math.min(have, Math.ceil(left / per)) };
+  }
+  const wood = bot.inventory.items().find((i) => isPlanks(i.name))
+    ?? bot.inventory.items().find((i) => isLog(i.name) && i.name !== input);
+  if (!wood) return null;
+  return { name: wood.name, count: Math.min(wood.count, Math.ceil(left / 1.5)) };
 }
