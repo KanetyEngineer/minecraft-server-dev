@@ -37,6 +37,7 @@ jobs:
             git switch --orphan potion-dupe-dist
           fi
           git rm -rfq . >/dev/null 2>&1 || true
+          git clean -fdxq
           cp /tmp/dist/*.jar .
           echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD.txt
           git add -A && git commit -qm "potion-dupe build ${GITHUB_SHA::7}" && git push origin potion-dupe-dist
