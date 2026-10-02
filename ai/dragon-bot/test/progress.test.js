@@ -216,3 +216,12 @@ test('このランで 2 回以上死んでいたら、鉄の防具を必須に�
   const old = deaths(0); old.data.deaths = [{ at: new Date(Date.now() - 2 * 3600_000).toISOString() }, { at: new Date(Date.now() - 2 * 3600_000).toISOString() }];
   assert.equal(armorRequired(old), false);
 });
+
+test('体力が少なくても、食べ物が無く満腹度 18 未満なら休んでも戻らないので、昼は食料集めへ', () => {
+  const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1 });
+  b.health = 6; b.food = 17;
+  assert.equal(nextStep(b, fakeMemory()).skill, 'gatherFood');
+  const b2 = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 3 });
+  b2.health = 6; b2.food = 17;
+  assert.equal(nextStep(b2, fakeMemory()).skill, 'shelterForNight');
+});

@@ -146,7 +146,12 @@ function nextStepRaw(bot, memory) {
 
   // 夜は穴にこもる（ベッドがあれば中で寝る）。ただし防具があってパール集めの段階なら、夜はエンダーマン狩りの時間
   // 体力が少ないうちは、掘ったり戦ったりせず穴で休んで回復する（弱ったまま作業を続けて死んでいた）
-  if (typeof bot.health === 'number' && bot.health <= 8) return { skill: 'shelterForNight', args: { untilHealed: true } };
+  // ただし満腹度が 18 未満で食べ物も無いと、休んでも体力は戻らない（体力 6 のまま穴で休み続けた）。昼なら食料を集めに行く
+  if (typeof bot.health === 'number' && bot.health <= 8) {
+    const canHeal = (bot.food ?? 20) >= 18 || foodPoints(bot) > 0;
+    if (!canHeal && !night && dim === 'overworld') return { skill: 'gatherFood', args: { amount: 12 } };
+    return { skill: 'shelterForNight', args: { untilHealed: true } };
+  }
   // 地下（空が見えない所）にいるときは、夜でも関係なく作業を続ける（地下は昼でも暗く、夜だからといって危険は変わらない）
   if (night && !isUnderground(bot)) {
     if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
