@@ -274,6 +274,10 @@ export class Agent {
     else if (drowned && drownedInWater && !bot.entity.isInWater && recentlyHurt && drowned.heldItem?.name !== 'trident') action = { kind: 'inland', from: drowned };
     // すぐそばで殴ってくる敵がいるときは、遠くのスケルトンへの壁より先にそちらに対処する
     //（洞窟でスケルトンに壁を作っている間に、そばのドクグモに倒された）
+    // スケルトンが 2 体以上、または防具なしで体力が少ないときは、壁で耐えずに射程の外まで離れる
+    //（洞窟で複数のスケルトンに撃たれ、壁を作っている間に死んだ）
+    else if (archer && recentlyHurt && !inCombat && ['skeleton', 'stray', 'bogged'].includes(archer.name)
+      && (this.countArchers(20) >= 2 || (!this.hasArmor() && bot.health < 14))) action = { kind: 'outrange', from: archer };
     else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat
       && !(threat && threat.position.distanceTo(pos) < 3.5)) action = { kind: 'shield', from: archer };
     // ドクグモは足が速く狭い所も通るので、逃げても追いつかれて毒を受け続ける。体力がよほど少なくなければ戦う
@@ -309,6 +313,18 @@ export class Agent {
           await runAway(fake, 24);
         }
         this.history.push({ skill: '反射:spawner', args: {}, ok: !!ok, result: ok ? 'スポナーを壊した' : 'スポナーから離れた' });
+        return;
+      }
+      if (action.kind === 'outrange') {
+        // スケルトンたちの真ん中から反対向きに、射程（約 16 マス）の外まで走る。盾があれば背中側に構えながら
+        const archers = Object.values(bot.entities).filter((e) => ['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(bot.entity.position) < 20);
+        const cx = archers.reduce((a, e) => a + e.position.x, 0) / archers.length;
+        const cz = archers.reduce((a, e) => a + e.position.z, 0) / archers.length;
+        log.warn(`スケルトン ${archers.length} 体に撃たれているので、射程の外へ離れる`);
+        await Promise.race([runAway({ position: { x: cx, z: cz }, name: 'skeleton' }, 22), sleep(12_000)]);
+        try { bot.pathfinder.setGoal(null); } catch {}
+        bot.setControlState('sprint', false);
+        this.history.push({ skill: '反射:outrange', args: {}, ok: true, result: 'スケルトンから離れた' });
         return;
       }
       if (action.kind === 'leaveWater') {
@@ -432,6 +448,15 @@ export class Agent {
       bot.setControlState('jump', true);
       setTimeout(() => bot.clearControlStates(), 1200);
     }
+  }
+
+  countArchers(radius) {
+    const me = this.bot.entity.position;
+    return Object.values(this.bot.entities).filter((e) => ['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(me) < radius).length;
+  }
+
+  hasArmor() {
+    return this.bot.inventory.slots.slice(5, 9).some((s) => s && /^(iron|diamond|netherite|chainmail)_/.test(s.name));
   }
 
   // 近くの溶岩（足の高さ ±1）。無ければ null
