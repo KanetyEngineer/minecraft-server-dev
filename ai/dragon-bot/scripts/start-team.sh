@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # チーム（リーダー 1 体＋係）をまとめて起動する。動いているボットは先に止める。
-# 使い方: bash scripts/start-team.sh [体数=3] [team|solo]   （止めるだけなら: stop、追加なら: add 11 20 [solo]）
+# 使い方: bash scripts/start-team.sh [体数=3] [team|solo]
+#   全部止める: stop ／ 番号を指定して止める: stop 11 100（ほかは動いたまま）／ 追加: add 11 20 [solo]
 # 役割: 1 体目はリーダー、残りは前半が食料・木材係、後半が鉄・鉱石係。
 # 名前は DragonBot01, DragonBot02, ... 。データ・ログ・状態ページ（3007 + 番号 - 1）は 1 体ずつ分ける。
 cd "$(dirname "$0")/.." || exit 1
@@ -14,6 +15,15 @@ if [ "$1" = "add" ]; then
     sleep 2
   done
   wait
+  exit 0
+fi
+# stop 開始番号 終了番号: その番号のボットだけ止める。ボットの見分けは状態ページのポート（3006 + 番号）を開いているプロセスで行う
+if [ "$1" = "stop" ] && [ -n "$2" ]; then
+  for ((n = $2; n <= ${3:-$2}; n++)); do
+    port=$((3006 + 10#$n))
+    powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id \$_ -Confirm:\$false }" >/dev/null 2>&1 \
+      && echo "stop $(printf 'DragonBot%02d' "$n") (port $port)"
+  done
   exit 0
 fi
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object CommandLine -like '*src/index.js*' | ForEach-Object { Stop-Process -Id \$_.ProcessId -Confirm:\$false }" >/dev/null 2>&1
