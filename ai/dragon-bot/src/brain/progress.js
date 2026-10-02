@@ -90,7 +90,13 @@ export function nextStep(bot, memory) {
   if (night && dimensionOf(bot) === 'overworld' && SURFACE_SKILLS.has(step.skill) && step.skill !== 'huntEndermen') {
     const m = milestones(bot, memory);
     const weak = typeof bot.health === 'number' && bot.health < 16;
-    if (!m.armor && (isUnderground(bot) || weak)) return { skill: 'shelterForNight', args: {} };
+    if (!m.armor && (isUnderground(bot) || weak)) {
+      // 地上の作業ができない夜は、穴で待つより地下でできる鉄集めをする（体力に余裕があり、石のツルハシがあれば）。
+      // 鉄集めは y=24 まで階段で掘り下がって横掘りするので、ずっと地下にいる
+      if (!weak && m.stoneTools && (!m.ironPickaxe || !m.ironSword || !m.bucket)) return { skill: 'getIronGear', args: { armor: false } };
+      if (!weak && m.ironPickaxe && !m.armor) return { skill: 'getIronGear', args: { armor: true } };
+      return { skill: 'shelterForNight', args: {} };
+    }
   }
   return step;
 }
