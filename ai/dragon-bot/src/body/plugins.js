@@ -57,6 +57,21 @@ export function configureBody(bot) {
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
   bot.pathfinder.setMovements(mv);
+  // 経路の途中で掘るときも、掘れるうちで一番安い道具を使う（pathfinder は一番速い道具＝鉄のツルハシを選び、
+  // 移動中に石を掘って鉄のツルハシを使い潰していた）
+  const fastestTool = bot.pathfinder.bestHarvestTool;
+  const TIERS = ['wooden', 'stone', 'golden', 'iron', 'diamond', 'netherite'];
+  bot.pathfinder.bestHarvestTool = (block) => {
+    const items = bot.inventory.items();
+    const hand = block.digTime(null, false, false, false);
+    for (const tier of TIERS) {
+      for (const kind of ['pickaxe', 'shovel', 'axe']) {
+        const it = items.find((i) => i.name === `${tier}_${kind}`);
+        if (it && block.canHarvest(it.type) && block.digTime(it.type, false, false, false) < hand) return it;
+      }
+    }
+    return fastestTool(block);
+  };
   bot.on('spawn', () => tuneMovementsForDimension(bot));
   tuneMovementsForDimension(bot);
   // 掘削・塔積み込みの経路探索は範囲を絞らないとノードが膨れ、ヒープ不足で落ちる。

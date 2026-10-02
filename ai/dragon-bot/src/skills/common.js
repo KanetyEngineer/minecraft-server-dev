@@ -582,6 +582,8 @@ async function craftItemInner(ctx, name, n = 1, { noTable = false, depth = 0 } =
       } catch (e) {
         if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
         // 柱積みなどで持ち物が変わり、レシピと実際の材料がずれた場合。材料をそろえ直す側に回す
+        // 作業台の窓の同期ずれ（updateSlot が来ない）も、窓を閉じて材料をそろえ直す処理に回す（石の道具作りが 4 分失敗し続けた）
+        if (/updateSlot|windowOpen/i.test(e.message)) { ctx.log.warn(`${name}: 作業台の窓がずれた、閉じてやり直す`); try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch {} await sleep(500); return false; }
         if (/missing ingredient/i.test(e.message)) { ctx.log.warn(`${name} の材料がずれた（${e.message}）、そろえ直す`); return false; }
         throw e;
       }
