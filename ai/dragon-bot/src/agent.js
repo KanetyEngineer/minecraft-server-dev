@@ -33,6 +33,8 @@ export class Agent {
     this.lastHurtAt = 0;
     this.running = false;
     this.state = {}; // スキルをまたいで覚えておく小さな状態（探索の向きなど）
+    // チームでは番号ごとに探索の向きを変え、同じ木や動物を取り合わないようにする
+    if (team?.homeHeading) this.state.heading = team.homeHeading();
     this.lastDecision = null;
     this.loopGuard = new LoopGuard();
     this.thoughts = []; // AI の思考ログ（状態ページ用）
@@ -839,7 +841,10 @@ export class Agent {
     const teamTimer = this.team ? setInterval(() => {
       try {
         if (this.team.role === 'leader') this.team.needs = leaderNeeds(this.bot, milestones(this.bot, this.memory));
-        this.team.publish(this.bot);
+        this.team.publish(this.bot, this.memory);
+        // 仲間が見つけた村・溶岩溜まり・ゲートなどを自分の記憶にも取り込む
+        const got = this.team.importPlaces(this.memory);
+        if (got.length) log.info(`仲間から場所を教わった: ${got.join('、')}`);
       } catch {}
     }, 5000) : null;
     try {

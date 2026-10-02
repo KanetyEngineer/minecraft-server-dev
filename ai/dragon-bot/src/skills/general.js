@@ -153,7 +153,7 @@ export async function deliverItems(ctx, { to, items = [] } = {}) {
   }
   if (!target()) throw new SkillError(`${to} が見つからない`);
   // 「渡しに行く」をチーム情報に出す（受け取る側は、そばに落ちた物を拾いに動く）
-  if (ctx.team) { ctx.team.delivering = { to, at: Date.now() }; ctx.team.publish(bot); }
+  if (ctx.team) { ctx.team.delivering = { to, at: Date.now(), items: items.map(({ item, count }) => ({ item, count })) }; ctx.team.publish(bot); }
   const given = [];
   try {
     const t = target().position;

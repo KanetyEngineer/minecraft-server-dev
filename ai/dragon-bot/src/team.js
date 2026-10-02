@@ -16,31 +16,97 @@ export const SUPPLIES = {
   iron: (name) => ['iron_ingot', 'raw_iron', 'coal', 'charcoal', 'iron_pickaxe', 'iron_sword', 'bucket', 'obsidian', 'flint', 'flint_and_steel', 'diamond'].includes(name),
 };
 
+// チーム全員で共有する場所（村・溶岩溜まり・ゲートなど）。ベッドや復活地点は 1 体ごとの物なので共有しない
+export const SHARED_PLACES = ['village', 'ruined_portal', 'lava_pool', 'overworld_portal', 'nether_portal', 'fortress', 'bastion',
+  'warped_forest', 'stronghold_estimate', 'stronghold', 'end_portal'];
+
+// 独立して動くとき、全員が同じ動きにならないよう番号ごとに進め方を少し変える（番号を 4 で割った余りで決まる）
+export const STRATEGIES = [
+  { name: '定石', description: 'RTA の定石どおり（盾だけで進み、溶岩と水でゲート）' },
+  { name: '防具優先', description: '鉄の防具をそろえてからネザーへ', armorEarly: true },
+  { name: '探索優先', description: '村・廃ポータル・溶岩溜まりを見つけるまで先に歩き回る', exploreFirst: true },
+  { name: 'ダイヤ掘り', description: 'ダイヤのツルハシで黒曜石を掘ってゲートを建てる', portalByDiamonds: true },
+];
+
+// 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7）
+export function indexOf(name) {
+  const m = /(\d+)$/.exec(name ?? '');
+  return m ? Number(m[1]) : 1;
+}
+
+// 名前（番号）から進め方を決める。チームを組まない solo でも使う
+export function strategyFor(name) {
+  return STRATEGIES[(indexOf(name) - 1) % STRATEGIES.length];
+}
+
 export class Team {
   constructor({ dir = 'team', name, role = 'leader' } = {}) {
     this.dir = path.resolve(dir);
     this.name = name;
     this.role = role;
     this.needs = [];
+    this.lastPlaces = {};
     try { fs.mkdirSync(this.dir, { recursive: true }); } catch {}
+  }
+
+  // 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7）
+  get index() {
+    return indexOf(this.name);
+  }
+
+  // 自分の進め方（番号ごとに違う）
+  strategy() {
+    return strategyFor(this.name);
+  }
+
+  // 散らばるときの自分の向き（番号ごとに 45 度ずつ違う方角）。全員が同じ木や動物を取り合わないようにする
+  homeHeading() {
+    return ((this.index - 1) % 8) * (Math.PI / 4);
+  }
+
+  // 同じ次元で r マス以内にいる仲間の数
+  crowded(bot, r = 12) {
+    const p = bot?.entity?.position;
+    if (!p) return 0;
+    const dim = String(bot.game?.dimension ?? 'overworld').replace('minecraft:', '');
+    return this.members().filter((m) => (m.dimension ?? 'overworld') === dim && m.pos
+      && Math.hypot(m.pos.x - p.x, m.pos.z - p.z) < r).length;
+  }
+
+  // 仲間が見つけた場所（村・溶岩溜まり・ゲートなど）を、自分の記憶に無ければ取り込む。取り込んだ名前を返す
+  importPlaces(memory) {
+    if (!memory?.setPlace || !memory.getPlace) return [];
+    const got = [];
+    for (const m of this.members()) {
+      for (const [name, p] of Object.entries(m.places ?? {})) {
+        if (!SHARED_PLACES.includes(name) || memory.getPlace(name) || !p) continue;
+        memory.setPlace(name, p, p.dimension);
+        got.push(name);
+      }
+    }
+    return got;
   }
 
   get enabled() {
     return true;
   }
 
-  // 自分の状態を書く
-  publish(bot) {
+  // 自分の状態を書く（memory を渡すと、共有する場所も一緒に書く）
+  publish(bot, memory) {
     if (!bot?.entity) return;
     const p = bot.entity.position;
+    if (memory?.data?.places) {
+      this.lastPlaces = Object.fromEntries(Object.entries(memory.data.places).filter(([n]) => SHARED_PLACES.includes(n)));
+    }
     const status = {
       name: this.name, role: this.role, at: Date.now(),
       pos: { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z) },
       dimension: String(bot.game?.dimension ?? 'overworld').replace('minecraft:', ''),
       health: Math.round(bot.health ?? 0), food: Math.round(bot.food ?? 0),
       needs: this.needs,
-      // 渡しに向かっている最中なら { to, at }（受け取る側はそばに落ちた物を拾いに動く）
+      // 渡しに向かっている最中なら { to, at, items }（受け取る側はそばに落ちた物を拾いに動き、ほかの係は同じ物を重ねて運ばない）
       delivering: this.delivering ?? null,
+      places: this.lastPlaces,
     };
     const file = path.join(this.dir, `${this.name}.json`);
     try {
@@ -76,16 +142,32 @@ export class Team {
       && (m.dimension ?? 'overworld') === dim && m.pos && Math.hypot(m.pos.x - p.x, m.pos.y - p.y, m.pos.z - p.z) < 12) ?? null;
   }
 
+  // ほかの係がいま運んでいる途中の物（60 秒以内）。同じ物を何体も重ねて運ばないために差し引く
+  inflight(to) {
+    const out = [];
+    for (const m of this.members()) {
+      const d = m.delivering;
+      if (!d || d.to !== to || Date.now() - (d.at ?? 0) > 60_000) continue;
+      for (const it of d.items ?? []) out.push(it);
+    }
+    return out;
+  }
+
   // 自分（係）が渡せる、リーダーのほしい物 [{ item, count, to }]
   deliverable(bot) {
     const leader = this.leader();
     if (!leader || !SUPPLIES[this.role]) return [];
     const have = new Map();
     for (const i of bot.inventory.items()) have.set(i.name, (have.get(i.name) ?? 0) + i.count);
+    const inflight = this.inflight(leader.name);
     const out = [];
-    for (const need of leader.needs ?? []) {
+    for (const need0 of leader.needs ?? []) {
       // 種類が「どれでもよい」もの（原木・羊毛など）は、正規表現で受け取る
-      const re = need.match ? new RegExp(need.match) : null;
+      const re = need0.match ? new RegExp(need0.match) : null;
+      const matches = (name) => (re ? re.test(name) : name === need0.item);
+      const carried = inflight.filter((it) => matches(it.item)).reduce((s, it) => s + (it.count ?? 0), 0);
+      const need = { ...need0, count: need0.count - carried };
+      if (need.count <= 0) continue;
       for (const [name, n] of have) {
         if (!SUPPLIES[this.role](name)) continue;
         if (re ? !re.test(name) : name !== need.item) continue;

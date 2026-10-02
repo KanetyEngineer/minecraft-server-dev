@@ -80,10 +80,11 @@ function hostilesNear(bot, r) {
 }
 
 // チームの役割（index.js が設定する）。1 体で動くときは leader
-const teamCtx = { role: 'leader', team: null };
-export function setTeamContext({ role, team }) {
+const teamCtx = { role: 'leader', team: null, strategy: {} };
+export function setTeamContext({ role, team, strategy }) {
   teamCtx.role = role ?? 'leader';
   teamCtx.team = team ?? null;
+  teamCtx.strategy = strategy ?? {}; // 番号ごとの進め方（team.strategy()）。独立して動くとき同じ動きにならないようにする
 }
 
 // 係の進め方: 自分の身を守る準備（道具・食料・ベッド）→ リーダーのほしい物を持っていれば渡しに行く → 担当の物を集める
@@ -226,6 +227,12 @@ function nextStepRaw(bot, memory) {
     if (!canWork) return { skill: 'shelterForNight', args: {} };
     // 作業可能: 昼と同じ進め方に進む
   }
+  // チームの係が同じ場所に固まっていると同じ木や動物を取り合うので、まず自分の向き（番号ごとに違う方角）へ散らばる（10 分に 1 回）
+  if (teamCtx.team && (teamCtx.team.crowded?.(bot, 12) ?? 0) >= 2
+    && Date.now() - (memory.flag?.('spreadAt') ?? 0) > 10 * 60_000 && !(night && !isUnderground(bot))) {
+    memory.setFlag?.('spreadAt', Date.now());
+    return { skill: 'explore', args: { steps: 2 } };
+  }
   // ツルハシを失っても原木が 3 本以上あれば、木集めに戻らずそのまま道具を作る（makeTools が木のツルハシから作る）
   if (!m.woodenTools && c.logs < 3) return { skill: 'gatherWood', args: { logs: 8 } };
   // 直前に「原木が足りない」で失敗していたら、先に木を集める
@@ -255,9 +262,15 @@ function nextStepRaw(bot, memory) {
     const rs = memory.getPlace('respawn');
     if (!rs || rs.dimension !== 'overworld' || Math.hypot(rs.x - pos.x, rs.z - pos.z) > 96) return { skill: 'setRespawnPoint', args: {} };
   }
+  // 探索優先の体は、村・廃ポータル・溶岩溜まりのどれかを見つけるまで先に歩き回る（最大 3 回。昼だけ）
+  if (teamCtx.strategy.exploreFirst && !night && !memory.getPlace('village') && !memory.getPlace('ruined_portal') && !memory.getPlace('lava_pool')
+    && (memory.flag?.('exploreFirstCount') ?? 0) < 3) {
+    memory.setFlag?.('exploreFirstCount', (memory.flag?.('exploreFirstCount') ?? 0) + 1);
+    return { skill: 'explore', args: { steps: 3 } };
+  }
   // 鉄の防具一式（鉄 24 個）は RTA では作らない。盾だけ必ず作り、防具は余った鉄があるときだけ（getIronGear の中で）作る。
-  // ただし、このランで何度も死んでいるなら防具も必須にする（armorRequired）
-  const wantArmor = !m.armor && armorRequired(memory);
+  // ただし、このランで何度も死んでいるなら防具も必須にする（armorRequired）。防具優先の体は最初から必須
+  const wantArmor = !m.armor && (armorRequired(memory) || !!teamCtx.strategy.armorEarly);
   if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: wantArmor } };
   if (!m.shield || wantArmor) return { skill: 'getIronGear', args: { armor: wantArmor } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
@@ -272,7 +285,7 @@ function nextStepRaw(bot, memory) {
     // RTA 式: ダイヤを使わず、溶岩溜まりで溶岩バケツと水バケツから黒曜石を作ってゲートを建てる（castNetherPortal）。
     // 水入りバケツのほかに空のバケツがもう 1 つ要るので、鉄 3 個を先に用意する。
     // 3 回続けて失敗したら、従来どおりダイヤのツルハシで黒曜石を掘る方式に切り替える。
-    if ((memory.flag('castNetherPortalFails') ?? 0) < 3 && !m.obsidian) {
+    if (!teamCtx.strategy.portalByDiamonds && (memory.flag('castNetherPortalFails') ?? 0) < 3 && !m.obsidian) {
       const buckets = count(bot, 'bucket') + count(bot, 'water_bucket') + count(bot, 'lava_bucket');
       if (buckets < 2) {
         if (count(bot, 'iron_ingot') >= 3) return { skill: 'craftTo', args: { item: 'bucket', count: 1 } };
