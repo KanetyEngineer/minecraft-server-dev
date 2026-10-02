@@ -340,7 +340,8 @@ export async function descendTo(ctx, targetY) {
           break;
         }
         await equipCheapestTool(bot, b);
-        await bot.dig(b);
+        // 「Digging aborted」（ほかの動作に掘削が割り込まれた）でスキル全体を失敗させず、次の周回で掘り直す
+        if (!(await digOrRetry(bot, b))) break;
       }
     }
     const floor = bot.blockAt(next.offset(0, -1, 0));
@@ -350,6 +351,17 @@ export async function descendTo(ctx, targetY) {
       return;
     }
     await bot.pathfinder.goto(new goals.GoalBlock(next.x, next.y, next.z)).catch(() => {});
+  }
+}
+
+// 掘る。ほかの動作に割り込まれて「Digging aborted」になったら false を返す（それ以外のエラーはそのまま投げる）
+export async function digOrRetry(bot, block, forceLook = false) {
+  try {
+    await bot.dig(block, forceLook);
+    return true;
+  } catch (e) {
+    if (/aborted/i.test(String(e?.message))) return false;
+    throw e;
   }
 }
 
@@ -451,12 +463,15 @@ export async function placeNear(ctx, itemName) {
       await bot.dig(at, true).catch(() => {});
       at = bot.blockAt(target);
     }
-    if (at && at.name === 'air' && below && below.boundingBox === 'block') {
+    if (at && (at.name === 'air' || at.name === 'cave_air') && below && below.boundingBox === 'block') {
       await bot.equip(item, 'hand');
       await smoothLookAt(bot, target.offset(0.5, 0, 0.5), ctx.cfg.human.turnSpeed);
       try {
         await bot.placeBlock(below, new Vec3(0, 1, 0));
-        return bot.blockAt(target);
+        // 置けたことを確かめる（サーバーに戻されて石のままだったのに作業台として開こうとし、止まっていた）
+        const placed = bot.blockAt(target);
+        if (placed?.name === itemName) return placed;
+        ctx.log.warn(`設置したはずの場所が ${placed?.name} のまま`);
       } catch (e) {
         ctx.log.warn(`設置失敗: ${e.message}`);
       }
@@ -471,11 +486,13 @@ export async function placeNear(ctx, itemName) {
     if (isNextToLiquid(bot, target)) continue;
     await bot.tool.equipForBlock(at, {}).catch(() => {});
     await bot.dig(at).catch(() => {});
-    if (bot.blockAt(target)?.name !== 'air') continue;
+    if (!['air', 'cave_air'].includes(bot.blockAt(target)?.name)) continue;
     await bot.equip(findItem(bot, itemName), 'hand');
     try {
       await bot.placeBlock(below, new Vec3(0, 1, 0));
-      return bot.blockAt(target);
+      const placed = bot.blockAt(target);
+      if (placed?.name === itemName) return placed;
+      ctx.log.warn(`設置したはずの場所が ${placed?.name} のまま`);
     } catch (e) {
       ctx.log.warn(`設置失敗: ${e.message}`);
     }

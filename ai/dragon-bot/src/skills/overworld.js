@@ -2,7 +2,7 @@
 import {
   SkillError, abortable, mineBlocks, branchMine, craftItem, ensurePlanks, smelt, attackEntity,
   pickUpItems, exploreStep, placeNear, goNearBlock, goTo, nearestEntityNamed, goals, Vec3, LOGS, dim,
-  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock, ascendToSurface, ensurePickaxe,
+  pillarUp, pillarDown, isNextToLiquid, collectWithTimeout, cheapBlock, ascendToSurface, ensurePickaxe, digOrRetry,
 } from './common.js';
 import { count, findItem, countMatching, isLog } from '../util/items.js';
 import { findVisibleBlocks, smoothLookAt, sleep } from '../body/humanize.js';
@@ -85,7 +85,7 @@ async function cutFromPillar(ctx, block, tree, onMined) {
       const b = bot.blockAt(q);
       if (!b || !isLog(b.name)) { tree.delete(`${q.x},${q.y},${q.z}`); continue; }
       await bot.tool.equipForBlock(b, {}).catch(() => {});
-      await bot.dig(b, true);
+      if (!(await digOrRetry(bot, b, true))) continue;
       onMined(b);
       if (q.equals(p)) cut = true;
     }
@@ -603,7 +603,7 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
     if (!solidSafe(below) || !under || under.boundingBox !== 'block' || under.name === 'lava') break;
     await bot.tool.equipForBlock(below, {}).catch(() => {});
     const y0 = bot.entity.position.y;
-    await bot.dig(below, true);
+    if (!(await digOrRetry(bot, below, true))) continue;
     // 掘った直後はまだ落ちていないので、1 マス下に着地するまで待つ（待たないと次の「足元」が今掘った穴になる）
     for (let t = 0; t < 30 && !(bot.entity.onGround && bot.entity.position.y <= y0 - 0.9); t++) await bot.waitForTicks(1);
     if (bot.entity.position.y > y0 - 0.9) break;
