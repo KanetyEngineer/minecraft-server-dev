@@ -195,9 +195,26 @@ export class Supplier {
     const { bot } = this;
     const item = bot.registry.itemsByName[name];
     if (!item) return [];
-    const list = bot.recipesAll(item.id, null, true);
+    const list = [...bot.recipesAll(item.id, null, true)];
+    // 染め直しのレシピ（染料＋羊毛）は「どの色の羊毛でもよい」が、レシピの一覧には黒い羊毛の形しか無い。
+    // 手に入れやすい白い羊毛に置き換えた形も足す（色付き羊毛が「作り方が無い」になっていた）
+    const white = bot.registry.itemsByName.white_wool?.id;
+    for (const r of [...list]) {
+      const wool = r.delta.find((d) => d.count < 0 && /_wool$/.test(bot.registry.items[d.id].name) && d.id !== white);
+      const hasDye = r.delta.some((d) => d.count < 0 && /_dye$/.test(bot.registry.items[d.id].name));
+      if (!wool || !hasDye || white === undefined || name === 'white_wool') continue;
+      const swap = (x) => (x && x.id === wool.id ? { ...x, id: white } : x);
+      const v = Object.assign(Object.create(Object.getPrototypeOf(r)), r, {
+        delta: r.delta.map(swap),
+        ingredients: r.ingredients ? r.ingredients.map(swap) : r.ingredients,
+        inShape: r.inShape ? r.inShape.map((row) => row.map(swap)) : r.inShape,
+      });
+      v.custom = true;
+      list.unshift(v);
+    }
     return list.map((r) => ({
       raw: r,
+      custom: !!r.custom,
       resultCount: r.result.count,
       ingredients: r.delta.filter((d) => d.count < 0).map((d) => [bot.registry.items[d.id].name, -d.count]),
     })).filter((r) => !r.ingredients.some(([n]) => n === name)); // 自分自身が材料のもの（染め直しなど）は使わない
@@ -406,6 +423,12 @@ export class Supplier {
       try {
         for (const [ing, q] of r.ingredients) {
           await this.ensure(ing, q * times, depth + 1, [...stack, name]);
+        }
+        if (r.custom) {
+          // 置き換えた形のレシピは craftItem が選ばないので、そのまま作る（2×2 なので作業台は要らない）
+          for (let g = 0; g < times * 2 && count(bot, name) < n; g++) await bot.craft(r.raw, 1, null);
+          if (count(bot, name) < n) throw new SkillError(`${name} を ${n} 個作れなかった`);
+          return;
         }
         // craftItem は 1 回の呼び出しで最大 64 回クラフトするので、多いときは分けて呼ぶ
         for (let g = 0; g < 20 && count(bot, name) < n; g++) {

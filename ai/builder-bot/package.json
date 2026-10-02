@@ -23,5 +23,8 @@
     "mineflayer-tool": "^1.2.0",
     "prismarine-nbt": "^2.8.0",
     "vec3": "^0.1.10"
+  },
+  "devDependencies": {
+    "prismarine-recipe": "^1.5.0"
   }
 }

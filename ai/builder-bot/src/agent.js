@@ -6,8 +6,9 @@ import { Vec3 } from 'vec3';
 import pathfinderPkg from 'mineflayer-pathfinder';
 import { parseLitematic } from './building/litematic.js';
 import { Builder } from './building/builder.js';
+import { materialList } from './building/blocks.js';
 import { Supplier } from './building/acquire.js';
-import { attackEntity, ensurePickaxe, pickUpItems } from './skills/common.js';
+import { attackEntity, ensurePickaxe, pickUpItems, ascendToSurface } from './skills/common.js';
 import { shelterForNight } from './skills/shelter.js';
 import { dimensionOf } from './util/dim.js';
 import { sleep } from './body/humanize.js';
@@ -15,6 +16,14 @@ import { findItem } from './util/items.js';
 import { log } from './log.js';
 
 const { goals } = pathfinderPkg;
+
+// signal が中断されたら AbortError で終わる Promise
+function aborted(signal) {
+  return new Promise((_, reject) => {
+    const fail = () => { const e = new Error('中断された'); e.name = 'AbortError'; reject(e); };
+    if (signal.aborted) fail(); else signal.addEventListener('abort', fail, { once: true });
+  });
+}
 
 const HOSTILE = new Set(['zombie', 'husk', 'drowned', 'skeleton', 'stray', 'bogged', 'spider', 'cave_spider', 'creeper',
   'witch', 'pillager', 'vindicator', 'slime', 'phantom', 'zombie_villager', 'silverfish', 'breeze', 'parched']);
@@ -144,8 +153,8 @@ export class Agent {
     const file = args[0] ? this.resolveSchematic(args[0]) : this.job?.file;
     if (!file) throw new Error('!materials <設計図>');
     const s = await parseLitematic(fs.readFileSync(file));
-    const b = new Builder(this.ctx, { schematic: s, origin: new Vec3(0, 0, 0) });
-    const { need } = b.materialSummary();
+    // 必要な数の多い順（建築中の Builder には触らない）
+    const need = [...materialList(this.bot.registry, s.blocks).need.entries()].sort((a, b) => b[1] - a[1]);
     this.say(`${s.name}（${s.size.x}×${s.size.y}×${s.size.z}）: ${need.slice(0, 12).map(([n, c]) => `${n}×${c}`).join(', ')}${need.length > 12 ? ' ほか' : ''}`);
   }
 
@@ -194,8 +203,7 @@ export class Agent {
         return;
       }
       log.info(`${e.name} と戦う`);
-      this.ctx.signal = null;
-      await attackEntity(this.ctx, e, { timeoutMs: 20_000 }).catch(() => {});
+      await attackEntity({ ...this.ctx, signal: null }, e, { timeoutMs: 20_000 }).catch(() => {});
     } finally {
       this.threat = null;
     }
@@ -222,8 +230,7 @@ export class Agent {
       sleep(90_000),
     ]);
     try { bot.pathfinder.setGoal(null); } catch {}
-    this.ctx.signal = null;
-    await pickUpItems(this.ctx, 10).catch(() => {});
+    await pickUpItems({ ...this.ctx, signal: null }, 10).catch(() => {});
     // 拾った素材の分、チェストの中身の記録を読み直す
     this.builder?.supplier?.chests.clear();
   }
@@ -233,7 +240,7 @@ export class Agent {
     const { bot } = this;
     let last = ''; let since = Date.now();
     this.stuckTimer = setInterval(() => {
-      if (!bot.entity || !this.job || this.threat) { since = Date.now(); return; }
+      if (!bot.entity || !this.job || this.threat || this.resting) { since = Date.now(); return; }
       const p = bot.entity.position;
       const sig = `${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}|${bot.inventory.items().reduce((s, i) => s + i.count, 0)}|${this.builder?.placed ?? 0}`;
       if (sig !== last) { last = sig; since = Date.now(); return; }
@@ -274,16 +281,25 @@ export class Agent {
       if (this.threat) { await this.handleThreat(); continue; }
       if (this.deathAt) { await this.recoverDrops(); continue; }
       if (this.job && cfg.shelterAtNight && dimensionOf(bot) === 'overworld' && (!bot.time.isDay || bot.health < 8)) {
+        await this.settlePending();
         await this.shelter();
         continue;
       }
       if (!this.job) { this.status = '待機中'; await sleep(1000); continue; }
+      await this.settlePending();
       this.controller = new AbortController();
-      this.ctx.signal = this.controller.signal;
-      try {
+      const { signal } = this.controller;
+      this.ctx.signal = signal;
+      // 建築は中断の合図と競争させる。途中の処理が応答しないまま固まっても、反射（戦う・逃げる）や次の周回に進める。
+      // 固まっていた処理が後で動き出しても、合図が中断のままなので次の確認で止まる（settlePending で決着を待つ）
+      const work = (async () => {
         if (!this.builder) await this.prepare();
         this.status = `建築中: ${path.basename(this.job.file)}`;
-        const result = await this.builder.run();
+        return this.builder.run();
+      })();
+      this.pending = work.catch(() => {});
+      try {
+        const result = await Promise.race([work, aborted(signal)]);
         const miss = result.missing.map(([n, c]) => `${n}×${c}`).join(', ');
         if (result.ok >= result.total) {
           this.say(`完成しました（${result.ok}/${result.total}${result.orientationOff ? `、向き違い ${result.orientationOff}` : ''}）`);
@@ -295,20 +311,27 @@ export class Agent {
           this.status = `素材待ち: ${miss}`;
           this.builder.missing.clear();
           this.builder.supplier.chests.clear();
-          this.ctx.signal = null;
           await this.waitFor(cfg.retryWaitSec * 1000);
         }
         fails = 0;
       } catch (e) {
-        if (e.name === 'AbortError' || this.controller.signal.aborted) continue;
+        if (e.name === 'AbortError' || signal.aborted) continue;
         fails++;
         log.warn(`建築が止まった（${fails} 回目）: ${e.stack ?? e.message}`);
         this.builder?.supplier?.chests.clear();
         await this.waitFor(Math.min(30_000, 2000 * fails));
-      } finally {
-        this.ctx.signal = null;
       }
     }
+  }
+
+  // 前の周回の処理（中断したもの）が終わるのを、最大 30 秒待つ。中断の合図は残したままにして、
+  // 遅れて動き出した処理が次の確認で止まるようにする
+  async settlePending() {
+    if (!this.pending) return;
+    const p = this.pending;
+    this.pending = null;
+    if (this.controller && !this.controller.signal.aborted) this.controller.abort();
+    await Promise.race([p, sleep(30_000)]);
   }
 
   // 夜（または体力が少ないとき）は穴にこもって待つ（防具なしで夜に建てていると、スケルトンに倒されて素材を落としていた）
@@ -317,14 +340,17 @@ export class Agent {
     const healing = bot.time.isDay;
     this.status = healing ? '体力が回復するまで休む' : '夜なので穴にこもって朝を待つ';
     this.controller = new AbortController();
-    this.ctx.signal = this.controller.signal;
+    const ctx = { ...this.ctx, signal: this.controller.signal };
+    this.resting = true;
     try {
-      const r = await shelterForNight(this.ctx, { untilHealed: healing });
+      const r = await shelterForNight(ctx, { untilHealed: healing });
       log.info(r);
+      // 穴から出る（ふたは掘ってある。足元にブロックを積んで上がる）
+      if (bot.time.isDay && bot.health >= 8) await ascendToSurface(ctx).catch(() => {});
     } catch (e) {
       if (e.name !== 'AbortError') { log.warn(`穴にこもれなかった: ${e.message}`); await sleep(5000); }
     } finally {
-      this.ctx.signal = null;
+      this.resting = false;
     }
   }
 
