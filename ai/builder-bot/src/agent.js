@@ -217,9 +217,11 @@ export class Agent {
   watchDeath() {
     const { bot } = this;
     bot.on('death', () => {
-      if (bot.entity?.position) this.deathAt = { pos: bot.entity.position.clone(), time: Date.now() };
+      if (bot.entity?.position) this.deathAt = this.lastDeath = { pos: bot.entity.position.clone(), time: Date.now(), respawned: false };
       this.abort('死んだ');
     });
+    // リスポーンの瞬間に経路探索が止められるので、リスポーンし終わってから戻る（すぐ戻ろうとして「Path was stopped」になっていた）
+    bot.on('spawn', () => { if (this.lastDeath) this.lastDeath.respawned = true; });
   }
 
   async recoverDrops() {
@@ -227,7 +229,8 @@ export class Agent {
     const d = this.deathAt;
     this.deathAt = null;
     if (!d || Date.now() - d.time > 4 * 60_000) return;
-    for (let i = 0; i < 20 && !bot.entity?.isValid; i++) await sleep(250);
+    for (let i = 0; i < 40 && !d.respawned; i++) await sleep(250);
+    await sleep(1000);
     log.info(`死んだ場所 (${d.pos.floored()}) に落とした物を拾いに戻る`);
     await Promise.race([
       bot.pathfinder.goto(new goals.GoalNear(d.pos.x, d.pos.y, d.pos.z, 2)).catch((e) => log.warn(`戻れなかった: ${e.message}`)),
