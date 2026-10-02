@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 # チーム（リーダー 1 体＋係）をまとめて起動する。動いているボットは先に止める。
-# 使い方: bash scripts/start-team.sh [体数=3] [team|solo]   （止めるだけなら: bash scripts/start-team.sh stop）
+# 使い方: bash scripts/start-team.sh [体数=3] [team|solo]   （止めるだけなら: stop、追加なら: add 11 20 [solo]）
 # 役割: 1 体目はリーダー、残りは前半が食料・木材係、後半が鉄・鉱石係。
 # 名前は DragonBot, DragonBot2, ... 。データ・ログ・状態ページ（3007 + 番号 - 1）は 1 体ずつ分ける。
 cd "$(dirname "$0")/.." || exit 1
+# add 開始番号 終了番号 [役割=solo]: 動いているボットは止めずに、指定の番号のボットだけ追加で起動する
+if [ "$1" = "add" ]; then
+  rev=$(git rev-parse --short HEAD 2>/dev/null)
+  role=${4:-solo}
+  for ((n = $2; n <= $3; n++)); do
+    echo "=== restart $(date +%T) ($rev) $role ===" >> "bot-run$n.log"
+    MC_USERNAME=DragonBot$n ROLE=$role DATA_DIR=data$n LOG_DIR=logs$n STATUS_PORT=$((3006 + n)) DISCORD_LEVEL=important       nohup node --max-old-space-size=1536 --env-file=.env src/index.js >> "bot-run$n.log" 2>&1 &
+    sleep 2
+  done
+  wait
+  exit 0
+fi
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object CommandLine -like '*src/index.js*' | ForEach-Object { Stop-Process -Id \$_.ProcessId -Confirm:\$false }" >/dev/null 2>&1
 [ "$1" = "stop" ] && exit 0
 n_total=${1:-3}
