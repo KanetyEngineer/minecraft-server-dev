@@ -91,7 +91,18 @@ export class Supplier {
     const { bot } = this;
     const block = bot.blockAt(pos);
     if (!block) throw new Error('チェストが読み込まれていない');
-    if (bot.entity.position.offset(0, 1.6, 0).distanceTo(pos.offset(0.5, 0.5, 0.5)) > 4) await goNearBlock(this.ctx, block, 2);
+    if (bot.entity.position.offset(0, 1.6, 0).distanceTo(pos.offset(0.5, 0.5, 0.5)) > 4) {
+      // 行けないチェストの前で考え続けて止まらないよう、30 秒で打ち切る
+      let timer;
+      try {
+        await Promise.race([
+          goNearBlock(this.ctx, block, 2),
+          new Promise((_, rej) => { timer = setTimeout(() => { try { bot.pathfinder.setGoal(null); } catch {} rej(new Error('チェストに近づけない')); }, 30_000); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     const win = await bot.openContainer(bot.blockAt(pos));
     try {
       return await fn(win);

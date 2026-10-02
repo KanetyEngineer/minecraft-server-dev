@@ -7,7 +7,9 @@ import pathfinderPkg from 'mineflayer-pathfinder';
 import { parseLitematic } from './building/litematic.js';
 import { Builder } from './building/builder.js';
 import { Supplier } from './building/acquire.js';
-import { attackEntity, ensurePickaxe } from './skills/common.js';
+import { attackEntity, ensurePickaxe, pickUpItems } from './skills/common.js';
+import { shelterForNight } from './skills/shelter.js';
+import { dimensionOf } from './util/dim.js';
 import { sleep } from './body/humanize.js';
 import { findItem } from './util/items.js';
 import { log } from './log.js';
@@ -168,7 +170,7 @@ export class Agent {
   watchThreats() {
     const { bot } = this;
     this.threatTimer = setInterval(() => {
-      if (!bot.entity || this.threat) return;
+      if (!bot.entity || this.threat || this.ctx.state.sheltered) return;
       const me = bot.entity.position;
       const e = bot.nearestEntity((x) => HOSTILE.has(x.name) && x.position.distanceTo(me) < (x.name === 'creeper' ? 7 : 5)
         && Math.abs(x.position.y - me.y) < 4);
@@ -183,10 +185,12 @@ export class Agent {
     const e = this.threat;
     try {
       if (!e?.isValid) return;
-      if (e.name === 'creeper') {
-        log.info('クリーパーから離れる');
+      // クリーパーと、体力が少ないときは戦わずに離れる（夜にスケルトンと撃ち合って倒されていた）
+      if (e.name === 'creeper' || bot.health < 10) {
+        log.info(`${e.name} から離れる（体力 ${Math.round(bot.health)}）`);
         const p = bot.entity.position; const d = p.minus(e.position); const n = Math.hypot(d.x, d.z) || 1;
-        await Promise.race([bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (d.x / n) * 10, p.z + (d.z / n) * 10, 2)).catch(() => {}), sleep(6000)]);
+        await Promise.race([bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (d.x / n) * 14, p.z + (d.z / n) * 14, 2)).catch(() => {}), sleep(8000)]);
+        try { bot.pathfinder.setGoal(null); } catch {}
         return;
       }
       log.info(`${e.name} と戦う`);
@@ -197,12 +201,56 @@ export class Agent {
     }
   }
 
+  // 死んだら、落とした物（チェストから出した素材など）を 5 分で消える前に拾いに戻る
+  watchDeath() {
+    const { bot } = this;
+    bot.on('death', () => {
+      if (bot.entity?.position) this.deathAt = { pos: bot.entity.position.clone(), time: Date.now() };
+      this.abort('死んだ');
+    });
+  }
+
+  async recoverDrops() {
+    const { bot } = this;
+    const d = this.deathAt;
+    this.deathAt = null;
+    if (!d || Date.now() - d.time > 4 * 60_000) return;
+    for (let i = 0; i < 20 && !bot.entity?.isValid; i++) await sleep(250);
+    log.info(`死んだ場所 (${d.pos.floored()}) に落とした物を拾いに戻る`);
+    await Promise.race([
+      bot.pathfinder.goto(new goals.GoalNear(d.pos.x, d.pos.y, d.pos.z, 2)).catch((e) => log.warn(`戻れなかった: ${e.message}`)),
+      sleep(90_000),
+    ]);
+    try { bot.pathfinder.setGoal(null); } catch {}
+    this.ctx.signal = null;
+    await pickUpItems(this.ctx, 10).catch(() => {});
+    // 拾った素材の分、チェストの中身の記録を読み直す
+    this.builder?.supplier?.chests.clear();
+  }
+
+  // 見張り: 建築中に 2 分間、位置も持ち物も変わらなければ、固まったとみなしてやり直す
+  watchStuck() {
+    const { bot } = this;
+    let last = ''; let since = Date.now();
+    this.stuckTimer = setInterval(() => {
+      if (!bot.entity || !this.job || this.threat) { since = Date.now(); return; }
+      const p = bot.entity.position;
+      const sig = `${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}|${bot.inventory.items().reduce((s, i) => s + i.count, 0)}|${this.builder?.placed ?? 0}`;
+      if (sig !== last) { last = sig; since = Date.now(); return; }
+      if (Date.now() - since > 120_000) {
+        since = Date.now();
+        this.abort('2 分間動きが無いので、やり直す');
+      }
+    }, 5000);
+  }
+
   // ---------- メインループ ----------
 
   stop() {
     this.stopped = true;
     clearInterval(this.threatTimer);
     clearInterval(this.controlTimer);
+    clearInterval(this.stuckTimer);
     this.abort('終了');
   }
 
@@ -210,6 +258,8 @@ export class Agent {
     const { bot, cfg } = this;
     this.watchThreats();
     this.watchControlFile();
+    this.watchDeath();
+    this.watchStuck();
     this.job = this.loadJob();
     if (!this.job && cfg.buildFile && cfg.buildOrigin) {
       if (cfg.buildOrigin === 'here') for (let i = 0; i < 40 && !bot.entity.onGround; i++) await sleep(250); // 着地を待つ
@@ -222,6 +272,11 @@ export class Agent {
     let fails = 0;
     while (!this.stopped) {
       if (this.threat) { await this.handleThreat(); continue; }
+      if (this.deathAt) { await this.recoverDrops(); continue; }
+      if (this.job && cfg.shelterAtNight && dimensionOf(bot) === 'overworld' && (!bot.time.isDay || bot.health < 8)) {
+        await this.shelter();
+        continue;
+      }
       if (!this.job) { this.status = '待機中'; await sleep(1000); continue; }
       this.controller = new AbortController();
       this.ctx.signal = this.controller.signal;
@@ -253,6 +308,23 @@ export class Agent {
       } finally {
         this.ctx.signal = null;
       }
+    }
+  }
+
+  // 夜（または体力が少ないとき）は穴にこもって待つ（防具なしで夜に建てていると、スケルトンに倒されて素材を落としていた）
+  async shelter() {
+    const { bot } = this;
+    const healing = bot.time.isDay;
+    this.status = healing ? '体力が回復するまで休む' : '夜なので穴にこもって朝を待つ';
+    this.controller = new AbortController();
+    this.ctx.signal = this.controller.signal;
+    try {
+      const r = await shelterForNight(this.ctx, { untilHealed: healing });
+      log.info(r);
+    } catch (e) {
+      if (e.name !== 'AbortError') { log.warn(`穴にこもれなかった: ${e.message}`); await sleep(5000); }
+    } finally {
+      this.ctx.signal = null;
     }
   }
 

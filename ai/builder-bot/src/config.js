@@ -40,6 +40,8 @@ export function loadConfig() {
     clearArea: bool('BUILD_CLEAR', true),
     // 最初に石の道具をそろえる
     prepareTools: bool('BUILD_PREPARE_TOOLS', true),
+    // 夜は穴にこもって朝を待つ（false なら夜も建て続ける）
+    shelterAtNight: bool('BUILD_SHELTER_AT_NIGHT', true),
     // 素材を探すチェストの範囲（建築範囲の端からのブロック数）
     chestRadius: num('BUILD_CHEST_RADIUS', 16),
     // 素材が足りず止まったとき、チェストを見直すまでの待ち時間（秒）

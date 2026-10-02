@@ -3,7 +3,7 @@
 // 毎回いまの世界の状態を見て「設計図どおりか」を確かめるので、中断・再起動しても続きから建てられる。
 import pathfinderPkg from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
-import { SkillError, abortable, equipCheapestTool, pickUpItems, cheapBlock } from '../skills/common.js';
+import { SkillError, abortable, equipCheapestTool, pickUpItems, cheapBlock, travelTo } from '../skills/common.js';
 import { count } from '../util/items.js';
 import { sleep } from '../body/humanize.js';
 import { itemFor, matches, isAirName, isSecondaryHalf, placementHint, materialList, DIRS, yawFor } from './blocks.js';
@@ -121,6 +121,7 @@ export class Builder {
   async run() {
     const { bot, ctx } = this;
     this.installPathRules();
+    await this.returnToSite();
     const ys = this.size.y;
     for (let y = 0; y < ys; y++) {
       abortable(ctx);
@@ -136,6 +137,16 @@ export class Builder {
     await this.cleanupScaffolds();
     const p = this.progress();
     return { ...p, missing: [...this.missing.entries()], orientationOff: this.orientationOff };
+  }
+
+  // 現場から離れていたら（死んで初期スポーンに戻った・素材集めで遠出した）、まず戻る
+  async returnToSite() {
+    const { bot } = this;
+    const c = this.origin.offset(this.size.x / 2, 0, this.size.z / 2);
+    const far = () => Math.hypot(bot.entity.position.x - c.x, bot.entity.position.z - c.z) > Math.max(this.size.x, this.size.z) / 2 + 16;
+    if (!far()) return;
+    this.log.info(`建築現場 (${Math.floor(c.x)}, ${Math.floor(c.z)}) へ戻る`);
+    await travelTo(this.ctx, c.x, c.z, { range: 6 });
   }
 
   // 空気のはずのマスにある固いブロック（地形・木）をどける
@@ -391,7 +402,9 @@ export class Builder {
     let forceLook = true;
     if (hint.look !== undefined || hint.yaw !== undefined || hint.pitch !== undefined) {
       const yaw = hint.yaw ?? (hint.look ? yawFor(hint.look) : bot.entity.yaw);
-      await bot.look(yaw, hint.pitch ?? 0, true);
+      // force=true だと mineflayer は向きをサーバーに送らない（置いたときの向きがずれた）。送り終わるまで待つ
+      await bot.look(yaw, hint.pitch ?? 0, false);
+      await bot.waitForTicks(1);
       forceLook = 'ignore';
     }
     this.selfPlacing = true;
