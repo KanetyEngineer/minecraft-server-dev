@@ -1096,6 +1096,69 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
       return true;
     }
   }
+  // 真上に掘り上がる（頭上を掘ってジャンプし、足元にブロックを置く）。階段より段数が半分で、1 段 1 秒ほど。
+  // y=4 から地上まで 60 段以上あり、階段（90 秒）では届かずに洞窟で木を探し続けて死んだ。
+  // 頭上に水があれば（湖や海の底）、横に 6 マス掘り進んでから、また真上を試す（4 回まで）
+  {
+    const towerUntil = Date.now() + 180_000;
+    const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    for (let attempt = 0; attempt < 4 && sky() < 12 && Date.now() < towerUntil && cheapBlock(bot); attempt++) {
+      let stuck = 0;
+      let reason = '';
+      while (sky() < 12 && Date.now() < towerUntil && cheapBlock(bot) && stuck < 3) {
+        abortable(ctx);
+        // 体力が減ってきたら（落ちてきた砂で窒息など）やめる
+        if (bot.health < 10) { reason = '体力が減った'; stuck = 3; break; }
+        const p = bot.entity.position.floored();
+        const above = p.offset(0, 2, 0);
+        // 落ちてきた砂や砂利が頭の位置に入ったら、まずそれを掘る（窒息する）
+        const headBlock = bot.blockAt(p.offset(0, 1, 0));
+        if (headBlock && headBlock.boundingBox === 'block' && bot.canDigBlock(headBlock)) {
+          await equipCheapestTool(bot, headBlock).catch(() => {});
+          await bot.dig(headBlock, true).catch(() => {});
+          continue;
+        }
+        if (isNextToLiquid(bot, above) || ['water', 'lava'].includes(bot.blockAt(above.offset(0, 1, 0))?.name)) { reason = '頭上に水・溶岩'; break; }
+        for (let k = 0; k < 6; k++) { // 砂利や砂が落ちてきたら掘り直す
+          const b = bot.blockAt(above);
+          if (!b || b.boundingBox !== 'block') break;
+          if (!bot.canDigBlock(b)) { stuck = 3; reason = `${b.name} を掘れない`; break; }
+          await equipCheapestTool(bot, b).catch(() => {});
+          await bot.dig(b, true).catch(() => {});
+          await bot.waitForTicks(3);
+        }
+        if (stuck >= 3) break;
+        const y0 = bot.entity.position.y;
+        const placed = await pillarUp(ctx, 1).catch(() => 0);
+        if (!placed || bot.entity.position.y < y0 + 0.5) stuck++; else stuck = 0;
+        if (stuck >= 3) reason = '柱を積めない';
+      }
+      if (sky() >= 12) {
+        ctx.log.info(`真上に掘り上がって地上に出た（y=${Math.floor(bot.entity.position.y)}）`);
+        return true;
+      }
+      if (!reason || reason === '体力が減った') { if (reason) ctx.log.info('体力が減ったので掘り上がりをやめる'); break; }
+      ctx.log.info(`真上に掘り上がれない（${reason}、y=${Math.floor(bot.entity.position.y)}）。横に 6 マス掘り進んでやり直す`);
+      // 横に掘り進む（足と頭の 2 マス。液体の隣は避けて次の向きへ）
+      const [dx, dz] = dirs[attempt % 4];
+      for (let k = 0; k < 6; k++) {
+        abortable(ctx);
+        const p = bot.entity.position.floored();
+        const next = p.offset(dx, 0, dz);
+        if ([next, next.offset(0, 1, 0)].some((c) => isNextToLiquid(bot, c))) break;
+        for (const c of [next.offset(0, 1, 0), next]) {
+          const b = bot.blockAt(c);
+          if (b && b.boundingBox === 'block' && bot.canDigBlock(b)) {
+            await equipCheapestTool(bot, b).catch(() => {});
+            await bot.dig(b, true).catch(() => {});
+          }
+        }
+        const floor = bot.blockAt(next.offset(0, -1, 0));
+        if (!floor || floor.boundingBox !== 'block') break; // 足場が無い（空洞）なら止める
+        await Promise.race([bot.pathfinder.goto(new goals.GoalBlock(next.x, next.y, next.z)).catch(() => {}), sleep(4000)]);
+      }
+    }
+  }
   let dir = ctx.state.stairDir ?? [1, 0];
   // 渓谷の底などで出られないまま何分も掘り続けないよう、90 秒で打ち切る
   const until = Date.now() + 90_000;
