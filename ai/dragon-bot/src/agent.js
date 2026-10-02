@@ -55,8 +55,6 @@ export class Agent {
       this.stopBody();
       this.reflexBusy = false;
     });
-    // リスポーン直後は酸素の値が死んだときの 0 のまま残り、陸の上で息継ぎの反射が誤って働く。満タンに戻す
-    bot.on('respawn', () => { bot.oxygenLevel = 20; });
     bot.on('chat', async (username, message) => {
       if (username === bot.username) return;
       this.chatLog.push({ username, message, at: Date.now() });

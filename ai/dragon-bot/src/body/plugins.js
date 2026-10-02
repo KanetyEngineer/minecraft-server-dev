@@ -23,6 +23,21 @@ export function loadPlugins(bot) {
   loadArmorManagerSafely(bot);
   bot.loadPlugin(hawkeyePkg.default ?? hawkeyePkg);
   bot.loadPlugin(autoEat);
+  trackOwnAir(bot);
+}
+
+// 自分の酸素だけを見る。
+// mineflayer は、どのエンティティの air_supply を受け取っても bot.oxygenLevel を書き換える（陸に上がった魚や
+// 溺れているゾンビなどの値が入る）。そのため陸の上でも「酸素 0/20」になり、息継ぎの反射が誤って働いて作業が止まっていた。
+// 自分のエンティティの値（メタデータ 1 番 = air_supply）だけを使い、mineflayer からの書き込みは無視する
+export function trackOwnAir(bot) {
+  let air = 20;
+  bot._client.on('entity_metadata', (packet) => {
+    if (!bot.entity || packet.entityId !== bot.entity.id) return;
+    for (const m of packet.metadata) if (m.key === 1 && typeof m.value === 'number') air = Math.round(m.value / 15);
+  });
+  bot.on('respawn', () => { air = 20; });
+  Object.defineProperty(bot, 'oxygenLevel', { configurable: true, enumerable: true, get: () => air, set: () => {} });
 }
 
 // armor-manager はアイテムを拾うたびに中身を読むが、サーバーによっては読み取りで例外が出て
