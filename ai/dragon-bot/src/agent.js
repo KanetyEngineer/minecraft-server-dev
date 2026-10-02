@@ -344,11 +344,21 @@ export class Agent {
         await runAway(action.from, 14);
       } else if (action.kind === 'creeper') {
         // 爆発しそうなほど近ければ、間にブロックを置いて爆風を和らげてから離れる
-        if (action.from.position.distanceTo(bot.entity.position) < 3.5) {
+        if (action.from.isValid && action.from.position.distanceTo(bot.entity.position) < 3.5) {
           const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
           log.info(`クリーパーとの間にブロックを ${n} 個置いた`);
         }
-        await runAway(action.from, 12);
+        // クリーパーの導火線は、相手が 7 マスより遠くに離れるまで止まらない（試験鯖で、殴って数マス下がる戦法は 3 回とも爆発された）。
+        // 同じ高さのまま 16 マス先までダッシュで離れる（高さを問わずに逃げて洞窟に下り、追い詰められて爆発された）
+        const p = bot.entity.position; const f = action.from.position;
+        const d = Math.hypot(p.x - f.x, p.z - f.z) || 1;
+        bot.setControlState('sprint', true);
+        await Promise.race([
+          bot.pathfinder.goto(new goals.GoalNear(p.x + ((p.x - f.x) / d) * 16, p.y, p.z + ((p.z - f.z) / d) * 16, 3)).catch(() => {}),
+          sleep(10_000),
+        ]);
+        try { bot.pathfinder.setGoal(null); } catch {}
+        bot.setControlState('sprint', false);
       } else if (action.kind === 'shield') {
         // 溶岩のそばだと矢のノックバックで落ちる（溶岩のそばでスケルトンに撃たれて死んだ）。まず溶岩から離れる
         const lava = this.nearestLava(4);
