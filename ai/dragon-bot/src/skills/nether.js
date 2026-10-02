@@ -1,6 +1,6 @@
 // ネザー関連とエンダーパール集め
 import {
-  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals, placeWallToward, collectWithTimeout,
+  SkillError, abortable, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, craftItem, dim, goals, placeWallToward, collectWithTimeout, placeBoat,
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
@@ -234,8 +234,7 @@ async function boatTrapEnderman(ctx, em) {
   if (!floor || floor.boundingBox !== 'block') return false;
   await bot.equip(boat, 'hand');
   await smoothLookAt(bot, floor.position.offset(0.5, 1, 0.5), ctx.cfg.human.turnSpeed);
-  try { await bot.placeEntity(floor, new Vec3(0, 1, 0)); } catch { return false; }
-  const vehicle = bot.nearestEntity((e) => e.name && e.name.endsWith('boat') && e.position.distanceTo(bot.entity.position) < 4);
+  const vehicle = await placeBoat(bot, floor.position).catch(() => null);
   if (!vehicle) return false;
   // 目を合わせて怒らせ、ボートの方へ来させる（ボートの真後ろに立っておく）
   await smoothLookAt(bot, em.position.offset(0, 2.6, 0), 60);

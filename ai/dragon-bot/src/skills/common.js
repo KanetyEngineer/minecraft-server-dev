@@ -104,8 +104,7 @@ export async function crossByBoat(ctx, x, z) {
   await goTo(ctx, water.position.x, water.position.y + 1, water.position.z, 2);
   await bot.equip(boat, 'hand');
   await smoothLookAt(bot, water.position.offset(0.5, 1, 0.5), ctx.cfg.human.turnSpeed);
-  await bot.placeEntity(bot.blockAt(water.position), new Vec3(0, 1, 0));
-  const vehicle = bot.nearestEntity((e) => e.name && e.name.endsWith('boat') && e.position.distanceTo(bot.entity.position) < 5);
+  const vehicle = await placeBoat(bot, water.position);
   if (!vehicle) throw new SkillError('ボートを置けなかった');
   bot.mount(vehicle);
   await sleep(800);
@@ -427,6 +426,22 @@ export async function digTunnel(ctx, dx, dz, n) {
   }
   bot.setControlState('forward', false);
   return moved;
+}
+
+// ボートを pos のブロックの上に置き、置けたボートのエンティティを返す（置けなければ null）。
+// mineflayer の placeEntity は 1.21.11 でボートを置くとき use_item パケットに向きを入れず、
+// 送信エラーで接続が切れていた。正しいパケットを送る activateItem で置く（向いている先に置かれる）
+export async function placeBoat(bot, pos) {
+  const before = new Set(Object.values(bot.entities).filter((e) => e.name?.endsWith('boat')).map((e) => e.id));
+  await bot.lookAt(pos.offset(0.5, 1, 0.5), true);
+  await bot.waitForTicks(2);
+  bot.activateItem();
+  for (let t = 0; t < 20; t++) {
+    await bot.waitForTicks(1);
+    const boat = Object.values(bot.entities).find((e) => e.name?.endsWith('boat') && !before.has(e.id) && e.position.distanceTo(bot.entity.position) < 6);
+    if (boat) return boat;
+  }
+  return null;
 }
 
 export function isNextToLiquid(bot, pos) {
