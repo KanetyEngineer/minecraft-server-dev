@@ -31,8 +31,11 @@ export function discordEnabled() {
 }
 
 // line は "[hh:mm:ss] 本文"。時刻を除いた本文が直前と同じなら回数だけ数える
+// DISCORD_LEVEL=important のときは大事な行（スキルの成功・死亡・受け渡し・キック・エラー）だけ送る（ボットが多いとき用）
+const IMPORTANT = /🛠 成功|死んで|渡した|キック|エラー|ゲート|ネザー|ポータル/;
 export function queueDiscord(line) {
   if (!discordEnabled()) return;
+  if (process.env.DISCORD_LEVEL === 'important' && !IMPORTANT.test(line)) return;
   const body = line.replace(/^\[[\d:]+\] /, '');
   if (body === lastBody) { repeats++; return; }
   closeRepeats();
