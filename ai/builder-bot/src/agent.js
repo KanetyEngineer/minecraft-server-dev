@@ -397,14 +397,14 @@ export class Agent {
     }
   }
 
-  // 昼のうちにベッドを用意しておく（夜は穴の中で寝て朝にする。羊が見つからなければ 10 分おきに試す）
+  // 昼のうちにベッドを用意しておく（夜は穴の中で寝て朝にする。羊が見つからなければ 30 分おきに試す）
   async ensureBed() {
     const { bot, cfg } = this;
     if (!cfg.useBed || !bot.time.isDay || bot.inventory.items().some((i) => i.name.endsWith('_bed'))) return;
-    if (this.bedTriedAt && Date.now() - this.bedTriedAt < 10 * 60_000) return;
+    if (this.bedTriedAt && Date.now() - this.bedTriedAt < 30 * 60_000) return;
     this.bedTriedAt = Date.now();
     log.info('夜に寝るためのベッドを用意する');
-    // 羊を探して現場から遠くまで歩き回らないよう、3 分で打ち切る（建築ごと中断し、次の周回では 10 分間ベッドを探さない）
+    // 羊を探して現場から遠くまで歩き回らないよう、3 分で打ち切る（建築ごと中断し、30 分間はベッドを探さない）
     const timer = setTimeout(() => this.abort('ベッドの用意に時間がかかるので後回しにする'), 3 * 60_000);
     try {
       await this.builder.supplier.ensure('white_bed', 1).catch((e) => {
