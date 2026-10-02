@@ -953,6 +953,23 @@ export async function lightIfDark(ctx) {
   return false;
 }
 
+// 廃坑の毒グモスポナーなどを無力化する: 近づいてツルハシで壊す（壊すと湧かなくなる）。
+// 壊せないとき（ツルハシが無い）は周りに松明を置くだけでも湧かなくなる。処理できたら true
+export async function neutralizeSpawner(ctx, spawner) {
+  const { bot } = ctx;
+  const pick = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe', 'stone_pickaxe', 'wooden_pickaxe'].map((n) => findItem(bot, n)).find(Boolean);
+  await goNearBlock(ctx, spawner, 2);
+  // まず周りを明るくする（壊している間に湧かないように）
+  await lightIfDark(ctx).catch(() => {});
+  const block = bot.blockAt(spawner.position);
+  if (!block || block.name !== 'spawner') return true;
+  if (!pick) return false;
+  await bot.equip(pick, 'hand');
+  await bot.lookAt(block.position.offset(0.5, 0.5, 0.5), true);
+  await bot.dig(block);
+  return bot.blockAt(spawner.position)?.name !== 'spawner';
+}
+
 // 地下（空の光が届かない場所）にいたら、階段状に掘り上がって地上に出る。
 // 動物探しや木集めなど地上でやる作業の前に使う（地下から遠くの地上へは経路が見つからず、その場で固まっていた）
 export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {

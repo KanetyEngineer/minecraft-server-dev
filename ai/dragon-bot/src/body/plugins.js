@@ -71,6 +71,9 @@ export function configureBody(bot) {
     .filter((id) => id !== undefined);
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
+  // クモの巣は通らない（廃坑の毒グモスポナーの周りに多く、はまると毒グモに囲まれる）
+  const cobweb = bot.registry.blocksByName.cobweb?.id;
+  if (cobweb !== undefined) mv.blocksToAvoid.add(cobweb);
   bot.pathfinder.setMovements(mv);
   // 経路の途中で掘るときも、掘れるうちで一番安い道具を使う（pathfinder は一番速い道具＝鉄のツルハシを選び、
   // 移動中に石を掘って鉄のツルハシを使い潰していた）

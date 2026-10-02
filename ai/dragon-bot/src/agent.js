@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
@@ -130,8 +130,15 @@ export class Agent {
     const mv = bot.pathfinder?.movements;
     if (mv && dimensionOf(bot) === 'overworld') mv.liquidCost = drowned ? 20 : 3;
     const drownedInWater = drowned && isWetBlock(bot.blockAt(drowned.position.offset(0, 0.5, 0)));
+    // 廃坑の毒グモ: 小さくて速く、壁を登り 1 マスのすき間も通るので、柱や壁では防げない。
+    // 体力は 12 しかないので、近くに来たら攻撃される前に剣で倒す。スポナーが近くにあれば壊す（壊すまで湧き続ける）
+    const caveSpider = bot.nearestEntity((e) => e.name === 'cave_spider' && e.position.distanceTo(pos) < 4);
+    const spawner = this.findSpawnerNearby(12);
     let action = null;
     if (creeper) action = { kind: 'creeper', from: creeper };
+    else if (caveSpider && bot.health <= 6) action = { kind: 'flee', from: caveSpider };
+    else if (caveSpider && !inCombat) action = { kind: 'fight', target: caveSpider };
+    else if (spawner && !recentlyHurt && bot.health >= 12 && !this.spawnerBusyUntil) action = { kind: 'spawner', block: spawner };
     else if (drowned && bot.entity.isInWater && drowned.position.distanceTo(pos) < 12 && Date.now() - (this.leftWaterAt ?? 0) > 8000) action = { kind: 'leaveWater', from: drowned };
     else if (drowned && drownedInWater && !bot.entity.isInWater && recentlyHurt && drowned.heldItem?.name !== 'trident') action = { kind: 'inland', from: drowned };
     // すぐそばで殴ってくる敵がいるときは、遠くのスケルトンへの壁より先にそちらに対処する
@@ -145,7 +152,7 @@ export class Agent {
 
     this.reflexBusy = true;
     try {
-      this.interrupt(action.from ? `${action.from.name} を避ける` : `${action.target.name} に攻撃された`);
+      this.interrupt(action.from ? `${action.from.name} を避ける` : action.block ? 'スポナーを処理する' : `${action.target.name} に攻撃された`);
       const ctx = this.makeCtx(new AbortController());
       const runAway = async (from, dist = 14) => {
         const p = bot.entity.position; const f = from.position;
@@ -154,6 +161,23 @@ export class Agent {
         await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + ((p.x - f.x) / d) * dist, p.z + ((p.z - f.z) / d) * dist, 2)).catch(() => {});
         bot.setControlState('sprint', false);
       };
+      if (action.kind === 'spawner') {
+        const p = action.block.position;
+        log.warn(`スポナー (${p.x}, ${p.y}, ${p.z}) が近いので壊す`);
+        const ok = await Promise.race([neutralizeSpawner(ctx, action.block), sleep(30_000)]).catch((e) => { log.warn(`スポナー: ${e.message}`); return false; });
+        this.stopBody();
+        if (ok) {
+          log.info('スポナーを壊した');
+        } else {
+          // 壊せないなら、しばらくは近づかない
+          log.warn('スポナーを壊せないので離れる');
+          this.spawnerBusyUntil = Date.now() + 10 * 60_000;
+          const fake = { position: p, name: 'spawner' };
+          await runAway(fake, 24);
+        }
+        this.history.push({ skill: '反射:spawner', args: {}, ok: !!ok, result: ok ? 'スポナーを壊した' : 'スポナーから離れた' });
+        return;
+      }
       if (action.kind === 'leaveWater') {
         this.leftWaterAt = Date.now();
         const land = this.findLandAwayFrom(action.from.position);
@@ -343,6 +367,17 @@ export class Agent {
       }
     }
     return best;
+  }
+
+  // 近くのスポナー（廃坑の毒グモ、洞窟のゾンビ/スケルトン）。処理済み・あきらめたものは除く
+  findSpawnerNearby(radius) {
+    const { bot } = this;
+    if ((this.spawnerBusyUntil ?? 0) > Date.now()) return null;
+    this.spawnerBusyUntil = 0;
+    const id = bot.registry?.blocksByName?.spawner?.id;
+    if (id === undefined || typeof bot.findBlocks !== 'function') return null;
+    const p = bot.findBlocks({ matching: id, maxDistance: radius, count: 1 })[0];
+    return p ? bot.blockAt(p) : null;
   }
 
   makeCtx(controller) {
