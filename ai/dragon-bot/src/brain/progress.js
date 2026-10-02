@@ -31,7 +31,7 @@ export function milestones(bot, memory) {
     bow: has(bot, 'bow'),
     arrows: count(bot, 'arrow') >= 32,
     obsidian: count(bot, 'obsidian') >= 10 || !!memory.getPlace('overworld_portal'),
-    flintAndSteel: has(bot, 'flint_and_steel') || !!memory.getPlace('overworld_portal'),
+    flintAndSteel: has(bot, 'flint_and_steel') || has(bot, 'fire_charge') || !!memory.getPlace('overworld_portal'),
     netherPortal: !!memory.getPlace('overworld_portal'),
     blazeRods: rods >= Math.ceil(eyesNeeded / 2) || eyes >= eyesNeeded,
     enderPearls: pearls + eyes >= eyesNeeded,

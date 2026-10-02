@@ -473,7 +473,7 @@ export async function collectObsidian(ctx, { count: n = 10 } = {}) {
 export async function buildNetherPortal(ctx) {
   const { bot, memory } = ctx;
   if (count(bot, 'obsidian') < 10) throw new SkillError('黒曜石が 10 個必要');
-  if (!findItem(bot, 'flint_and_steel')) await craftItem(ctx, 'flint_and_steel', 1);
+  if (!findItem(bot, 'flint_and_steel') && !findItem(bot, 'fire_charge')) await craftItem(ctx, 'flint_and_steel', 1);
   if (count(bot, 'cobblestone') < 4) await mineBlocks(ctx, COBBLE_SOURCES, 4, { maxExplore: 2 });
 
   const origin = findPortalSite(bot);
@@ -506,7 +506,7 @@ export async function buildNetherPortal(ctx) {
     await bot.placeBlock(ref, target.minus(ref.position));
   }
   // 着火
-  await bot.equip(findItem(bot, 'flint_and_steel'), 'hand');
+  await bot.equip(findItem(bot, 'flint_and_steel') ?? findItem(bot, 'fire_charge'), 'hand');
   const bottom = bot.blockAt(new Vec3(ox + 1, oy, oz));
   await smoothLookAt(bot, bottom.position.offset(0.5, 1, 0.5), ctx.cfg.human.turnSpeed);
   await bot.activateBlock(bottom, new Vec3(0, 1, 0));

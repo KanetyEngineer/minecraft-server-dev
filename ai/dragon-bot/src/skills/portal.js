@@ -118,7 +118,8 @@ export async function castNetherPortal(ctx) {
   if (memory.getPlace('overworld_portal')) return 'ゲートはもうある';
   if (!findItem(bot, 'water_bucket')) throw new SkillError('水入りバケツが必要（fillWaterBucket）');
   if (!findItem(bot, 'bucket') && !findItem(bot, 'lava_bucket')) await craftItem(ctx, 'bucket', 1);
-  if (!findItem(bot, 'flint_and_steel')) await craftItem(ctx, 'flint_and_steel', 1);
+  // 着火は火打石でもファイヤーチャージ（廃ポータルのチェストでよく拾う）でもよい
+  if (!findItem(bot, 'flint_and_steel') && !findItem(bot, 'fire_charge')) await craftItem(ctx, 'flint_and_steel', 1);
   const cobbleCount = () => COBBLE.reduce((s, n) => s + count(bot, n), 0);
   if (cobbleCount() < 34) await mineBlocks(ctx, ['stone', 'cobblestone', 'deepslate'], 34 - cobbleCount(), { maxExplore: 4 });
   if (cobbleCount() < 30) throw new SkillError('丸石が足りない（30 個必要）');
@@ -215,7 +216,7 @@ export async function castNetherPortal(ctx) {
   if (missing > 0) throw new SkillError(`黒曜石があと ${missing} 個足りない（やり直すと続きから作る）`);
 
   // 5. 着火
-  await bot.equip(findItem(bot, 'flint_and_steel'), 'hand');
+  await bot.equip(findItem(bot, 'flint_and_steel') ?? findItem(bot, 'fire_charge'), 'hand');
   const bottom = bot.blockAt(new Vec3(ox + 1, oy, oz));
   await bot.lookAt(bottom.position.offset(0.5, 1, 0.5), true);
   await bot.activateBlock(bottom, new Vec3(0, 1, 0));
