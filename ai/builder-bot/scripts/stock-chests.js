@@ -1,6 +1,7 @@
 // 試験用: 設計図に要る素材をチェストに入れて、ボットの近くに並べる（RCON を使う。サーバーの OP 操作の代わり）。
 // 使い方: RCON_PASSWORD=... node scripts/stock-chests.js <設計図> <基準のプレイヤー名> [dx dz]
 // 基準のプレイヤーの位置から (dx, 0, dz)（既定 -3, 0）を先頭に、z 方向へ 1 マスおきにチェストを置く。
+// <設計図> の代わりに inspect.js の MISSING_JSON（アイテム名 → 個数）を渡すと、その分だけを入れる。
 import fs from 'node:fs';
 import path from 'node:path';
 import mcData from 'minecraft-data';
@@ -14,9 +15,13 @@ if (!file || !who) {
   process.exit(1);
 }
 const reg = mcData(process.env.MC_VERSION || '1.21.11');
-const p = fs.existsSync(file) ? file : path.join('schematics', file.endsWith('.litematic') ? file : `${file}.litematic`);
-const schematic = await parseLitematic(fs.readFileSync(p));
-const { need } = materialList(reg, schematic.blocks);
+let need;
+if (file.endsWith('.json')) {
+  need = new Map(Object.entries(JSON.parse(fs.readFileSync(file, 'utf8'))));
+} else {
+  const p = fs.existsSync(file) ? file : path.join('schematics', file.endsWith('.litematic') ? file : `${file}.litematic`);
+  need = materialList(reg, (await parseLitematic(fs.readFileSync(p))).blocks).need;
+}
 const stacks = [];
 for (const [item, n] of need) {
   const size = reg.itemsByName[item]?.stackSize ?? 64;

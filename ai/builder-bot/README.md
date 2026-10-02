@@ -53,6 +53,7 @@ Litematica の設計図（`.litematic`）を読み込み、サバイバルで素
 | `BUILD_CHEST_RADIUS` | 16 | 素材を探すチェストの範囲（建築範囲の端から） |
 | `BUILD_RETRY_WAIT_SEC` | 60 | 素材が足りないとき、チェストを見直すまでの秒数 |
 | `BUILD_SHELTER_AT_NIGHT` | true | 夜は穴にこもって朝を待つ |
+| `BUILD_GATHER_BUDGET` | 800 | 1 回に自分で集める手間の上限（原木 1 本 ≒ 1、精錬やクラフトの分も足す）。超える量はチェストに入れてもらう |
 | `STATUS_PORT` | 3008 | 状態ページ（0 で無効） |
 
 ## 制限

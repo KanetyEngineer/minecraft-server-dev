@@ -1,5 +1,6 @@
 // 試験用: 観察用のボットで接続し、設計図と実際のブロックを比べて、違うマスを一覧にする。
 // 使い方: node scripts/inspect.js <設計図> <x> <y> <z> [観察ボットの名前]
+// MISSING_JSON=ファイル名 を付けると、まだ置かれていないブロックに要るアイテムの数を JSON で書き出す（stock-chests.js で補充できる）
 // 観察ボットは設計図の近くまで行けないので、サーバーの OP 権限で近くへテレポートしてもらうか、近くで実行する
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,17 +27,23 @@ bot.once('spawn', async () => {
   await bot.waitForChunksToLoad();
   let ok = 0; let typeOk = 0; let total = 0;
   const wrong = [];
+  const missing = {};
   for (const b of schematic.blocks) {
     if (!itemFor(bot.registry, b)) continue;
     total++;
     const w = bot.blockAt(origin.offset(b.x, b.y, b.z));
     if (matches(b, w)) ok++;
     if (matches(b, w, { checkProps: false })) typeOk++;
-    else wrong.push(`(${b.x},${b.y},${b.z}) ${b.name} → ${w?.name}`);
+    else {
+      wrong.push(`(${b.x},${b.y},${b.z}) ${b.name} → ${w?.name}`);
+      const it = itemFor(bot.registry, b);
+      missing[it.item] = (missing[it.item] ?? 0) + it.count;
+    }
     if (matches(b, w, { checkProps: false }) && !matches(b, w)) {
       wrong.push(`(${b.x},${b.y},${b.z}) ${b.name} 向き ${JSON.stringify(b.props)} → ${JSON.stringify(w.getProperties())}`);
     }
   }
+  if (process.env.MISSING_JSON) fs.writeFileSync(process.env.MISSING_JSON, JSON.stringify(missing, null, 2));
   console.log(`種類が合っている: ${typeOk}/${total}、向きまで合っている: ${ok}/${total}`);
   for (const l of wrong.slice(0, 40)) console.log(`  ${l}`);
   if (wrong.length > 40) console.log(`  ほか ${wrong.length - 40} 件`);

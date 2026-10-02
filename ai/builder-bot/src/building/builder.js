@@ -216,6 +216,17 @@ export class Builder {
       for (const [item, n] of short.sort((a, b) => a[1] - b[1])) {
         abortable(this.ctx);
         if (count(bot, item) >= n || !this.supplier) continue;
+        // 手間が大きすぎるもの（エメラルドブロック 600 個を鉱石から など）は自分では集めず、チェストに入れてもらう
+        const lack = n - count(bot, item);
+        const effort = this.supplier.estimate(item) * lack;
+        const budget = this.ctx.cfg?.gatherBudget ?? 800;
+        if (effort > budget && this.supplier.chestCount(item) < lack) {
+          failed.add(item);
+          this.missing.set(item, Math.max(this.missing.get(item) ?? 0, lack - this.supplier.chestCount(item)));
+          if (this.supplier.chestCount(item) > 0) await this.supplier.takeFromChests(item, lack).catch(() => {});
+          this.log.warn(`${item} ×${lack} は自分で集めるには多すぎる（手間 ${Math.round(effort)}）。チェストに入れてください`);
+          continue;
+        }
         try {
           this.log.info(`素材を用意: ${item} ×${n}（手持ち ${count(bot, item)}）`);
           await this.supplier.ensure(item, n);
