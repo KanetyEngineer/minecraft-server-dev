@@ -92,10 +92,10 @@ export class Agent {
     // ほかの反射（戦闘など）の最中でも割り込む（戦っている間に溺れたことがある）
     const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
     // 最後に息ができていた場所（頭が水の外で地面の上）を覚えておく。溺れそうなときの第一の逃げ先
-    if (headBlock && headBlock.name !== 'water' && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
+    if (headBlock && !isWetBlock(headBlock) && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
     // 頭の位置のブロック名では判定しない（昆布・海草・泡の柱の中だと water 以外の名前になり、反応せずに溺れていた）。
     // 酸素は水に潜っているときだけ減るので、酸素の値だけで判定する
-    if (bot.oxygenLevel !== undefined && bot.oxygenLevel !== null && bot.oxygenLevel < 8 && !this.airBusy) {
+    if (bot.oxygenLevel !== undefined && bot.oxygenLevel !== null && bot.oxygenLevel < 12 && !this.airBusy) {
       this.airBusy = true;
       this.stopBody(); // 戦闘などほかの反射の動きも止める
       this.reflexBusy = true;
@@ -103,47 +103,10 @@ export class Agent {
         this.interrupt('息継ぎ');
         log.warn(`酸素が少ない（${bot.oxygenLevel}/20）ので水面へ上がる`);
         this.state.floodedAt = bot.entity.position.clone(); // 水没した場所として覚え、横掘りで戻らない
-        bot.setControlState('jump', true);
-        const WET = new Set(['water', 'kelp', 'kelp_plant', 'seagrass', 'tall_seagrass', 'bubble_column']);
-        const headWet = () => { const h = bot.blockAt(bot.entity.position.offset(0, 1.6, 0)); return !!h && (WET.has(h.name) || h.getProperties?.().waterlogged === true); };
-        for (let t = 0; t < 120; t++) {
-          await bot.waitForTicks(1);
-          if (!headWet() && bot.oxygenLevel >= 18) break;
-          // 20 ティック浮いても頭が水の中（天井がある水没した坑道など）なら、近くの空気のある所へ逃げる。
-          // 無ければ頭上のブロックを掘って空気を探す
-          if (t === 20 && headWet()) {
-            bot.setControlState('jump', false);
-            // まず、さっきまで息ができていた場所へ戻る（数秒前に通った道なので確実に行ける）
-            if (this.lastDryPos && this.lastDryPos.distanceTo(bot.entity.position) < 24) {
-              log.warn(`さっきまで息ができていた場所 (${this.lastDryPos.x}, ${this.lastDryPos.y}, ${this.lastDryPos.z}) へ戻る`);
-              await Promise.race([
-                bot.pathfinder.goto(new goals.GoalBlock(this.lastDryPos.x, this.lastDryPos.y, this.lastDryPos.z)).catch(() => {}),
-                sleep(8000),
-              ]);
-              try { bot.pathfinder.setGoal(null); } catch {}
-              if (!headWet()) { bot.setControlState('jump', true); continue; }
-            }
-            const air = nearestAirPocket(bot, 8);
-            if (air) {
-              log.warn(`真上に出られないので空気のある所 (${air.x}, ${air.y}, ${air.z}) へ`);
-              await Promise.race([
-                bot.pathfinder.goto(new goals.GoalBlock(air.x, air.y, air.z)).catch(() => {}),
-                sleep(6000),
-              ]);
-              try { bot.pathfinder.stop(); } catch {}
-            } else {
-              const up = bot.blockAt(bot.entity.position.floored().offset(0, 2, 0));
-              if (up && up.boundingBox === 'block' && bot.canDigBlock(up)) {
-                log.warn('真上に出られないので頭上を掘る');
-                await bot.tool.equipForBlock(up, {}).catch(() => {});
-                await bot.dig(up, true).catch(() => {});
-              }
-            }
-            bot.setControlState('jump', true);
-          }
-        }
+        await this.escapeWater();
       } finally {
         bot.setControlState('jump', false);
+        bot.setControlState('forward', false);
         this.reflexBusy = false;
         this.airBusy = false;
       }
@@ -163,8 +126,16 @@ export class Agent {
     const recentlyHurt = Date.now() - this.lastHurtAt < 2500;
     const inCombat = this.current && COMBAT_SKILLS.has(this.current.name);
 
+    // ドラウンド: 水の中では向こうが有利（泳ぎが速く、トライデントも投げてくる）。
+    // 近くにいる間は水を通る道を避け、自分が水の中にいたら先に陸へ上がる。陸から水の中のドラウンドとは戦わず内陸へ離れる
+    const drowned = bot.nearestEntity((e) => e.name === 'drowned' && e.position.distanceTo(pos) < 16);
+    const mv = bot.pathfinder?.movements;
+    if (mv && dimensionOf(bot) === 'overworld') mv.liquidCost = drowned ? 20 : 3;
+    const drownedInWater = drowned && isWetBlock(bot.blockAt(drowned.position.offset(0, 0.5, 0)));
     let action = null;
     if (creeper) action = { kind: 'creeper', from: creeper };
+    else if (drowned && bot.entity.isInWater && drowned.position.distanceTo(pos) < 12 && Date.now() - (this.leftWaterAt ?? 0) > 8000) action = { kind: 'leaveWater', from: drowned };
+    else if (drowned && drownedInWater && !bot.entity.isInWater && recentlyHurt && drowned.heldItem?.name !== 'trident') action = { kind: 'inland', from: drowned };
     else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat) action = { kind: 'shield', from: archer };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
     else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
@@ -182,7 +153,22 @@ export class Agent {
         await bot.pathfinder.goto(new goals.GoalNearXZ(p.x + ((p.x - f.x) / d) * dist, p.z + ((p.z - f.z) / d) * dist, 2)).catch(() => {});
         bot.setControlState('sprint', false);
       };
-      if (action.kind === 'creeper') {
+      if (action.kind === 'leaveWater') {
+        this.leftWaterAt = Date.now();
+        const land = this.findLandAwayFrom(action.from.position);
+        if (land) {
+          log.info(`ドラウンドが近いので陸 (${land.x}, ${land.y}, ${land.z}) へ上がる`);
+          bot.setControlState('sprint', true);
+          await Promise.race([bot.pathfinder.goto(new goals.GoalBlock(land.x, land.y, land.z)).catch(() => {}), sleep(10000)]);
+          try { bot.pathfinder.setGoal(null); } catch {}
+          bot.setControlState('sprint', false);
+        }
+        if (!bot.entity.isInWater) await runAway(action.from, 8);
+      } else if (action.kind === 'inland') {
+        // 水辺から離れれば、昼のドラウンドは水から出てこない
+        log.info('水の中のドラウンドに攻撃されたので、水辺から離れる');
+        await runAway(action.from, 14);
+      } else if (action.kind === 'creeper') {
         // 爆発しそうなほど近ければ、間にブロックを置いて爆風を和らげてから離れる
         if (action.from.position.distanceTo(bot.entity.position) < 3.5) {
           const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
@@ -275,6 +261,67 @@ export class Agent {
       bot.setControlState('jump', true);
       setTimeout(() => bot.clearControlStates(), 1200);
     }
+  }
+
+  // 息ができる所まで逃げる。息ができるまで（最大 25 秒）は作業に戻さない
+  //（以前は 6 秒で諦めて作業に戻り、水の中で作業を始めては中断、を繰り返して溺れた）。
+  // 手を順に試し、うまくいかなければ次の手へ:
+  //   1. 真上が水面まで開いていれば、真上へ泳ぐ（いちばん速い）
+  //   2. さっきまで息ができていた場所へ戻る（数秒前に通った道）
+  //   3. 近くの空気のある所（洞窟の空気も含む）へ泳ぐ
+  //   4. 頭上のブロックを掘って上がる（水中では掘るのが遅いので最後の手段）
+  async escapeWater() {
+    const { bot } = this;
+    const headWet = () => isWetBlock(bot.blockAt(bot.entity.position.offset(0, 1.6, 0)));
+    const breathing = () => !headWet() && bot.oxygenLevel >= 18;
+    const deadline = Date.now() + 25_000;
+    const swimTo = async (p, ms) => {
+      bot.setControlState('sprint', true);
+      await Promise.race([bot.pathfinder.goto(new goals.GoalBlock(p.x, p.y, p.z)).catch(() => {}), sleep(ms)]);
+      try { bot.pathfinder.setGoal(null); } catch {}
+      bot.setControlState('sprint', false);
+    };
+    // 息ができるようになったら、そのまま少し浮いて酸素を回復する
+    const recover = async () => {
+      bot.setControlState('jump', true);
+      for (let t = 0; t < 60 && !breathing() && Date.now() < deadline; t++) {
+        await bot.waitForTicks(1);
+        if (headWet()) return false;
+      }
+      return true;
+    };
+    let step = 0;
+    while (Date.now() < deadline && !breathing()) {
+      if (!headWet()) { if (await recover()) break; continue; }
+      const plan = step++ % 4;
+      if (plan === 0) {
+        const up = openWaterAbove(bot, 12);
+        if (up === null) continue;
+        log.warn(`真上 ${up} マスが水面なので泳いで上がる`);
+        bot.setControlState('jump', true);
+        for (let t = 0; t < up * 6 + 20 && headWet(); t++) await bot.waitForTicks(1);
+      } else if (plan === 1) {
+        const p = this.lastDryPos;
+        if (!p || p.distanceTo(bot.entity.position) > 24) continue;
+        log.warn(`さっきまで息ができていた場所 (${p.x}, ${p.y}, ${p.z}) へ戻る`);
+        await swimTo(p, 7000);
+      } else if (plan === 2) {
+        const air = nearestAirPocket(bot, 10);
+        if (!air) continue;
+        log.warn(`空気のある所 (${air.x}, ${air.y}, ${air.z}) へ泳ぐ`);
+        await swimTo(air, 6000);
+      } else {
+        const up = bot.blockAt(bot.entity.position.floored().offset(0, 2, 0));
+        if (up && up.boundingBox === 'block' && bot.canDigBlock(up)) {
+          log.warn('真上に出られないので頭上を掘る');
+          await bot.tool.equipForBlock(up, {}).catch(() => {});
+          await bot.dig(up, true).catch(() => {});
+        }
+        bot.setControlState('jump', true);
+        await bot.waitForTicks(10);
+      }
+    }
+    if (!breathing()) log.warn('息のできる所まで逃げきれなかった');
   }
 
   // 敵から離れる向きで、いちばん近い陸（足元が固く、水でない 2 マスの空き）を探す
@@ -399,9 +446,28 @@ export class Agent {
 // 足と頭の 2 マスが空気（水ではない）の場所で、いちばん近い所。水没した所から逃げる先
 function nearestAirPocket(bot, radius) {
   const me = bot.entity.position;
-  const airId = bot.registry.blocksByName.air?.id;
-  if (airId === undefined) return null;
-  return bot.findBlocks({ matching: airId, maxDistance: radius, count: 300 })
-    .filter((p) => bot.blockAt(p.offset(0, 1, 0))?.name === 'air' && bot.blockAt(p.offset(0, -1, 0))?.boundingBox === 'block')
+  // 洞窟の中の空気は cave_air なので、それも含める（含めておらず、水没した洞窟で逃げ先が見つからなかった）
+  const ids = ['air', 'cave_air'].map((n) => bot.registry.blocksByName[n]?.id).filter((id) => id !== undefined);
+  if (ids.length === 0) return null;
+  const isAir = (b) => !!b && (b.name === 'air' || b.name === 'cave_air');
+  return bot.findBlocks({ matching: ids, maxDistance: radius, count: 400 })
+    .filter((p) => isAir(bot.blockAt(p.offset(0, 1, 0))) && bot.blockAt(p.offset(0, -1, 0))?.boundingBox === 'block')
     .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0] ?? null;
+}
+
+const WET_BLOCKS = new Set(['water', 'kelp', 'kelp_plant', 'seagrass', 'tall_seagrass', 'bubble_column']);
+function isWetBlock(b) {
+  return !!b && (WET_BLOCKS.has(b.name) || b.getProperties?.().waterlogged === true);
+}
+
+// 真上が水だけで水面（空気）までつながっていれば、その高さを返す。途中に固いブロックがあれば null
+function openWaterAbove(bot, maxUp) {
+  const base = bot.entity.position.floored();
+  for (let dy = 2; dy <= maxUp; dy++) {
+    const b = bot.blockAt(base.offset(0, dy, 0));
+    if (!b) return null;
+    if (b.name === 'air' || b.name === 'cave_air') return dy;
+    if (!isWetBlock(b) && b.boundingBox !== 'empty') return null;
+  }
+  return null;
 }

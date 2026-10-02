@@ -111,35 +111,57 @@ export function configureBody(bot) {
   // 泳ぐ:
   // - 頭まで水に浸かったら浮き上がる（溺れない・沈まない）
   // - 移動中に水に触れたら、必ずダッシュ泳ぎで進む
+  // - 水面で上下に揺れて「水に入った・出た」が毎ティック切り替わると、ダッシュが入ったり切れたりしてぎこちないので、
+  //   水から出て 10 ティックたつまでは泳ぎ続ける
+  // - pathfinder は水中では常にジャンプ（浮上）するので、下の足場へ向かうときは沈めず止まっていた。次の地点が下なら沈む
   let floating = false;
   let swimSprint = false;
+  let wetTicks = 0;
+  let livePath = [];
+  bot.on('path_update', (r) => { livePath = r?.path ?? []; });
+  bot.on('goal_reached', () => { livePath = []; });
+  bot.on('path_reset', () => { livePath = []; });
   // pathfinder は水中で毎ティック sprint=false にするので、泳いでいる間はそれを無視する
   const setCS = bot.setControlState.bind(bot);
   bot.setControlState = (ctl, state) => {
     if (ctl === 'sprint' && !state && swimSprint) return;
     setCS(ctl, state);
   };
+  const WET = new Set(['water', 'kelp', 'kelp_plant', 'seagrass', 'tall_seagrass', 'bubble_column']);
+  const isWet = (b) => !!b && (WET.has(b.name) || b.getProperties?.().waterlogged === true);
   bot.on('physicsTick', () => {
-    if (!bot.entity || bot.vehicle) return;
+    if (!bot.entity || bot.vehicle) { wetTicks = 0; return; }
     const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
-    const under = !!head && head.name === 'water';
+    const under = isWet(head);
+    const inWater = bot.entity.isInWater;
+    if (inWater) wetTicks = 10; else if (wetTicks > 0) wetTicks--;
     const moving = bot.getControlState('forward') || bot.pathfinder?.isMoving?.();
     // 移動中に水に入ったら必ず泳ぐ
-    const longSwim = bot.entity.isInWater && moving;
+    const longSwim = wetTicks > 0 && moving;
     if (longSwim) {
       if (!swimSprint) setCS('sprint', true); // 水中でのダッシュ = 泳ぎ
       swimSprint = true;
-      // prismarine-physics は泳ぎの速さを計算しないので、バニラ（減速 0.9 / 通常 0.8）に合わせて補正
-      bot.entity.velocity.x *= 1.125;
-      bot.entity.velocity.z *= 1.125;
+      if (inWater) {
+        // prismarine-physics は泳ぎの速さを計算しないので、バニラ（減速 0.9 / 通常 0.8）に合わせて補正
+        bot.entity.velocity.x *= 1.125;
+        bot.entity.velocity.z *= 1.125;
+      }
     } else if (swimSprint) {
       swimSprint = false;
       setCS('sprint', false);
     }
-    // 泳いでいる間は水面近くを保ち、息が減ったら必ず浮上する
-    const needAir = bot.oxygenLevel !== undefined && bot.oxygenLevel < 10;
-    if (under && (!longSwim || needAir)) { bot.setControlState('jump', true); floating = true; }
-    else if (floating) { bot.setControlState('jump', false); floating = false; }
+    const needAir = bot.oxygenLevel !== undefined && bot.oxygenLevel < 12;
+    // 移動中: 次の地点が 1 マス以上下なら沈んで向かい、それ以外は水面近くを保つ（息が減ったら必ず浮上）
+    if (longSwim && inWater) {
+      const next = livePath[0];
+      const diving = !needAir && next && next.y < bot.entity.position.y - 0.6;
+      setCS('jump', !diving);
+      floating = false;
+      return;
+    }
+    // 止まっているときは、頭まで沈んだら浮く
+    if (under) { setCS('jump', true); floating = true; }
+    else if (floating) { setCS('jump', false); floating = false; }
   });
   return mv;
 }
@@ -152,7 +174,8 @@ export function tuneMovementsForDimension(bot) {
   const nether = bot.game?.dimension?.includes('nether');
   mv.maxDropDown = nether ? 3 : 4;
   mv.infiniteLiquidDropdownDistance = !nether; // ネザーの液体は溶岩なので「水に落ちれば安全」を無効化
-  mv.liquidCost = nether ? 50 : 1;
+  // 水の中は遅く、溺れやすく、ドラウンドもいるので、陸の道が少し遠いだけなら陸を通る
+  mv.liquidCost = nether ? 50 : 3;
   const magma = bot.registry.blocksByName.magma_block?.id;
   if (magma !== undefined) { if (nether) mv.blocksToAvoid.add(magma); else mv.blocksToAvoid.delete(magma); }
 }
