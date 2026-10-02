@@ -170,6 +170,8 @@ function nextStepRaw(bot, memory) {
   }
   // 最近（既定 15 分以内）失敗した方法は避けて、別の方法を選ぶ
   const failedRecently = (name, min = 15) => Date.now() - (memory.flag?.(`${name}FailAt`) ?? 0) < min * 60_000;
+  // チームの仲間が物を渡しに来ていたら（そばにいる）、落ちた物を拾う。拾わないと 5 分で消える
+  if (teamCtx.team?.incomingDelivery?.(bot)) return { skill: 'collectDrops', args: {} };
   if (dim === 'the_end') {
     // 弓が無ければクリスタルは壊さず、ベッド爆破と着地中の剣で倒す（RTA のゼロサイクルもクリスタルを壊さない）
     if (!m.crystalsDestroyed && has(bot, 'bow') && count(bot, 'arrow') >= 10) return { skill: 'destroyEndCrystals', args: {} };

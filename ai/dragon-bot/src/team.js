@@ -39,6 +39,8 @@ export class Team {
       dimension: String(bot.game?.dimension ?? 'overworld').replace('minecraft:', ''),
       health: Math.round(bot.health ?? 0), food: Math.round(bot.food ?? 0),
       needs: this.needs,
+      // 渡しに向かっている最中なら { to, at }（受け取る側はそばに落ちた物を拾いに動く）
+      delivering: this.delivering ?? null,
     };
     const file = path.join(this.dir, `${this.name}.json`);
     try {
@@ -65,6 +67,15 @@ export class Team {
     return this.members().find((m) => m.role === 'leader') ?? null;
   }
 
+  // 自分に物を渡しに来ている仲間（同じ次元で 12 マス以内、40 秒以内の情報）。受け取る側はそばの落とし物を拾う
+  incomingDelivery(bot) {
+    const p = bot?.entity?.position;
+    if (!p) return null;
+    const dim = String(bot.game?.dimension ?? 'overworld').replace('minecraft:', '');
+    return this.members().find((m) => m.delivering?.to === this.name && Date.now() - (m.delivering.at ?? 0) < 40_000
+      && (m.dimension ?? 'overworld') === dim && m.pos && Math.hypot(m.pos.x - p.x, m.pos.y - p.y, m.pos.z - p.z) < 12) ?? null;
+  }
+
   // 自分（係）が渡せる、リーダーのほしい物 [{ item, count, to }]
   deliverable(bot) {
     const leader = this.leader();
@@ -78,8 +89,10 @@ export class Team {
       for (const [name, n] of have) {
         if (!SUPPLIES[this.role](name)) continue;
         if (re ? !re.test(name) : name !== need.item) continue;
-        // 自分の分は少し残す（食料は 4、鉄は 0、木材は 4）
-        const keep = /^cooked_|bread|apple/.test(name) ? 4 : /_log$|_planks$/.test(name) ? 4 : 0;
+        // 自分の分は少し残す（食料は 4、木材は 4）。鉄係は自分の鉄のツルハシ（3）と剣（2）の分だけ先に残す（石のツルハシでは遅い）
+        const hasOwn = (n) => bot.inventory.items().some((i) => i.name === n);
+        const keep = /^cooked_|bread|apple/.test(name) ? 4 : /_log$|_planks$/.test(name) ? 4
+          : name === 'iron_ingot' ? (hasOwn('iron_pickaxe') ? (hasOwn('iron_sword') ? 0 : 2) : 3) : 0;
         const give = Math.min(need.count, n - keep);
         if (give > 0) out.push({ item: name, count: give, to: leader.name });
       }

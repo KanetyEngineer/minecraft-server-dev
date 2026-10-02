@@ -1,7 +1,7 @@
 import { Vec3 } from 'vec3';
 // LLM が細かく組み合わせるための汎用スキル
 import {
-  SkillError, halfShiftBridge, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
+  SkillError, abortable, halfShiftBridge, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
 } from './common.js';
 import { count } from '../util/items.js';
 import { sleep } from '../body/humanize.js';
@@ -152,21 +152,39 @@ export async function deliverItems(ctx, { to, items = [] } = {}) {
     await travelTo(ctx, m.pos.x, m.pos.z, { range: 4 });
   }
   if (!target()) throw new SkillError(`${to} が見つからない`);
-  const t = target().position;
-  await goTo(ctx, t.x, t.y, t.z, 2).catch(() => {});
+  // 「渡しに行く」をチーム情報に出す（受け取る側は、そばに落ちた物を拾いに動く）
+  if (ctx.team) { ctx.team.delivering = { to, at: Date.now() }; ctx.team.publish(bot); }
   const given = [];
-  for (const { item, count } of items) {
-    const id = bot.registry.itemsByName[item]?.id;
-    const have = bot.inventory.items().filter((i) => i.name === item).reduce((s, i) => s + i.count, 0);
-    const n = Math.min(count, have);
-    if (id === undefined || n <= 0) continue;
-    const tp = target()?.position;
-    if (tp) await bot.lookAt(tp.offset(0, 1, 0), true).catch(() => {});
-    await bot.toss(id, null, n).catch(() => {});
-    given.push(`${item}×${n}`);
+  try {
+    const t = target().position;
+    await goTo(ctx, t.x, t.y, t.z, 2).catch(() => {});
+    // 相手のそば（4 マス以内）まで行けていなければ投げない（地下にいる相手へ地上から投げても、物が消えるだけ）
+    const d = target()?.position?.distanceTo(bot.entity.position);
+    if (!(d <= 4)) throw new SkillError(`${to} のそばまで行けなかった（${d ? d.toFixed(1) : '?'} マス）`);
+    for (const { item, count } of items) {
+      abortable(ctx);
+      const id = bot.registry.itemsByName[item]?.id;
+      if (id === undefined) continue;
+      let left = Math.min(count, bot.inventory.items().filter((i) => i.name === item).reduce((s, i) => s + i.count, 0));
+      const want = left;
+      const tp = target()?.position;
+      if (tp) await bot.lookAt(tp.offset(0, 1, 0), true).catch(() => {});
+      // toss は 1 スタック分ずつしか投げられないので、スタックごとに投げる
+      while (left > 0) {
+        const slot = bot.inventory.items().find((i) => i.name === item);
+        if (!slot) break;
+        const k = Math.min(left, slot.count);
+        try { await bot.toss(id, null, k); left -= k; } catch (e) { ctx.log.warn(`${item} を投げられなかった: ${e.message}`); break; }
+        await sleep(150);
+      }
+      if (want - left > 0) given.push(`${item}×${want - left}`);
+    }
+    if (given.length === 0) throw new SkillError('渡せる物が無かった');
+    ctx.memory.setFlag('deliveredAt', Date.now());
+    await sleep(2500); // 相手が拾う間、そばで待つ（投げた物は 2 秒間拾えない）
+  } finally {
+    if (ctx.team) { ctx.team.delivering = null; ctx.team.publish(bot); }
   }
-  ctx.memory.setFlag('deliveredAt', Date.now());
-  if (given.length === 0) throw new SkillError('渡せる物が無かった');
   ctx.say?.(`${to} に ${given.join('、')} を渡した`);
   return `${to} に ${given.join('、')} を渡した`;
 }
