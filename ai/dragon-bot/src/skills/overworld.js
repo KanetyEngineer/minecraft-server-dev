@@ -531,9 +531,12 @@ export async function makeBed(ctx, { count: want = 1 } = {}) {
   const { bot } = ctx;
   const beds = () => countMatching(bot, (n) => n.endsWith('_bed'));
   if (beds() >= want) return `ベッドを ${beds()} 個持っている`;
-  // 必要なベッドの数 × 3 枚の羊毛を集める（エンドのベッド爆破用に複数作ることもある）
+  // 必要なベッドの数 × 3 枚の羊毛を集める（エンドのベッド爆破用に複数作ることもある）。
+  // ベッドは同じ色の羊毛 3 枚が要るので、色ごとに数える（白 2 枚と黒 1 枚で「3 枚ある」と数えて作れず、
+  // 10 分ベッド作りを飛ばして、目の前の黒い羊に反応しなくなっていた）
+  const craftable = () => bot.inventory.items().filter((i) => i.name.endsWith('_wool')).reduce((s, i) => s + Math.floor(i.count / 3), 0);
   const woolNeed = (want - beds()) * 3;
-  for (let t = 0; t < 20 + woolNeed * 2 && countMatching(bot, (n) => n.endsWith('_wool')) < woolNeed; t++) {
+  for (let t = 0; t < 20 + woolNeed * 2 && beds() + craftable() < want; t++) {
     abortable(ctx);
     const sheep = nearestEntityNamed(bot, ['sheep'], 40);
     if (!sheep) { await exploreStep(ctx); continue; }
