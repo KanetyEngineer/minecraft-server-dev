@@ -17,7 +17,9 @@ const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 // ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
 // （バニラの鯖では「/ai」のような独自コマンドは本人にエラーが返るだけでボットには届かないので、先頭に ai を付ける）
 export const INSTRUCTION_RE = /^\s*(?:\/?ai|@?dragonbot|!ai)[\s:：、,]+(.+)$/i;
-const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack', 'gatherFood']);
+// 戦うこと自体が目的のスキル（その最中は、相手の攻撃に反射で割り込まない）。
+// 食料集め（gatherFood）は動物を狩るだけなので含めない（含めていて、夜の食料集め中にスケルトンに撃たれても反応せず死んだ）
+const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack']);
 
 export class Agent {
   constructor({ bot, cfg, memory, planner, chat }) {

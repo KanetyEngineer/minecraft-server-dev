@@ -130,7 +130,8 @@ export function nextStep(bot, memory) {
     // 寝られなくても、石の道具があって体力があれば穴にこもらず作業を続ける（夜に 7 分待つのは大きなロス。敵は反射で対処する）
     const hasBedNow = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
     const sleepFailed = Date.now() - (memory.flag('sleepFailAt') ?? 0) < 10 * 60_000;
-    const canWork = m.stoneTools && (typeof bot.health !== 'number' || bot.health >= 12);
+    // 防具が無いときは、体力に余裕（16 以上）が無ければ地上の夜は出歩かない（体力 13 で出てスケルトンに撃たれた）
+    const canWork = m.stoneTools && (typeof bot.health !== 'number' || bot.health >= (m.armor ? 12 : 16));
     if (hasBedNow && !sleepFailed) return { skill: 'shelterForNight', args: {} };
     if (!canWork) return { skill: 'shelterForNight', args: {} };
     // 作業可能: 昼と同じ進め方に進む
