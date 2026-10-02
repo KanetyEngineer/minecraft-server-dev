@@ -1,0 +1,58 @@
+name: solaria-tools
+on:
+  push:
+    paths: ['mods/solaria-tools/**', '.github/workflows/solaria-tools.yml']
+  pull_request:
+    paths: ['mods/solaria-tools/**', '.github/workflows/solaria-tools.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '9.2.1' }
+      - name: Build
+        working-directory: mods/solaria-tools
+        run: gradle --no-daemon build
+      - name: Download the existing mods the pack uses (checked against Modrinth sha512)
+        run: |
+          mkdir -p /tmp/dist/extra
+          dl() { # url sha512 name
+            curl -fsSL -o "/tmp/dist/extra/$3" "$1"
+            echo "$2  /tmp/dist/extra/$3" | sha512sum -c -
+          }
+          dl https://cdn.modrinth.com/data/UyBaYBa7/versions/AnFGBKba/server_waypoint-3.0.4-fabric-mc1.21.11.jar \
+             17bda95683d537f2428856175ecdbd0f585449b10079402b546b261e4474a6b34331cfec71a2f796768e803616154338c53237a8b0516463e936749ece5366e3 \
+             server_waypoint-3.0.4-fabric-mc1.21.11.jar
+          dl "https://cdn.modrinth.com/data/fy7jmMai/versions/MnHhLg5D/stats-scoreboard-1.0.0%2B1.21.11.jar" \
+             e5ece7c6c42525c69ec8c5e2af4ccb64b54482cc5b223b713371b84c90bf29b2ba347250750ffc5b04d77c1bfa7fa4facbf5345dcd1e6d0bf2e4f352922ffb6c \
+             stats-scoreboard-1.0.0+1.21.11.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solaria-tools
+          path: |
+            mods/solaria-tools/build/libs/*.jar
+            /tmp/dist/extra/*.jar
+      - name: Publish jars to solaria-dist branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          JAR=$(ls mods/solaria-tools/build/libs/*.jar | grep -v sources | head -1)
+          cp "$JAR" /tmp/dist/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin solaria-dist || true
+          if git rev-parse --verify origin/solaria-dist >/dev/null 2>&1; then
+            git switch -C solaria-dist origin/solaria-dist
+          else
+            git switch --orphan solaria-dist
+          fi
+          git rm -rfq . >/dev/null 2>&1 || true
+          git clean -fdxq
+          cp -r /tmp/dist/* .
+          echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD.txt
+          git add -A && git commit -qm "solaria-tools build ${GITHUB_SHA::7}" && git push origin solaria-dist
