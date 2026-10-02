@@ -58,6 +58,7 @@ export const SKILLS = [
   def('makeBed', ow.makeBed, '羊を倒して羊毛を集め、ベッドを作る（count 個持つまで。エンドのベッド爆破用に 3〜5 個）。', { count: int('持っておくベッドの数', 1, 8) }),
   def('shelterForNight', ow.shelterForNight, '夜、防具が無いうちはその場で 3 マス掘り下がって頭上をふさぎ、朝まで待つ。', { untilHealed: { type: 'boolean', description: '体力が少ないとき、昼でも穴で休んで回復を待つ' } }),
   def('sleepInBed', ow.sleepInBed, '夜にベッドで寝て朝にする（ベッドの場所も覚える）。'),
+  def('setRespawnPoint', noteFailAt('setRespawnPoint', ow.setRespawnPoint), 'ベッドを置いて使い（昼でもよい）、復活地点を今の場所に設定してベッドを回収する。死んでも作業場所の近くで復活できる。'),
   def('enterNether', nether.enterNether, '覚えているネザーポータルからネザーへ入る。'),
   def('returnThroughPortal', nether.returnThroughPortal, 'ネザーからポータルを通ってオーバーワールドに戻る。'),
   def('huntBlazes', nether.huntBlazes, 'ネザー要塞を探し、ブレイズを倒してブレイズロッドを集める。', { rods: int('目標のロッド数', 1, 16) }),

@@ -750,3 +750,58 @@ async function sleepInShelter(ctx, feet, bedItem) {
   }
   return false;
 }
+// 復活地点をベッドで設定する。ベッドは「使う」だけで復活地点になる（昼なら「夜しか寝られない」と出るが設定はされる。
+// 夜に敵が近くにいて寝られないときも同じ）。寝る必要はないので、昼のうちに作業場所の近くで設定しておく。
+// （夜に世界の初期スポーンで復活し、道具も防具も無いままゾンビに倒された）
+export async function setRespawnPoint(ctx) {
+  const { bot, memory } = ctx;
+  const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
+  if (!bedItem) throw new SkillError('ベッドがない（makeBed で作る）');
+  const base = bot.entity.position.floored();
+  const solid = (p) => bot.blockAt(p)?.boundingBox === 'block';
+  const empty = (p) => { const b = bot.blockAt(p); return !!b && b.boundingBox === 'empty' && !/water|lava/.test(b.name); };
+  // 足元の高さに 2 マス分の平らな場所を探して置く（向いている方向に頭が来る）
+  let placed = null;
+  outer:
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    for (const [ex, ez] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      abortable(ctx);
+      const a = base.offset(dx, 0, dz); const b = a.offset(ex, 0, ez);
+      if (b.equals(base)) continue;
+      if (!solid(a.offset(0, -1, 0)) || !solid(b.offset(0, -1, 0))) continue;
+      if (!empty(a) || !empty(b) || !empty(a.offset(0, 1, 0)) || !empty(b.offset(0, 1, 0))) continue;
+      await bot.look(Math.atan2(-ex, -ez), -0.6, true);
+      await bot.equip(bedItem, 'hand');
+      try { await bot.placeBlock(bot.blockAt(a.offset(0, -1, 0)), new Vec3(0, 1, 0)); } catch { continue; }
+      for (let t = 0; t < 20; t++) {
+        if (bot.blockAt(a)?.name?.endsWith('_bed') && bot.blockAt(b)?.name?.endsWith('_bed')) break;
+        await bot.waitForTicks(1);
+      }
+      if (bot.blockAt(a)?.name?.endsWith('_bed')) { placed = a; break outer; }
+    }
+  }
+  if (!placed) throw new SkillError('ベッドを置く平らな場所がない');
+  try {
+    const bed = bot.blockAt(placed);
+    await bot.lookAt(placed.offset(0.5, 0.5, 0.5), true);
+    await bot.activateBlock(bed);
+    await bot.waitForTicks(4);
+    // 夜で寝られてしまったら、そのまま朝まで寝る（復活地点は設定済み）
+    if (bot.isSleeping) {
+      const t0 = Date.now();
+      while (bot.isSleeping && Date.now() - t0 < 9 * 60_000) { abortable(ctx); await sleep(1000); }
+    }
+    memory.setPlace('respawn', placed, dim(ctx));
+    memory.setFlag('respawnSetAt', Date.now());
+    return `復活地点を (${placed.x}, ${placed.y}, ${placed.z}) に設定した`;
+  } finally {
+    // ベッドは回収して持ち歩く
+    if (bot.isSleeping) await bot.wake().catch(() => {});
+    const b = bot.blockAt(placed);
+    if (b && b.name.endsWith('_bed')) {
+      await bot.dig(b, true).catch(() => {});
+      await sleep(400);
+      await pickUpItems(ctx, 4).catch(() => {});
+    }
+  }
+}

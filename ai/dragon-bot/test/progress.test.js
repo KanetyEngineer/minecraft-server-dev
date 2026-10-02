@@ -233,3 +233,19 @@ test('食料集めが目標に届かなかった直後は、蓄えが 5 以上�
   assert.equal(nextStep(b, fakeMemory()).skill, 'gatherFood');
   assert.notEqual(nextStep(b, fakeMemory({}, { foodRetryAt: Date.now() + 60_000 })).skill, 'gatherFood');
 });
+
+test('ベッドを持っていて復活地点が未設定か遠ければ、昼のうちにベッドで復活地点を設定する', () => {
+  const base = { stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, white_bed: 1 };
+  const at = (bot, x, z) => Object.assign(bot, { entity: { position: { x, y: 64, z } } });
+  assert.equal(nextStep(at(fakeBot(base), 0, 0), fakeMemory()).skill, 'setRespawnPoint');
+  assert.ok(SKILL_MAP.setRespawnPoint);
+  // 近く（96 マス以内）に設定済みなら、ふだんの流れ（鉄集め）
+  const near = { respawn: { x: 30, y: 64, z: 10, dimension: 'overworld' } };
+  assert.equal(nextStep(at(fakeBot(base), 0, 0), fakeMemory(near)).skill, 'getIronGear');
+  assert.equal(nextStep(at(fakeBot(base), 200, 0), fakeMemory(near)).skill, 'setRespawnPoint');
+  // 夜は寝る流れに任せる。ベッドが無ければ先にベッド作り。失敗直後は飛ばす
+  assert.equal(nextStep(at(fakeBot(base, { isDay: false }), 0, 0), fakeMemory()).skill, 'shelterForNight');
+  const { white_bed: _bed, ...noBed } = base;
+  assert.equal(nextStep(at(fakeBot(noBed), 0, 0), fakeMemory()).skill, 'makeBed');
+  assert.equal(nextStep(at(fakeBot(base), 0, 0), fakeMemory({}, { respawnRetryAt: Date.now() + 60_000 })).skill, 'getIronGear');
+});

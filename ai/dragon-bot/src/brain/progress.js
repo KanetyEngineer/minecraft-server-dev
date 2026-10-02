@@ -186,6 +186,13 @@ function nextStepRaw(bot, memory) {
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
   const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
+  // 復活地点: ベッドを持っていて、今の作業場所が復活地点から遠い（または未設定）なら、昼のうちにベッドを使って設定しておく
+  //（夜に世界の初期スポーンで復活し、道具も防具も無いまま倒された。ベッドは使うだけで復活地点になり、寝る必要はない）
+  const pos = bot.entity?.position;
+  if (hasBed && pos && dim === 'overworld' && !night && !((memory.flag('respawnRetryAt') ?? 0) > Date.now())) {
+    const rs = memory.getPlace('respawn');
+    if (!rs || rs.dimension !== 'overworld' || Math.hypot(rs.x - pos.x, rs.z - pos.z) > 96) return { skill: 'setRespawnPoint', args: {} };
+  }
   // 鉄の防具一式（鉄 24 個）は RTA では作らない。盾だけ必ず作り、防具は余った鉄があるときだけ（getIronGear の中で）作る。
   // ただし、このランで何度も死んでいるなら防具も必須にする（armorRequired）
   const wantArmor = !m.armor && armorRequired(memory);
