@@ -31,6 +31,7 @@ function emit(method, prefix, a, toDiscord = false) {
   recent.push(line);
   if (recent.length > RECENT_MAX) recent.splice(0, recent.length - RECENT_MAX);
   stream?.write(`${new Date().toISOString().slice(0, 10)} ${line}\n`);
+  if (toDiscord) queueDiscord(line);
 }
 
 export const log = {
