@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Vec3 } from 'vec3';
-import { findLavaEscape, lavaEdgeCost, lavaBeside, isBurning, inLava } from '../src/skills/lava.js';
+import { lavaEdgeCost, lavaBeside, isBurning, inLava } from '../src/skills/lava.js';
 
 // 小さな世界: y<=63 は石、y>=64 は空気。x -2..1, z -2..2 の y=63 は溶岩溜まり
 function world() {
@@ -17,11 +17,13 @@ function world() {
   return { blockAt, entity: { position: new Vec3(0.5, 63.2, 0.5), isInLava: true, metadata: [1] } };
 }
 
-test('溶岩の中から、いちばん近い足場（溶岩でない地面の上）を見つける', () => {
+test('溶岩の中にいる・燃えている の判定', () => {
   const bot = world();
-  const p = findLavaEscape(bot, 5);
-  assert.deepEqual([p.x, p.y, p.z], [2, 64, 0]);
   assert.equal(inLava(bot), true);
+  bot.entity.isInLava = false;
+  assert.equal(inLava(bot), true); // 足の位置のブロックが溶岩
+  bot.entity.position = new Vec3(3.5, 64.2, 0.5);
+  assert.equal(inLava(bot), false);
   assert.equal(isBurning(bot), true);
   bot.entity.metadata = [0];
   assert.equal(isBurning(bot), false);

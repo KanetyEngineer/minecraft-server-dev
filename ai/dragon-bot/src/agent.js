@@ -10,7 +10,7 @@ import { log } from './log.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
 import { typingDelay, doingPhrase } from './brain/chat.js';
-import { inLava, isBurning, escapeLava, extinguish, recoverPouredWater } from './skills/lava.js';
+import { isBurning, extinguish } from './skills/lava.js';
 import { findItem } from './util/items.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
@@ -170,42 +170,21 @@ export class Agent {
   async reflexTick() {
     const { bot } = this;
     if (!bot.entity) return;
-    // 溶岩: 入ったら何よりも先に脱出する（3〜4 秒で死ぬ）。息継ぎや戦闘の最中でも割り込む
-    if (inLava(bot) && !this.lavaBusy) {
+    // 溶岩: 入ったら何よりも先に抜け出す（溶岩遊泳で死んだ）
+    const lavaAt = (dy) => bot.blockAt(bot.entity.position.offset(0, dy, 0))?.name === 'lava';
+    if ((bot.entity.isInLava || lavaAt(0.1) || lavaAt(1.2)) && !this.lavaBusy) {
       this.lavaBusy = true;
       this.stopBody();
       this.reflexBusy = true;
       try {
-        this.interrupt('溶岩から脱出');
-        log.warn(`溶岩に入った（体力 ${Math.round(bot.health)}）。すぐ脱出する`);
-        const ctx = this.makeCtx(new AbortController());
-        const ok = await escapeLava(ctx);
-        if (ok) {
-          log.warn(`溶岩から出た（体力 ${Math.round(bot.health)}）`);
-          if (isBurning(bot)) await extinguish(ctx).catch(() => false);
-          await recoverPouredWater(ctx).catch(() => false);
-        } else {
-          log.warn('溶岩から出られなかった');
-        }
-        this.history.push({ skill: '反射:lava', args: {}, ok, result: ok ? '溶岩から脱出した' : '溶岩から出られなかった' });
+        this.interrupt('溶岩');
+        log.warn('溶岩に入った。すぐ抜け出す');
+        await this.escapeLava();
       } finally {
         bot.clearControlStates();
         this.reflexBusy = false;
         this.lavaBusy = false;
       }
-      return;
-    }
-    // 燃えているだけ（溶岩のそばの火など）: オーバーワールドで水入りバケツがあれば足元に水を置いて消し、すぐ回収する
-    if (isBurning(bot) && !this.reflexBusy && dimensionOf(bot) === 'overworld' && findItem(bot, 'water_bucket')
-      && bot.entity.onGround && Date.now() - (this.extinguishAt ?? 0) > 15_000) {
-      this.extinguishAt = Date.now();
-      this.reflexBusy = true;
-      try {
-        this.stopBody();
-        log.warn('燃えているので水で消す');
-        const ok = await extinguish(this.makeCtx(new AbortController()));
-        log.info(ok ? '火を消した' : '火を消せなかった');
-      } finally { this.reflexBusy = false; }
       return;
     }
     // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）。
@@ -232,24 +211,20 @@ export class Agent {
       }
       return;
     }
-    // 溶岩: 入ったら何よりも先に抜け出す（溶岩遊泳で死んだ）
-    const lavaAt = (dy) => bot.blockAt(bot.entity.position.offset(0, dy, 0))?.name === 'lava';
-    if ((bot.entity.isInLava || lavaAt(0.1) || lavaAt(1.2)) && !this.lavaBusy) {
-      this.lavaBusy = true;
-      this.stopBody();
+    if (this.reflexBusy) return;
+    // 燃えているだけ（溶岩のそばの火など）: オーバーワールドで水入りバケツがあれば足元に水を置いて消し、すぐ回収する
+    if (isBurning(bot) && dimensionOf(bot) === 'overworld' && findItem(bot, 'water_bucket')
+      && bot.entity.onGround && Date.now() - (this.extinguishAt ?? 0) > 15_000) {
+      this.extinguishAt = Date.now();
       this.reflexBusy = true;
       try {
-        this.interrupt('溶岩');
-        log.warn('溶岩に入った。すぐ抜け出す');
-        await this.escapeLava();
-      } finally {
-        bot.clearControlStates();
-        this.reflexBusy = false;
-        this.lavaBusy = false;
-      }
+        this.stopBody();
+        log.warn('燃えているので水で消す');
+        const ok = await extinguish(this.makeCtx(new AbortController()));
+        log.info(ok ? '火を消した' : '火を消せなかった');
+      } finally { this.reflexBusy = false; }
       return;
     }
-    if (this.reflexBusy) return;
     this.noticeDanger();
     this.equipShieldIfLoose();
     // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
