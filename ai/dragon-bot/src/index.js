@@ -13,6 +13,10 @@ import { Team, ROLES, strategyFor } from './team.js';
 import { setTeamContext } from './brain/progress.js';
 
 const cfg = loadConfig();
+// 待ち時間切れ（CPU が混んで「2 ティック待ったが来ない」など）の取りこぼしたエラーで、ボットごと落ちないようにする。
+// 記録だけして動き続ける（100 体の試験で、CPU 100% のときに 2 体がこれで落ちた）
+process.on('unhandledRejection', (e) => { try { log.warn(`処理されなかったエラー（続行）: ${e?.message ?? e}`); } catch {} });
+process.on('uncaughtException', (e) => { try { log.warn(`想定外のエラー（続行）: ${e?.message ?? e}`); } catch {} });
 startLogFile(cfg.logDir);
 if (startDiscordLog({ botToken: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, prefix: process.env.MC_USERNAME || 'DragonBot' })) log.info('AI の思考ログを Discord へ送る');
 const memory = new Memory(cfg.dataDir);
