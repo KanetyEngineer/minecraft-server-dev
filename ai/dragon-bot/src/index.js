@@ -51,9 +51,16 @@ function connect() {
   bot.once('spawn', async () => {
     configureBody(bot);
     log.info(`スポーンしました (${bot.entity.position.floored()})`);
-    agent = new Agent({ bot, cfg, memory, planner, chat, team });
+    const a = new Agent({ bot, cfg, memory, planner, chat, team });
+    agent = a;
     await bot.waitForChunksToLoad().catch(() => {});
-    agent.run().catch((e) => log.error(e.stack ?? e.message));
+    // メインループが止まったのに接続だけ残ると、ボットはその場に立ったままになる。止まったら入り直す
+    a.run().catch((e) => log.error(e.stack ?? e.message)).finally(() => {
+      if (stopping || agent !== a || !a.running) return;
+      log.warn('メインループが止まったので、いったん入り直す');
+      a.running = false;
+      try { bot.quit('メインループが止まった'); } catch {}
+    });
   });
   bot.on('kicked', (reason) => log.warn(`キックされた: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`));
   bot.on('error', (e) => log.error(e.message));

@@ -14,6 +14,7 @@ import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/ai
 import { typingDelay, doingPhrase } from './brain/chat.js';
 import { isBurning, extinguish } from './skills/lava.js';
 import { findItem } from './util/items.js';
+import { untilAborted } from './util/abort.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 // ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
@@ -861,55 +862,72 @@ export class Agent {
     }, 5000) : null;
     try {
       let busySince = 0;
+      let errorStreak = 0;
       while (this.running) {
-        // 反射が終わらないまま（死亡やリスポーンで経路が宙に浮いたなど）だと、ここで永久に待ってしまう。
-        // 30 秒を超えたら体を止めて反射を解除し、判断に戻る（実際に 30 分止まったことがある）
-        if (this.reflexBusy) {
-          busySince ||= Date.now();
-          if (Date.now() - busySince > 30_000) {
-            log.warn('反射が 30 秒以上終わらないので打ち切って、行動を再開する');
-            this.stopBody();
-            this.reflexBusy = false;
+        try {
+          // 反射が終わらないまま（死亡やリスポーンで経路が宙に浮いたなど）だと、ここで永久に待ってしまう。
+          // 30 秒を超えたら体を止めて反射を解除し、判断に戻る（実際に 30 分止まったことがある）
+          if (this.reflexBusy) {
+            busySince ||= Date.now();
+            if (Date.now() - busySince > 30_000) {
+              log.warn('反射が 30 秒以上終わらないので打ち切って、行動を再開する');
+              this.stopBody();
+              this.reflexBusy = false;
+              busySince = 0;
+            }
+          } else {
             busySince = 0;
           }
-        } else {
-          busySince = 0;
+          if (this.reflexBusy || !this.bot.entity || this.bot.health <= 0) { await sleep(500); continue; }
+          if (this.memory.flag('dragonDefeated') && this.memory.flag('celebrated')) {
+            log.info('🎉 エンダードラゴン討伐済み。待機します');
+            await sleep(60_000);
+            continue;
+          }
+          await this.dropJunkIfFull().catch(() => {});
+          // チャットで「止まれ」と言われている間は何もしない（反射は動く）
+          if (this.paused) { await sleep(1000); continue; }
+          // 独立して動くときは、最初にほかのボットと別の方向へ散らばる
+          if (this.cfg.role === 'solo' && !this.memory.flag('spreadDone2') && !this.order) this.order = { skill: 'spreadOut', args: {} };
+          // チャットで頼まれたこと（来て・スキル名）を、進捗表より先に 1 回やる
+          if (this.order) {
+            const order = this.order;
+            this.order = null;
+            log.brain(`[chat] ${order.skill}(${JSON.stringify(order.args)}) チャットの指示`);
+            await this.runSkill(order.skill, order.args);
+            continue;
+          }
+          const snap = snapshot(this.bot, this.memory, this.cfg);
+          let decision = await this.planner.decide({
+            bot: this.bot, memory: this.memory, snapshot: snap, history: this.history.slice(-12), chatLog: this.chatLog.slice(-5),
+            instructions: this.pendingInstructions(),
+            banned: this.loopGuard.bannedSkills(),
+          });
+          // ループ検知で禁止中のスキルが選ばれたら、進捗表の案か探索に差し替える
+          decision = this.loopGuard.substitute(decision, [decision.hint]);
+          this.lastDecision = { ...decision, at: new Date().toISOString() };
+          if (decision.thinking) log.brain(`思考: ${decision.thinking}`);
+          log.brain(`[${decision.source}] ${decision.skill}(${JSON.stringify(decision.args)}) ${decision.thought ?? ''}`);
+          this.thoughts.push({ at: this.lastDecision.at, source: decision.source, skill: decision.skill, args: decision.args, thinking: decision.thinking ?? null, thought: decision.thought ?? null });
+          this.thoughts = this.thoughts.slice(-50);
+          await this.runSkill(decision.skill, decision.args);
+          if (decision.skill === 'celebrate') this.memory.setFlag('celebrated');
+          errorStreak = 0;
+          await sleep(jitter(this.cfg.human.thinkDelayMs));
+        } catch (e) {
+          // 判断や後片付けで例外が出ても、メインループごと止めない（止まると反射も切れて、ボットが立ったままになる）
+          errorStreak++;
+          log.warn(`メインループでエラー（${errorStreak} 回連続）: ${e?.message ?? e}`);
+          this.stopBody();
+          this.reflexBusy = false;
+          if (errorStreak >= 5) {
+            log.warn('エラーが続くので、いったん入り直す');
+            this.running = false;
+            this.bot.quit('メインループのエラーが続いた');
+            break;
+          }
+          await sleep(2000);
         }
-        if (this.reflexBusy || !this.bot.entity || this.bot.health <= 0) { await sleep(500); continue; }
-        if (this.memory.flag('dragonDefeated') && this.memory.flag('celebrated')) {
-          log.info('🎉 エンダードラゴン討伐済み。待機します');
-          await sleep(60_000);
-          continue;
-        }
-        await this.dropJunkIfFull().catch(() => {});
-        // チャットで「止まれ」と言われている間は何もしない（反射は動く）
-        if (this.paused) { await sleep(1000); continue; }
-        // 独立して動くときは、最初にほかのボットと別の方向へ散らばる
-        if (this.cfg.role === 'solo' && !this.memory.flag('spreadDone2') && !this.order) this.order = { skill: 'spreadOut', args: {} };
-        // チャットで頼まれたこと（来て・スキル名）を、進捗表より先に 1 回やる
-        if (this.order) {
-          const order = this.order;
-          this.order = null;
-          log.brain(`[chat] ${order.skill}(${JSON.stringify(order.args)}) チャットの指示`);
-          await this.runSkill(order.skill, order.args);
-          continue;
-        }
-        const snap = snapshot(this.bot, this.memory, this.cfg);
-        let decision = await this.planner.decide({
-          bot: this.bot, memory: this.memory, snapshot: snap, history: this.history.slice(-12), chatLog: this.chatLog.slice(-5),
-          instructions: this.pendingInstructions(),
-          banned: this.loopGuard.bannedSkills(),
-        });
-        // ループ検知で禁止中のスキルが選ばれたら、進捗表の案か探索に差し替える
-        decision = this.loopGuard.substitute(decision, [decision.hint]);
-        this.lastDecision = { ...decision, at: new Date().toISOString() };
-        if (decision.thinking) log.brain(`思考: ${decision.thinking}`);
-        log.brain(`[${decision.source}] ${decision.skill}(${JSON.stringify(decision.args)}) ${decision.thought ?? ''}`);
-        this.thoughts.push({ at: this.lastDecision.at, source: decision.source, skill: decision.skill, args: decision.args, thinking: decision.thinking ?? null, thought: decision.thought ?? null });
-        this.thoughts = this.thoughts.slice(-50);
-        await this.runSkill(decision.skill, decision.args);
-        if (decision.skill === 'celebrate') this.memory.setFlag('celebrated');
-        await sleep(jitter(this.cfg.human.thinkDelayMs));
       }
     } finally {
       clearInterval(reflexTimer);
@@ -932,7 +950,11 @@ export class Agent {
     log.skill(`開始 ${name} ${JSON.stringify(args)}`);
     let entry;
     try {
-      const result = await skill.run(this.makeCtx(controller), args);
+      // 中断から 5 秒たってもスキルが終わらなければ見切る（中の待ちが終わらず、ボットが何分も立ったままになっていた）
+      const result = await untilAborted(skill.run(this.makeCtx(controller), args), controller.signal, {
+        graceMs: 5000,
+        onAbandon: () => { log.warn(`${name} が中断に応じないので見切って、次の行動に移る`); this.stopBody(); },
+      });
       entry = { skill: name, args, ok: true, result: String(result ?? '完了') };
     } catch (e) {
       const reason = controller.signal.aborted ? `中断（${controller.signal.reason}）` : e.message;

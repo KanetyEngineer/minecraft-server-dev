@@ -10,7 +10,9 @@ export class Planner {
   constructor(cfg, { client } = {}) {
     this.cfg = cfg;
     const hasKey = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-    this.client = client ?? (cfg.llm.enabled && hasKey ? new Anthropic() : null);
+    // 判断を待つ間、ボットは何もせず立っている。遅い・混んでいるときは早めにあきらめてルールベースで動く
+    //（既定の 10 分待ち・2 回再試行だと、混雑時に 1 回の判断で何分も止まっていた）
+    this.client = client ?? (cfg.llm.enabled && hasKey ? new Anthropic({ timeout: cfg.llm.timeoutMs ?? 45_000, maxRetries: 1 }) : null);
     this.tools = toolDefinitions();
     this.failStreak = 0;
   }
@@ -23,7 +25,10 @@ export class Planner {
     const hint = nextStep(bot, memory);
     if (!this.usingLLM) return { ...hint, hint, source: 'rules', thought: '（ルールベース）進捗表の次の項目' };
     try {
+      const started = Date.now();
       const d = await this.askClaude({ snapshot, history, chatLog, hint, banned, instructions });
+      const sec = Math.round((Date.now() - started) / 1000);
+      if (sec >= 15) log.warn(`LLM の判断に ${sec} 秒かかった（その間は立ち止まっている）`);
       d.hint = hint;
       this.failStreak = 0;
       return d;

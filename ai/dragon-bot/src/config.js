@@ -30,6 +30,8 @@ export function loadConfig() {
       // 拒否時にサーバー側で別モデルに引き継ぐ（Claude API のみ）。
       fallbacks: bool('CLAUDE_FALLBACKS', true),
       chat: bool('LLM_CHAT', true),
+      // 1 回の判断をこれ以上待たない（ミリ秒）。超えたらルールベースで動く
+      timeoutMs: num('LLM_TIMEOUT_MS', 45_000),
     },
 
     // 人間らしさの調整
