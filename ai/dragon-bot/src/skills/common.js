@@ -619,9 +619,16 @@ export async function placeNearOrRelocate(ctx, itemName, tries = 3) {
 // ---------- クラフト ----------
 
 // 近くの作業台・かまどを使う。行けない・手が届かないものは外して null（呼び出し側で新しく置く）。
+// pos のそばに、自分以外のプレイヤー（チームの仲間など）がいるか
+export function otherPlayerNear(bot, pos, r) {
+  return Object.values(bot.players).some((p) => p.username !== bot.username && p.entity && p.entity.position.distanceTo(pos) < r);
+}
+
 async function nearbyBlock(ctx, name, dist = 6) {
+  // ほかのプレイヤーがそばにいる作業台・かまどは使わない（仲間が使っている最中に開いたり、仲間が回収したりして、
+  // 「材料がずれた」「作れなかった」になっていた）
   const b = findVisibleBlocks(ctx.bot, [name], { maxDistance: 24, count: 4, visibleOnly: false })
-    .find((x) => !isUnreachable(ctx, x.position));
+    .find((x) => !isUnreachable(ctx, x.position) && !otherPlayerNear(ctx.bot, x.position, 4));
   if (!b) return null;
   if (b.position.distanceTo(ctx.bot.entity.position) > dist) {
     try {
@@ -669,7 +676,8 @@ export async function craftItem(ctx, name, n = 1, opts = {}) {
       const pos = ctx.state.placedTable;
       ctx.state.placedTable = null;
       const b = ctx.bot.blockAt(pos);
-      if (b && b.name === 'crafting_table' && b.position.distanceTo(ctx.bot.entity.position) < 6) {
+      // 仲間がそばにいれば回収しない（仲間が使っているかもしれない）
+      if (b && b.name === 'crafting_table' && b.position.distanceTo(ctx.bot.entity.position) < 6 && !otherPlayerNear(ctx.bot, b.position, 6)) {
         await equipCheapestTool(ctx.bot, b).catch(() => {});
         await ctx.bot.dig(b, true).catch(() => {});
         await pickUpItems(ctx, 4).catch(() => {});
@@ -880,7 +888,7 @@ export async function smelt(ctx, input, n) {
     // 普段どおり終わったら、かまども回収して持ち歩く（遠くに置き去りにしない）
     if (!ctx.signal?.aborted) {
       const b = bot.blockAt(furnaceBlock.position);
-      if (b && b.name === 'furnace') {
+      if (b && b.name === 'furnace' && !otherPlayerNear(bot, b.position, 6)) {
         await equipCheapestTool(bot, b).catch(() => {});
         await bot.dig(b, true).catch(() => {});
         await pickUpItems(ctx, 4).catch(() => {});
