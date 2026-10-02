@@ -771,9 +771,10 @@ export async function smelt(ctx, input, n) {
     if (furnace.outputItem()) await furnace.takeOutput();
     if (furnace.inputItem() && furnace.inputItem().type !== inItem.id) await furnace.takeInput();
     if (furnace.fuelItem() && furnace.fuelItem().name !== fuelName) await furnace.takeFuel();
-    if (!furnace.fuelItem() || furnace.fuelItem().count < fuelCount) {
-      await furnace.putFuel(bot.registry.itemsByName[fuelName].id, null, fuelCount);
-    }
+    // すでに入っている同じ燃料の分は差し引き、持っている数を超えて入れない（超えると「Can't find」で精錬ごと失敗した）
+    const addFuel = Math.min(fuelCount - (furnace.fuelItem()?.count ?? 0), count(bot, fuelName));
+    if (addFuel > 0) await furnace.putFuel(bot.registry.itemsByName[fuelName].id, null, addFuel);
+    if (!furnace.fuelItem() && (furnace.fuel ?? 0) <= 0) throw new SkillError('燃料を入れられなかった');
     await furnace.putInput(inItem.id, null, n);
     let taken = 0;
     const deadline = Date.now() + (n * 10 + 20) * 1000;
@@ -793,7 +794,8 @@ export async function smelt(ctx, input, n) {
           ctx.log.warn(`かまどの燃料が切れたが、補充する燃料が無い（残り ${left} 個）`);
           break;
         }
-        await furnace.putFuel(bot.registry.itemsByName[add.name].id, null, add.count);
+        const addCount = Math.min(add.count, count(bot, add.name));
+        if (addCount > 0) await furnace.putFuel(bot.registry.itemsByName[add.name].id, null, addCount);
         refills++;
         ctx.log.info(`かまどの燃料が切れたので ${add.name} を ${add.count} 個補充した（残り ${left} 個）`);
       }
