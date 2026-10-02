@@ -7,10 +7,6 @@ on:
 jobs:
   decomp:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        mc: ['1.21.1', '1.21.11']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -20,20 +16,18 @@ jobs:
       - name: genSources
         working-directory: research/decomp
         run: |
-          gradle --no-daemon -Pmc=${{ matrix.mc }} -Ploader=0.19.5 -Ploom_version=1.14-SNAPSHOT genSources --stacktrace || \
-          gradle --no-daemon -Pmc=${{ matrix.mc }} -Ploader=0.19.5 -Ploom_version=1.18.2 genSources --stacktrace
-      - name: collect
-        run: |
-          J=$(find ~/.gradle/caches research/decomp/.gradle -name '*-sources.jar' -path '*minecraft*' 2>/dev/null | grep -v client | head -5)
-          echo "$J"
-          mkdir -p out src
-          for j in $J; do (cd src && unzip -oq "$j"); done
-          ls src | head
-          cd src
-          zip -qr ../out/src-${{ matrix.mc }}.zip net/minecraft/world/entity net/minecraft/world/level/block/entity net/minecraft/world/level/portal net/minecraft/server/level net/minecraft/world/item/alchemy net/minecraft/core/dispenser net/minecraft/world/level/block 2>/dev/null || true
-          ls -la ../out
-      - uses: actions/upload-artifact@v4
-        with:
-          name: src-${{ matrix.mc }}
-          path: out/
-          retention-days: 3
+          for v in 1.21.1 1.21.11; do
+            gradle --no-daemon -q -Pmc=$v -Ploader=0.19.5 -Ploom_version=1.14-SNAPSHOT genSources
+            J=$(find ~/.gradle/caches .gradle -name '*-sources.jar' -path "*${v}*" 2>/dev/null | grep -v client | head -1)
+            echo "$v -> $J"; mkdir -p /tmp/s$v; (cd /tmp/s$v && unzip -oq "$J")
+          done
+      - name: dump
+        run: bash research/decomp/dump.sh > dump.txt; wc -l dump.txt
+      - name: part1
+        run: sed -n '1,3000p' dump.txt
+      - name: part2
+        run: sed -n '3001,6000p' dump.txt
+      - name: part3
+        run: sed -n '6001,9000p' dump.txt
+      - name: part4
+        run: sed -n '9001,12000p' dump.txt
