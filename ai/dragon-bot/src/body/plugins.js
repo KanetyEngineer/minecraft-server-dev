@@ -83,6 +83,8 @@ export function configureBody(bot) {
   const fastestTool = bot.pathfinder.bestHarvestTool;
   const TIERS = ['wooden', 'stone', 'golden', 'iron', 'diamond', 'netherite'];
   bot.pathfinder.bestHarvestTool = (block) => {
+    // ブロックが読み込まれていない（null）ことがある。そのまま digTime を呼ぶとボットごと落ちていた
+    if (!block || typeof block.digTime !== 'function') return null;
     const items = bot.inventory.items();
     const hand = block.digTime(null, false, false, false);
     for (const tier of TIERS) {
