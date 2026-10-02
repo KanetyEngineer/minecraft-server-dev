@@ -411,11 +411,18 @@ export async function fillWaterBucket(ctx) {
   for (let t = 0; t < 10 && !src(); t++) await exploreStep(ctx);
   const water = src();
   if (!water) throw new SkillError('水源が見つからない');
-  // 水源の上の面をまっすぐ見てバケツを使う。届かない・見えていないと汲めないので、近づき直して 3 回まで試す
-  //（遠くから見て使い、何度も「水をくめなかった」になっていた）
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const w = attempt === 0 ? water : (src() ?? water);
+  // 水源の上の面をまっすぐ見てバケツを使う。上が空気の水源（水面）だけを、近い順に 8 か所まで試す。
+  // 近づけなかった（目から 4.5 マスより遠い）水源は飛ばす（届かない水源に向かって使い、何度も「水をくめなかった」になっていた）
+  const isAir = (b) => !!b && (b.name === 'air' || b.name === 'cave_air');
+  const candidates = findVisibleBlocks(bot, ['water'], { maxDistance: 48, count: 24, extra: (b) => b.metadata === 0 })
+    .filter((b) => isAir(bot.blockAt(b.position.offset(0, 1, 0))))
+    .slice(0, 8);
+  if (candidates.length === 0) candidates.push(water);
+  for (const w of candidates) {
+    abortable(ctx);
     await goNearBlock(ctx, w, 2).catch(() => {});
+    const eye = bot.entity.position.offset(0, 1.62, 0);
+    if (eye.distanceTo(w.position.offset(0.5, 0.9, 0.5)) > 4.5) continue;
     await bot.equip(findItem(bot, 'bucket'), 'hand');
     await bot.lookAt(w.position.offset(0.5, 0.9, 0.5), true);
     await bot.waitForTicks(2);
