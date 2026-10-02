@@ -21,6 +21,7 @@ let stopping = false;
 
 startStatusServer(cfg.statusPort, () => agent);
 log.info(`方針判断: ${planner.usingLLM ? `Claude (${cfg.llm.model})` : 'ルールベース（ANTHROPIC_API_KEY 未設定）'}`);
+log.info(`チャット: ${chat.usingLLM ? 'Claude で自由に会話' : '決まった話しかけに返す（自由な会話には ANTHROPIC_API_KEY が必要）'}`);
 
 function connect() {
   log.info(`${cfg.host}:${cfg.port} に ${cfg.username} として接続します（${cfg.version || '自動判別'}）`);

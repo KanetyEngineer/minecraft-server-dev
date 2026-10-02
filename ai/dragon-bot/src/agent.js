@@ -9,6 +9,7 @@ import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
+import { typingDelay, doingPhrase } from './brain/chat.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 // ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
@@ -80,9 +81,9 @@ export class Agent {
         await this.handleAiCommand(username, cmd, false).catch((e) => log.warn(`指示の処理に失敗: ${e.message}`));
         return;
       }
-      const ctx = `${dimensionOf(bot)}にいる。いまの作業: ${this.current?.name ?? '考え中'}`;
-      const r = await this.chat.reply(bot, username, message, ctx);
-      if (r) this.say(r);
+      // 普通の会話: 人と話すように返す（打っているような間を置いてから）
+      const r = await this.chat.reply(bot, username, message, this.chatContext(), { current: this.current?.name });
+      if (r) { await sleep(typingDelay(r)); this.say(r); }
     });
   }
 
@@ -130,10 +131,20 @@ export class Agent {
       this.interrupt(`${username} の指示で ${c.skill}`);
       return reply(`${c.skill} をやります`);
     }
-    // 決まった形でない指示: LLM で判断しているときは、次の判断で最優先にする（takeInstruction）。
-    // ルールベースのときは自由な指示は理解できないので、今の状況と使い方を返す
-    if (this.planner?.client) return this.takeInstruction(username, c.text);
-    return reply(`ごめん、今は決まった指示しか分からない。${statusLine(bot, this.memory, this.current?.name)}（${HELP}）`);
+    // 決まった形でない文: LLM で判断しているときは、次の判断で最優先の指示にする（takeInstruction）。
+    // そうでなければ会話として返す
+    if (this.planner?.usingLLM) return this.takeInstruction(username, c.text);
+    const r = await this.chat.reply(bot, username, c.text, this.chatContext(), { force: true, current: this.current?.name });
+    await sleep(typingDelay(r ?? ''));
+    return reply(r ?? `いま${doingPhrase(this.current?.name)}`);
+  }
+
+  // チャットの返事に渡す今の状況
+  chatContext() {
+    const { bot } = this;
+    const p = bot.entity?.position;
+    return `${dimensionOf(bot)}${p ? ` (${Math.round(p.x)}, ${Math.round(p.y)}, ${Math.round(p.z)})` : ''}にいる。`
+      + `いまの作業: ${doingPhrase(this.current?.name)}。体力 ${Math.round(bot.health ?? 0)}/20。${statusLine(bot, this.memory, this.current?.name)}`;
   }
 
   interrupt(reason) {
@@ -183,6 +194,7 @@ export class Agent {
     }
     if (this.reflexBusy) return;
     this.noticeDanger();
+    this.equipShieldIfLoose();
     // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
     const feetBlock = bot.blockAt(bot.entity.position.offset(0, 0.2, 0));
     const web = [feetBlock, headBlock].find((b) => b?.name === 'cobweb');
@@ -287,6 +299,18 @@ export class Agent {
         }
         await runAway(action.from, 12);
       } else if (action.kind === 'shield') {
+        // 溶岩のそばだと矢のノックバックで落ちる（溶岩のそばでスケルトンに撃たれて死んだ）。まず溶岩から離れる
+        const lava = this.nearestLava(4);
+        if (lava) {
+          const p = bot.entity.position;
+          const ax = p.x - (lava.x + 0.5); const az = p.z - (lava.z + 0.5); const ad = Math.hypot(ax, az) || 1;
+          log.warn('溶岩のそばで撃たれているので、溶岩から離れる');
+          await Promise.race([
+            bot.pathfinder.goto(new goals.GoalNearXZ(p.x + (ax / ad) * 6, p.z + (az / ad) * 6, 1)).catch(() => {}),
+            sleep(5000),
+          ]);
+          try { bot.pathfinder.setGoal(null); } catch {}
+        }
         // スケルトン: 矢の飛んでくる方向に壁を置いて盾にし、少し待ってから作業に戻る
         const n = await placeWallToward(ctx, action.from, 2).catch(() => 0);
         log.info(`スケルトンの方向に壁を ${n} 個置いた`);
@@ -373,6 +397,27 @@ export class Agent {
       bot.setControlState('jump', true);
       setTimeout(() => bot.clearControlStates(), 1200);
     }
+  }
+
+  // 近くの溶岩（足の高さ ±1）。無ければ null
+  nearestLava(radius) {
+    const { bot } = this;
+    const id = bot.registry.blocksByName.lava?.id;
+    if (id === undefined) return null;
+    const me = bot.entity.position;
+    return bot.findBlocks({ matching: id, maxDistance: radius, count: 20 })
+      .filter((p) => Math.abs(p.y - me.y) <= 1.5)
+      .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0] ?? null;
+  }
+
+  // 盾を持っているのに左手に無ければ持たせる（死んで拾い直したときなど、盾を構えられず矢とノックバックを受けていた）
+  equipShieldIfLoose() {
+    const { bot } = this;
+    if (Date.now() - (this.shieldCheckAt ?? 0) < 5000 || bot.currentWindow) return;
+    this.shieldCheckAt = Date.now();
+    if (bot.inventory.slots[45]?.name === 'shield') return;
+    const shield = bot.inventory.items().find((i) => i.name === 'shield');
+    if (shield) bot.equip(shield, 'off-hand').then(() => log.info('盾を左手に持った')).catch(() => {});
   }
 
   // 廃坑（ドクグモのスポナー、まとまったクモの巣）を見つけたら場所を記録する。近くでは掘らない（common.js の nearDanger）
