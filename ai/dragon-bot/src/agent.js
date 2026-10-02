@@ -227,6 +227,7 @@ export class Agent {
     }
     this.noticeDanger();
     this.equipShieldIfLoose();
+    this.emergencyEat();
     // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
     const feetBlock = bot.blockAt(bot.entity.position.offset(0, 0.2, 0));
     const web = [feetBlock, headBlock].find((b) => b?.name === 'cobweb');
@@ -440,6 +441,33 @@ export class Agent {
     return bot.findBlocks({ matching: id, maxDistance: radius, count: 20 })
       .filter((p) => Math.abs(p.y - me.y) <= 1.5)
       .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0] ?? null;
+  }
+
+  // 非常食: 満腹度が 6 以下でふつうの食べ物が無ければ、腐った肉やクモの目でも食べる
+  // （食べ物が無いまま夜に出歩いて体力が戻らず、ゾンビ 1 体に 2 秒で倒された。腐った肉はゾンビを倒すと手に入る）
+  emergencyEat() {
+    const { bot } = this;
+    if (Date.now() - (this.eatCheckAt ?? 0) < 4000 || bot.currentWindow || bot.autoEat?.isEating) return;
+    this.eatCheckAt = Date.now();
+    if (typeof bot.food !== 'number' || bot.food > 6) return;
+    const banned = new Set(['rotten_flesh', 'spider_eye', 'poisonous_potato', 'pufferfish', 'chorus_fruit', 'suspicious_stew']);
+    const foods = bot.registry.foodsByName ?? {};
+    const items = bot.inventory.items();
+    if (items.some((i) => foods[i.name] && !banned.has(i.name))) return; // ふつうの食べ物は auto-eat が食べる
+    const emergency = items.find((i) => i.name === 'rotten_flesh') ?? items.find((i) => i.name === 'spider_eye');
+    if (!emergency) return;
+    this.reflexBusy = true;
+    (async () => {
+      try {
+        await bot.equip(emergency, 'hand');
+        await bot.consume();
+        log.info(`非常食に ${emergency.name} を食べた（満腹度 ${bot.food}）`);
+      } catch (e) {
+        log.warn(`非常食を食べられなかった: ${e.message}`);
+      } finally {
+        this.reflexBusy = false;
+      }
+    })();
   }
 
   // 盾を持っているのに左手に無ければ持たせる（死んで拾い直したときなど、盾を構えられず矢とノックバックを受けていた）
