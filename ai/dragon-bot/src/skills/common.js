@@ -1169,6 +1169,21 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
           await bot.waitForTicks(3);
         }
         if (stuck >= 3) break;
+        // 砂や砂利が上から落ちてくる途中で跳ぶと、落ちてきたブロックに頭が埋まって窒息する（実際に窒息死した）。
+        // 頭上が空いたまま、落下中のブロックも無い状態が 6 ティック続くまで待つ（落ちてきたら掘り直す）
+        let clear = 0;
+        for (let t = 0; t < 40 && clear < 6; t++) {
+          await bot.waitForTicks(1);
+          const b = bot.blockAt(above);
+          const falling = Object.values(bot.entities).some((e) => e.name === 'falling_block'
+            && Math.abs(e.position.x - (above.x + 0.5)) < 1 && Math.abs(e.position.z - (above.z + 0.5)) < 1 && e.position.y > above.y - 1);
+          if (b && b.boundingBox === 'block') {
+            clear = 0;
+            if (bot.canDigBlock(b)) { await equipCheapestTool(bot, b).catch(() => {}); await bot.dig(b, true).catch(() => {}); }
+          } else if (falling) clear = 0;
+          else clear++;
+        }
+        if (clear < 6) { reason = '上から砂や砂利が落ち続ける'; break; }
         // 掘った石が落ちてきて拾われるのを少し待つ（それを足場に使う）
         for (let t = 0; t < 10 && !cheapBlock(bot); t++) await bot.waitForTicks(1);
         if (!cheapBlock(bot)) { reason = '足場のブロックが無い'; stuck = 3; break; }
