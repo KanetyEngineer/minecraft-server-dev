@@ -134,7 +134,10 @@ export class Agent {
     if (creeper) action = { kind: 'creeper', from: creeper };
     else if (drowned && bot.entity.isInWater && drowned.position.distanceTo(pos) < 12 && Date.now() - (this.leftWaterAt ?? 0) > 8000) action = { kind: 'leaveWater', from: drowned };
     else if (drowned && drownedInWater && !bot.entity.isInWater && recentlyHurt && drowned.heldItem?.name !== 'trident') action = { kind: 'inland', from: drowned };
-    else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat) action = { kind: 'shield', from: archer };
+    // すぐそばで殴ってくる敵がいるときは、遠くのスケルトンへの壁より先にそちらに対処する
+    //（洞窟でスケルトンに壁を作っている間に、そばのドクグモに倒された）
+    else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat
+      && !(threat && threat.position.distanceTo(pos) < 3.5)) action = { kind: 'shield', from: archer };
     else if (threat && recentlyHurt && bot.health <= 6) action = { kind: 'flee', from: threat };
     else if (threat && recentlyHurt && ZOMBIES.has(threat.name) && dimensionOf(bot) !== 'the_end') action = { kind: 'pillar', target: threat };
     else if (threat && recentlyHurt && !inCombat) action = { kind: 'fight', target: threat };
