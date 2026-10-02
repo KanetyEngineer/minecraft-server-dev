@@ -7,7 +7,7 @@ import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallTow
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
-import { foodPoints } from './util/items.js';
+import { foodPoints, dropPlan } from './util/items.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
 import { typingDelay, doingPhrase } from './brain/chat.js';
@@ -231,6 +231,7 @@ export class Agent {
     this.noticeDanger();
     this.equipShieldIfLoose();
     this.emergencyEat();
+    this.dropJunkIfFull();
     // クモの巣に引っかかったら、剣で切って抜ける（巣の中では動けず、ドクグモに一方的にやられる）
     const feetBlock = bot.blockAt(bot.entity.position.offset(0, 0.2, 0));
     const web = [feetBlock, headBlock].find((b) => b?.name === 'cobweb');
@@ -505,6 +506,29 @@ export class Agent {
         log.info(`非常食に ${emergency.name} を食べた（満腹度 ${bot.food}）`);
       } catch (e) {
         log.warn(`非常食を食べられなかった: ${e.message}`);
+      } finally {
+        this.reflexBusy = false;
+      }
+    })();
+  }
+
+  // 持ち物がほぼいっぱい（空き 4 以下）なら、いらない物を捨てる（いっぱいだと掘った鉱石を拾えない）。
+  // 丸石・土などは足場や柱に使うので、決めた数だけ残す
+  dropJunkIfFull() {
+    const { bot } = this;
+    if (Date.now() - (this.junkCheckAt ?? 0) < 5000 || bot.currentWindow || bot.targetDigBlock || bot.autoEat?.isEating) return;
+    this.junkCheckAt = Date.now();
+    if (bot.inventory.emptySlotCount() > 4) return;
+    const plan = dropPlan(bot.inventory.items());
+    if (plan.length === 0) return;
+    this.reflexBusy = true;
+    (async () => {
+      try {
+        for (const { name, count } of plan) {
+          const id = bot.registry.itemsByName[name]?.id;
+          if (id !== undefined && count > 0) await bot.toss(id, null, count).catch(() => {});
+        }
+        log.info(`持ち物がいっぱいなので捨てた: ${plan.map((p) => `${p.name}×${p.count}`).join(', ')}`);
       } finally {
         this.reflexBusy = false;
       }

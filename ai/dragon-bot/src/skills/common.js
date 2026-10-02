@@ -3,7 +3,7 @@
 import pathfinderPkg from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
-import { count, findItem, isLog, isPlanks, LOGS } from '../util/items.js';
+import { count, findItem, isLog, isPlanks, LOGS, wantsPickup } from '../util/items.js';
 import { dimensionOf } from '../brain/progress.js';
 
 const { goals } = pathfinderPkg;
@@ -474,7 +474,9 @@ export async function pickUpItems(ctx, radius = 8) {
   const { bot } = ctx;
   for (let i = 0; i < 10; i++) {
     abortable(ctx);
-    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(bot.entity.position) < radius);
+    // 持ち物がいっぱいで捨てた物（丸石の余りなど）は拾い直さない
+    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(bot.entity.position) < radius
+      && wantsPickup(bot, e.getDroppedItem?.()?.name));
     if (!item) return;
     await bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.8)).catch(() => {});
     await sleep(250);

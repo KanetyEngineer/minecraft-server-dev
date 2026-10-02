@@ -64,3 +64,29 @@ export function foodPoints(bot) {
 export function emptySlots(bot) {
   return bot.inventory.emptySlotCount();
 }
+
+// 持ち物がいっぱいのときに捨てる物と、残す数
+const JUNK_KEEP = {
+  cobblestone: 64, cobbled_deepslate: 32, dirt: 32, netherrack: 64, andesite: 0, diorite: 0, granite: 0, tuff: 0, calcite: 0,
+  gravel: 8, sand: 8, red_sand: 0, deepslate: 0, blackstone: 32, basalt: 0, rotten_flesh: 8, poisonous_potato: 0, wheat_seeds: 0,
+  red_tulip: 0, dandelion: 0, poppy: 0, leaf_litter: 0, birch_button: 0, flint: 8, raw_copper: 0, copper_ingot: 0,
+};
+export function dropPlan(items) {
+  const totals = new Map();
+  for (const i of items) totals.set(i.name, (totals.get(i.name) ?? 0) + i.count);
+  const out = [];
+  for (const [name, total] of totals) {
+    const keep = JUNK_KEEP[name] ?? (/_sapling$/.test(name) ? 0 : undefined);
+    if (keep === undefined || total <= keep) continue;
+    out.push({ name, count: total - keep });
+  }
+  return out;
+}
+
+
+// 落ちている物を拾うか: 捨てる物の一覧にあって、すでに残す数以上持っている物は拾わない（捨てた物を拾い直さない）
+export function wantsPickup(bot, name) {
+  const keep = JUNK_KEEP[name] ?? (/_sapling$/.test(name) ? 0 : undefined);
+  if (keep === undefined) return true;
+  return count(bot, name) < keep;
+}
