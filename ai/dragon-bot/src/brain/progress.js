@@ -23,7 +23,8 @@ export function milestones(bot, memory) {
     food: foodPoints(bot) >= 10,
     ironPickaxe: anyOf(bot, ['iron_pickaxe', 'diamond_pickaxe']),
     ironSword: anyOf(bot, ['iron_sword', 'diamond_sword']),
-    shield: has(bot, 'shield'),
+    // 左手（装備の欄）に持っている盾も数える
+    shield: has(bot, 'shield') || (bot.inventory.slots ?? []).some((s) => s?.name === 'shield'),
     armor: armorPieces >= 3,
     bucket: anyOf(bot, ['bucket', 'water_bucket', 'lava_bucket']),
     waterBucket: has(bot, 'water_bucket'),

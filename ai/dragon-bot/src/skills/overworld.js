@@ -312,10 +312,12 @@ export async function getIronGear(ctx, { armor = false } = {}) {
   if (!findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) want.push(['iron_pickaxe', 3]);
   if (!findItem(bot, 'iron_sword') && !findItem(bot, 'diamond_sword')) want.push(['iron_sword', 2]);
   // 盾は鉄 1 個で作れて矢を防げるので、道具と一緒に最初から作る
-  if (!findItem(bot, 'shield')) want.push(['shield', 1]);
+  // 左手に持っている盾は findItem（持ち物の欄）に出てこないので、装備の欄も見る（無いと思って何度も作っていた）
+  const hasShield = () => bot.inventory.slots.some((s) => s?.name === 'shield');
+  if (!hasShield()) want.push(['shield', 1]);
   if (!findItem(bot, 'bucket') && !findItem(bot, 'water_bucket') && !findItem(bot, 'lava_bucket')) want.push(['bucket', 3]);
   if (armor) {
-    for (const [p, c] of [['iron_chestplate', 8], ['iron_leggings', 7], ['iron_helmet', 5], ['iron_boots', 4], ['shield', 1]]) {
+    for (const [p, c] of [['iron_chestplate', 8], ['iron_leggings', 7], ['iron_helmet', 5], ['iron_boots', 4]]) {
       const worn = bot.inventory.slots.some((s) => s && s.name.endsWith(p.split('_')[1]) && !s.name.startsWith('leather'));
       if (!worn && !want.some(([n]) => n === p)) want.push([p, c]);
     }
