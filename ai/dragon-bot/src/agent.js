@@ -458,11 +458,24 @@ export class Agent {
         const land = this.findLandAwayFrom(p.offset(0, 0, 0));
         if (land) {
           log.info(`水から上がれないので、岸 (${land.x}, ${land.y}, ${land.z}) へ泳いで上がる`);
-          bot.lookAt(new Vec3(land.x + 0.5, land.y + 1, land.z + 0.5), true).catch(() => {});
-          bot.setControlState('forward', true);
-          bot.setControlState('jump', true);
-          bot.setControlState('sprint', true);
-          setTimeout(() => bot.clearControlStates(), 3000);
+          // 反射として 4 秒間ほかの行動を止める（止めないと次のスキルの pathfinder がすぐ操作を消し、1 秒も泳げていなかった）
+          this.reflexBusy = true;
+          const target = new Vec3(land.x + 0.5, land.y + 1, land.z + 0.5);
+          (async () => {
+            try {
+              try { bot.pathfinder.setGoal(null); } catch {}
+              for (let t = 0; t < 40 && (bot.entity.isInWater || bot.blockAt(bot.entity.position)?.name === 'water'); t++) {
+                await bot.lookAt(target, true).catch(() => {});
+                bot.setControlState('forward', true);
+                bot.setControlState('jump', true);
+                bot.setControlState('sprint', true);
+                await bot.waitForTicks(2);
+              }
+            } finally {
+              bot.clearControlStates();
+              this.reflexBusy = false;
+            }
+          })();
           return;
         }
       }
