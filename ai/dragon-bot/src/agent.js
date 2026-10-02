@@ -10,6 +10,8 @@ import { log } from './log.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
 import { typingDelay, doingPhrase } from './brain/chat.js';
+import { inLava, isBurning, escapeLava, extinguish, recoverPouredWater } from './skills/lava.js';
+import { findItem } from './util/items.js';
 
 const ZOMBIES = new Set(['zombie', 'husk', 'drowned', 'zombie_villager']);
 // ゲーム内チャットでの指示の書き方: 「ai 村へ行って」「@DragonBot 木を集めて」「!ai 止まって」。
@@ -168,6 +170,44 @@ export class Agent {
   async reflexTick() {
     const { bot } = this;
     if (!bot.entity) return;
+    // 溶岩: 入ったら何よりも先に脱出する（3〜4 秒で死ぬ）。息継ぎや戦闘の最中でも割り込む
+    if (inLava(bot) && !this.lavaBusy) {
+      this.lavaBusy = true;
+      this.stopBody();
+      this.reflexBusy = true;
+      try {
+        this.interrupt('溶岩から脱出');
+        log.warn(`溶岩に入った（体力 ${Math.round(bot.health)}）。すぐ脱出する`);
+        const ctx = this.makeCtx(new AbortController());
+        const ok = await escapeLava(ctx);
+        if (ok) {
+          log.warn(`溶岩から出た（体力 ${Math.round(bot.health)}）`);
+          if (isBurning(bot)) await extinguish(ctx).catch(() => false);
+          await recoverPouredWater(ctx).catch(() => false);
+        } else {
+          log.warn('溶岩から出られなかった');
+        }
+        this.history.push({ skill: '反射:lava', args: {}, ok, result: ok ? '溶岩から脱出した' : '溶岩から出られなかった' });
+      } finally {
+        bot.clearControlStates();
+        this.reflexBusy = false;
+        this.lavaBusy = false;
+      }
+      return;
+    }
+    // 燃えているだけ（溶岩のそばの火など）: オーバーワールドで水入りバケツがあれば足元に水を置いて消し、すぐ回収する
+    if (isBurning(bot) && !this.reflexBusy && dimensionOf(bot) === 'overworld' && findItem(bot, 'water_bucket')
+      && bot.entity.onGround && Date.now() - (this.extinguishAt ?? 0) > 15_000) {
+      this.extinguishAt = Date.now();
+      this.reflexBusy = true;
+      try {
+        this.stopBody();
+        log.warn('燃えているので水で消す');
+        const ok = await extinguish(this.makeCtx(new AbortController()));
+        log.info(ok ? '火を消した' : '火を消せなかった');
+      } finally { this.reflexBusy = false; }
+      return;
+    }
     // 息: 頭まで水に浸かって酸素が減ってきたら、作業を止めて真上に浮いて息継ぎする（何よりも優先）。
     // ほかの反射（戦闘など）の最中でも割り込む（戦っている間に溺れたことがある）
     const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
@@ -175,7 +215,7 @@ export class Agent {
     if (headBlock && !isWetBlock(headBlock) && bot.entity.onGround && !bot.entity.isInWater) this.lastDryPos = bot.entity.position.floored();
     // 頭の位置のブロック名では判定しない（昆布・海草・泡の柱の中だと water 以外の名前になり、反応せずに溺れていた）。
     // 酸素は水に潜っているときだけ減るので、酸素の値だけで判定する
-    if (bot.oxygenLevel !== undefined && bot.oxygenLevel !== null && bot.oxygenLevel < 12 && !this.airBusy) {
+    if (bot.oxygenLevel !== undefined && bot.oxygenLevel !== null && bot.oxygenLevel < 12 && !this.airBusy && !this.lavaBusy) {
       this.airBusy = true;
       this.stopBody(); // 戦闘などほかの反射の動きも止める
       this.reflexBusy = true;

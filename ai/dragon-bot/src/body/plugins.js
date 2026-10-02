@@ -6,6 +6,7 @@ import toolPkg from 'mineflayer-tool';
 import armorManager from 'mineflayer-armor-manager';
 import hawkeyePkg from 'minecrafthawkeye';
 import { loader as autoEat } from 'mineflayer-auto-eat';
+import { lavaEdgeCost } from '../skills/lava.js';
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -71,6 +72,8 @@ export function configureBody(bot) {
     .filter((id) => id !== undefined);
   // 溶岩の近くや奈落ギリギリは避ける
   mv.maxDropDown = 4;
+  // 溶岩のとなりを通るマスは高コストにして、少し遠回りでも溶岩から離れた道を選ぶ（滑り・ノックバックで落ちない）
+  mv.exclusionAreasStep.push((block) => lavaEdgeCost(bot, block));
   // クモの巣は通らない（廃坑の毒グモスポナーの周りに多く、はまると毒グモに囲まれる）
   const cobweb = bot.registry.blocksByName.cobweb?.id;
   if (cobweb !== undefined) mv.blocksToAvoid.add(cobweb);
@@ -191,6 +194,7 @@ export function tuneMovementsForDimension(bot) {
   if (!mv) return;
   const nether = bot.game?.dimension?.includes('nether');
   mv.maxDropDown = nether ? 3 : 4;
+  mv.allowParkour = !nether; // ネザーのすき間の下は溶岩が多いので、飛び越えずに回り道する
   mv.infiniteLiquidDropdownDistance = !nether; // ネザーの液体は溶岩なので「水に落ちれば安全」を無効化
   // 水の中は遅く、溺れやすく、ドラウンドもいるので、陸の道が少し遠いだけなら陸を通る
   mv.liquidCost = nether ? 50 : 3;
