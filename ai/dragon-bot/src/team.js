@@ -28,7 +28,7 @@ export const STRATEGIES = [
   { name: 'ダイヤ掘り', description: 'ダイヤのツルハシで黒曜石を掘ってゲートを建てる', portalByDiamonds: true },
 ];
 
-// 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7）
+// 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7、DragonBot07 → 7。番号は 2 桁表示でも 1 桁でも同じ扱い）
 export function indexOf(name) {
   const m = /(\d+)$/.exec(name ?? '');
   return m ? Number(m[1]) : 1;
@@ -49,7 +49,7 @@ export class Team {
     try { fs.mkdirSync(this.dir, { recursive: true }); } catch {}
   }
 
-  // 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7）
+  // 名前の末尾の番号（DragonBot → 1、DragonBot7 → 7、DragonBot07 → 7）
   get index() {
     return indexOf(this.name);
   }

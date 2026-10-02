@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Team } from '../src/team.js';
+import { Team, indexOf, strategyFor } from '../src/team.js';
 import { nextStep, setTeamContext } from '../src/brain/progress.js';
 import { fakeBot, fakeMemory } from './fakebot.js';
 
@@ -150,4 +150,20 @@ test('独立して動くとき、番号ごとに進め方が変わる（防具�
   } finally {
     setTeamContext({ role: 'leader', team: null });
   }
+});
+
+test('番号を 2 桁にした名前（DragonBot01 ...）でも番号・進め方・向きは 1 桁名と同じ', () => {
+  assert.equal(indexOf('DragonBot01'), 1);
+  assert.equal(indexOf('DragonBot07'), 7);
+  assert.equal(indexOf('DragonBot10'), 10);
+  assert.equal(indexOf('DragonBot50'), 50);
+  for (let n = 1; n <= 50; n++) {
+    const two = `DragonBot${String(n).padStart(2, '0')}`;
+    const one = n === 1 ? 'DragonBot' : `DragonBot${n}`;
+    assert.equal(indexOf(two), indexOf(one), two);
+    assert.equal(strategyFor(two), strategyFor(one), two);
+  }
+  const dir = tmp();
+  assert.equal(new Team({ dir, name: 'DragonBot01', role: 'leader' }).index, 1);
+  assert.equal(new Team({ dir, name: 'DragonBot09', role: 'leader' }).homeHeading(), new Team({ dir, name: 'DragonBot9', role: 'leader' }).homeHeading());
 });

@@ -16,6 +16,7 @@
 3. `.env.example` を `.env` にコピーします。Claude を使う場合は `ANTHROPIC_API_KEY` を書きます。
 4. `node --env-file=.env src/index.js`
 5. 状態は http://localhost:3007/ で見られます。記憶は `data/memory.json` に残ります。
+6. 何体もまとめて動かすときは `bash scripts/start-team.sh 10 solo`（10 体が独立して動く）。名前は番号を 2 桁にした DragonBot01〜DragonBot50 で、記憶・ログ・状態ページは 1 体ずつ分かれます（1 体目は `data/`・`logs/`・3007、2 体目以降は `data2/`・`logs2/`・3008 ...）。動かしたまま足すときは `bash scripts/start-team.sh add 11 20`、全部止めるときは `bash scripts/start-team.sh stop`。鯖のホワイトリストには DragonBot01〜DragonBot50 を登録しておきます。
 
 ## バージョン
 Mineflayer は Minecraft 26.1 までの対応なので、試験鯖は 1.21.11 にしています。
