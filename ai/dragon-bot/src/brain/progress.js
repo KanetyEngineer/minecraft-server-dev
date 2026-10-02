@@ -174,7 +174,9 @@ function nextStepRaw(bot, memory) {
   if (memory.getPlace('village') && !memory.flag('villageLooted') && !((memory.flag('villageRetryAt') ?? 0) > Date.now())) {
     return { skill: 'lootVillage', args: { beds: 7, bread: 12 } };
   }
-  if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };
+  // 食料集めで目標に届かなかった直後は、5 以上あれば 10 分は先へ進む（近くに動物がいないのに食料集めを繰り返していた）
+  const foodRetry = (memory.flag?.('foodRetryAt') ?? 0) > Date.now() && c.food >= 5;
+  if (!m.food && !foodRetry) return { skill: 'gatherFood', args: { amount: 12 } };
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
   const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };

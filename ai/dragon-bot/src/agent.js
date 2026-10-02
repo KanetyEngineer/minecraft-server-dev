@@ -7,6 +7,7 @@ import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallTow
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
+import { foodPoints } from './util/items.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
 import { parseAiCommand, classify, statusLine, planLine, HELP } from './brain/aicommand.js';
 import { typingDelay, doingPhrase } from './brain/chat.js';
@@ -820,6 +821,8 @@ export class Agent {
     // 「原木が足りない」で失敗したら、進捗表が次に木集めを選ぶよう記録する（道具はあるので木集めが選ばれず、同じ失敗を繰り返していた）
     if (!entry.ok && /原木が足りない/.test(entry.result)) this.memory.setFlag('needWoodAt', Date.now());
     if (entry.ok && name === 'gatherWood') this.memory.setFlag('needWoodAt', 0);
+    // 食料集めが目標（蓄え 10）に届かなかったら、しばらく繰り返さない（進捗表が 5 以上なら先へ進む）
+    if (name === 'gatherFood' && foodPoints(this.bot) < 10) this.memory.setFlag('foodRetryAt', Date.now() + 10 * 60_000);
     this.history.push(entry);
     this.history = this.history.slice(-30);
     const moved = before.pos && this.bot.entity ? this.bot.entity.position.distanceTo(before.pos) : 0;

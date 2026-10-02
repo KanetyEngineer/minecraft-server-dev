@@ -225,3 +225,9 @@ test('体力が少なくても、食べ物が無く満腹度 18 未満なら休�
   b2.health = 6; b2.food = 17;
   assert.equal(nextStep(b2, fakeMemory()).skill, 'shelterForNight');
 });
+
+test('食料集めが目標に届かなかった直後は、蓄えが 5 以上なら先へ進む', () => {
+  const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_mutton: 8 });
+  assert.equal(nextStep(b, fakeMemory()).skill, 'gatherFood');
+  assert.notEqual(nextStep(b, fakeMemory({}, { foodRetryAt: Date.now() + 60_000 })).skill, 'gatherFood');
+});
