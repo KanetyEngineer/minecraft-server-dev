@@ -18,6 +18,10 @@
 5. 状態は http://localhost:3007/ で見られます。記憶は `data/memory.json` に残ります。
 6. 何体もまとめて動かすときは `bash scripts/start-team.sh 10 solo`（10 体が独立して動く）。名前は番号を 2 桁にした DragonBot01〜DragonBot50 で、記憶・ログ・状態ページは 1 体ずつ分かれます（1 体目は `data/`・`logs/`・3007、2 体目以降は `data2/`・`logs2/`・3008 ...）。動かしたまま足すときは `bash scripts/start-team.sh add 11 20`、全部止めるときは `bash scripts/start-team.sh stop`。鯖のホワイトリストには DragonBot01〜DragonBot50 を登録しておきます。
 
+## 試験鯖を Paper で軽量化する（ボットが 30 体を超えるとき）
+バニラ鯖は 50 体で 1 ティック 74 ms（上限 50 ms）まで落ちました。限界は CPU やメモリではなく、参加人数に比例して湧く敵などのエンティティ数（50 体で約 2,660 体）です。
+鯖を止めてから `powershell -ExecutionPolicy Bypass -File scripts\setup-paper.ps1` を実行すると、試験鯖を Paper に替えて（設定と start.bat は `backup_before_paper_<日時>\` に写してから）、`scripts/paper-tune.mjs` の値（湧き数・AI を動かす距離・落ちた物の寿命など。2026-10-02 に 50 体で 20 TPS・エンティティ約 410 体になった設定）を書き込みます。終わったら `start.bat` で起動します。値だけ入れ直すときは `node scripts/paper-tune.mjs <鯖のフォルダ>`（`--dry-run` で確認だけ）。
+
 ## バージョン
 Mineflayer は Minecraft 26.1 までの対応なので、試験鯖は 1.21.11 にしています。
 
