@@ -1,7 +1,7 @@
 import { Vec3 } from 'vec3';
 // LLM が細かく組み合わせるための汎用スキル
 import {
-  SkillError, abortable, halfShiftBridge, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
+  SkillError, abortable, halfShiftBridge, favoriteHeading, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
 } from './common.js';
 import { count } from '../util/items.js';
 import { sleep } from '../body/humanize.js';

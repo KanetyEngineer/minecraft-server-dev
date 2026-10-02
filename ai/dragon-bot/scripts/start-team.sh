@@ -21,7 +21,7 @@ start_bot() { # 番号 役割
   # 独立モードでは DragonBot（1 体目）だけ全部送る
   local discord=all; [ "$n" != "1" ] && discord=important
   MC_USERNAME=$name ROLE=$role DATA_DIR=data$suffix LOG_DIR=logs$suffix STATUS_PORT=$((3006 + n)) DISCORD_LEVEL=$discord \
-    nohup node --max-old-space-size=512 --env-file=.env src/index.js >> "bot-run$suffix.log" 2>&1 &
+    nohup node --max-old-space-size=1536 --env-file=.env src/index.js >> "bot-run$suffix.log" 2>&1 &
 }
 if [ "$mode" = "solo" ]; then
   for ((n = 1; n <= n_total; n++)); do start_bot "$n" solo; sleep 2; done
