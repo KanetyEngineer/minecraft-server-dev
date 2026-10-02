@@ -1,20 +1,17 @@
 #!/bin/bash
 V=$1; R=/tmp/s$V
-cd $R; echo "#### potion-ish projectile classes"; find . -path '*projectile*' -iname '*Potion*.java'
+cd $R
 E=net/minecraft/world/entity
 P=$E/projectile
-if [ "$V" = "1.21.1" ]; then
-python3 $GITHUB_WORKSPACE/research/decomp/extract.py $R \
-  $P/ThrownPotion.java:'*' $P/ThrowableProjectile.java:'*' \
-  $E/Entity.java:changeDimension,handlePortal,setAsInsidePortal,canChangeDimensions,restoreFrom,removeAfterChangingDimensions,isOnPortalCooldown,setPortalCooldown \
-  $P/Projectile.java:tick,restoreFrom,onHit,shoot \
-  net/minecraft/world/level/block/NetherPortalBlock.java:entityInside,getPortalDestination \
-  net/minecraft/world/entity/PortalProcessor.java:'*'
+grep -rn "getDimensionChangingDelay" --include=*.java . | head -20
+X="python3 $GITHUB_WORKSPACE/research/decomp/extract.py $R"
+$X $E/Entity.java:baseTick,getDimensionChangingDelay,processPortalCooldown \
+   net/minecraft/world/level/block/HoneyBlock.java:entityInside,isSlidingDown,doSlideMovement,maybeDoSlideEffects
+if [ "$V" = "1.21.11" ]; then
+  $X $P/throwableitemprojectile/AbstractThrownPotion.java:onHit,onHitBlock,onHitAsPotion \
+     $P/throwableitemprojectile/ThrownSplashPotion.java:'*' \
+     $E/Entity.java:applyEffectsFromBlocks,checkInsideBlocks \
+     $P/Projectile.java:hitTargetOrDeflectSelf
 else
-python3 $GITHUB_WORKSPACE/research/decomp/extract.py $R \
-  $P/AbstractThrownPotion.java:'*' $P/ThrowableProjectile.java:'*' \
-  $E/Entity.java:teleport,teleportCrossDimension,teleportSameDimension,handlePortal,setAsInsidePortal,canTeleport,canUsePortal,restoreFrom,removeAfterChangingDimensions,isOnPortalCooldown \
-  $P/Projectile.java:tick,restoreFrom,onHit,teleport \
-  net/minecraft/world/level/block/NetherPortalBlock.java:entityInside,getPortalDestination \
-  net/minecraft/world/entity/PortalProcessor.java:'*'
+  $X $E/Entity.java:checkInsideBlocks $P/Projectile.java:hitTargetOrDeflectSelf
 fi
