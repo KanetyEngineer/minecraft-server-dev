@@ -138,3 +138,8 @@ test('体力が 8 以下なら、昼でも穴で休んで回復する', () => {
   b.health = 18;
   assert.notEqual(nextStep(b, fakeMemory()).skill, 'shelterForNight');
 });
+test('防具の無い夜は、死亡地点の回収より穴にこもるのが先', () => {
+  const m = fakeMemory(); m.data.deaths = [{ x: 0, y: 64, z: 0, dimension: 'overworld', at: new Date().toISOString() }];
+  assert.equal(nextStep(fakeBot({}, { isDay: false }), m).skill, 'shelterForNight');
+  assert.equal(nextStep(fakeBot({}, { isDay: true }), m).skill, 'recoverItems');
+});

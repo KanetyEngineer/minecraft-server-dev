@@ -63,7 +63,9 @@ export function nextStep(bot, memory) {
   if (m.dragonDefeated) return { skill: 'celebrate', args: {} };
   // 死んだら、落とした物が消える（5 分）前に拾いに戻る
   const death = memory.data?.deaths?.at(-1);
-  if (death && !death.recovered && death.dimension === dim && Date.now() - Date.parse(death.at) < 4 * 60_000) {
+  // ただし防具の無い夜は回収より身を守るのが先（夜の海辺へ回収に戻り、トライデントのドラウンドにまた倒された）
+  const unsafeNight = night && !m.armor && dim === 'overworld';
+  if (death && !death.recovered && !unsafeNight && death.dimension === dim && Date.now() - Date.parse(death.at) < 4 * 60_000) {
     return { skill: 'recoverItems', args: {} };
   }
   if (dim === 'the_end') {
