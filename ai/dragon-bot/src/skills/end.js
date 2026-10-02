@@ -1,5 +1,5 @@
 // ジ・エンド: エンドクリスタルを壊し、エンダードラゴンを倒す
-import { SkillError, abortable, travelTo, dim, goals, Vec3, pillarUp, pillarDown } from './common.js';
+import { SkillError, abortable, travelTo, dim, goals, Vec3, pillarUp, pillarDown, halfShiftBridge } from './common.js';
 import { shootAt } from './nether.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep, smoothLookAt } from '../body/humanize.js';
@@ -26,7 +26,17 @@ async function goToMainIsland(ctx) {
   const { bot } = ctx;
   if (Math.hypot(bot.entity.position.x, bot.entity.position.z) < 50) return;
   // 出現位置の黒曜石の足場から本島まで、必要なら橋をかけて歩く（pathfinder が足場ブロックを置く）
-  await travelTo(ctx, 20, 0, { step: 32, range: 4 });
+  await travelTo(ctx, 20, 0, { step: 32, range: 4 }).catch((e) => ctx.log.warn(`本島への移動: ${e.message}`));
+  // まだ遠ければ（足場の外が奈落で経路が見つからないなど）、半シフトで本島の方へ橋をかける
+  for (let i = 0; i < 8 && Math.hypot(bot.entity.position.x, bot.entity.position.z) >= 50; i++) {
+    abortable(ctx);
+    const p = bot.entity.position;
+    const [dx, dz] = Math.abs(p.x) > Math.abs(p.z) ? [-Math.sign(p.x), 0] : [0, -Math.sign(p.z)];
+    const n = await halfShiftBridge(ctx, { dx, dz, length: 16 });
+    ctx.log.info(`本島へ半シフトで橋をかけた（${n} 個）`);
+    await travelTo(ctx, 20, 0, { step: 32, range: 4 }).catch(() => {});
+    if (n === 0) break;
+  }
 }
 
 export async function destroyEndCrystals(ctx) {

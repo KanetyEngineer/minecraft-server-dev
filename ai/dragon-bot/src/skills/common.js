@@ -883,6 +883,65 @@ export async function pillarUp(ctx, height = 2) {
   return placed;
 }
 
+// 半シフト（PvP やスピードブリッジの技）で、(dx, dz) の向きに橋をかけながら進む。
+// 進む向きに背を向けて足元を見下ろし、しゃがんで縁まで下がって（しゃがんでいれば落ちない）足元の先にブロックを置き、
+// しゃがみを一瞬離して普通の速さで新しいブロックの上へ下がる、をくり返す。
+// しゃがみっぱなしで歩くより速く、縁で必ずしゃがむので落ちない。dx, dz は -1/0/1（どちらか一方だけ）。置いた数を返す
+export async function halfShiftBridge(ctx, { dx, dz, length = 8 }) {
+  const { bot } = ctx;
+  let placed = 0;
+  // 背中を進む向けに: mineflayer の向き yaw の正面は (-sin, -cos) なので、正面を (-dx, -dz) にする
+  await bot.look(Math.atan2(dx, dz), -1.2, true);
+  const offset = (feet) => {
+    const p = bot.entity.position;
+    return (p.x - (feet.x + 0.5)) * dx + (p.z - (feet.z + 0.5)) * dz;
+  };
+  try {
+    for (let i = 0; i < length; i++) {
+      abortable(ctx);
+      const feet = bot.entity.position.floored();
+      const support = bot.blockAt(feet.offset(0, -1, 0));
+      if (!support || support.boundingBox !== 'block') break;
+      const target = feet.offset(dx, 0, dz);
+      const ahead = bot.blockAt(target.offset(0, -1, 0));
+      const body = [bot.blockAt(target), bot.blockAt(target.offset(0, 1, 0))];
+      if (body.some((b) => !b || b.boundingBox !== 'empty')) break; // 進む先が壁
+      if (!ahead || ahead.boundingBox !== 'block') {
+        if (ahead && ['lava', 'water'].includes(ahead.name) === false && ahead.boundingBox !== 'empty') break;
+        const item = cheapBlock(bot);
+        if (!item) break;
+        await bot.equip(item, 'hand');
+        // 1. しゃがんだまま縁まで下がる（下がり続けたまま置く）
+        bot.setControlState('sneak', true);
+        bot.setControlState('back', true);
+        for (let t = 0; t < 30 && offset(feet) < 0.25; t++) await bot.waitForTicks(1);
+        // 2. 足元のブロックの、進む向きの面に置く
+        try {
+          // 視線はすでに足元の先を向いているので、置くときは振り向かない（毎回なめらかに視線を動かすと 1 個 1.5 秒かかった）
+          const t0 = Date.now();
+          await bot._placeBlockWithOptions(support, new Vec3(dx, 0, dz), { swingArm: 'right', forceLook: true });
+          placed++;
+          ctx.state.lastPlaceMs = Date.now() - t0;
+        } catch {
+          break;
+        }
+        // 置くときに置き場所の方を向くので、すぐ（瞬時に）背中を進む向きに戻す。戻さないと逆向きに下がって落ちる
+        await bot.look(Math.atan2(dx, dz), -1.2, true);
+      }
+      // 3. 半シフト: しゃがみを離して、普通の速さで次のブロックの上へ下がる。入ったらすぐしゃがみ直す
+      bot.setControlState('sneak', false);
+      bot.setControlState('back', true);
+      // 新しいブロックの真ん中あたりまでは普通の速さで下がり、縁に近づく前にしゃがむ（ここが「半」シフト）
+      for (let t = 0; t < 20 && offset(target) < -0.1; t++) await bot.waitForTicks(1);
+      bot.setControlState('sneak', true);
+    }
+  } finally {
+    bot.setControlState('back', false);
+    bot.setControlState('sneak', false);
+  }
+  return placed;
+}
+
 // 柱を掘って降りる
 export async function pillarDown(ctx, placed) {
   const { bot } = ctx;

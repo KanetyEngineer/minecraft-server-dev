@@ -84,6 +84,10 @@ export const SKILLS = [
   def('collectDrops', gen.collectDrops, '近くに落ちているアイテムを拾う。'),
   def('recoverItems', gen.recoverItems, '最後に死んだ場所へ戻ってアイテムを回収する。'),
   def('remember', gen.remember, '今いる場所に名前を付けて覚える、またはメモを残す。', { name: str('場所の名前'), note: str('メモ') }),
+  def('bridge', gen.bridge, '半シフト（しゃがみを縁でだけ使う速い橋かけ）で、谷・溶岩・奈落の上に橋をかけて進む。', {
+    direction: { type: 'string', enum: ['east', 'west', 'south', 'north'], description: '進む向き' },
+    x: int('目標の x', -30000000, 30000000), z: int('目標の z', -30000000, 30000000), length: int('最大の長さ', 1, 64),
+  }),
   def('comeToPlayer', gen.comeToPlayer, 'プレイヤーのそばへ行く（呼ばれたとき）。', { player: str('プレイヤー名') }, ['player']),
   def('wait', gen.wait, '少し待つ（夜が明けるのを待つなど）。', { seconds: int('秒', 1, 120) }),
 ];

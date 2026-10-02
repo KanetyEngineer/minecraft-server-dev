@@ -1,7 +1,7 @@
 import { Vec3 } from 'vec3';
 // LLM が細かく組み合わせるための汎用スキル
 import {
-  SkillError, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
+  SkillError, halfShiftBridge, mineBlocks, craftItem, smelt, attackEntity, pickUpItems, exploreStep, travelTo, goTo, nearestEntityNamed, dim,
 } from './common.js';
 import { count } from '../util/items.js';
 import { sleep } from '../body/humanize.js';
@@ -115,4 +115,18 @@ export async function comeToPlayer(ctx, { player } = {}) {
   const t2 = bot.players[player]?.entity;
   if (t2) await goTo(ctx, t2.position.x, t2.position.y, t2.position.z, 2).catch(() => {});
   return `${player} のそばに来た`;
+}
+
+// 半シフトで橋をかけて進む。向きは east/west/south/north か、目標の座標（x, z）の方向
+export async function bridge(ctx, { direction, x, z, length = 16 } = {}) {
+  const { bot } = ctx;
+  const DIRS = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] };
+  let d = DIRS[String(direction ?? '').toLowerCase()];
+  if (!d && x !== undefined && z !== undefined) {
+    const ex = x - bot.entity.position.x; const ez = z - bot.entity.position.z;
+    d = Math.abs(ex) > Math.abs(ez) ? [Math.sign(ex), 0] : [0, Math.sign(ez)];
+  }
+  if (!d) throw new SkillError('向き（east/west/south/north）か目標の座標が必要');
+  const n = await halfShiftBridge(ctx, { dx: d[0], dz: d[1], length });
+  return `半シフトで橋をかけた（ブロック ${n} 個）`;
 }
