@@ -63,6 +63,45 @@ async function scoop(ctx, liquid, pos) {
   return !!findItem(bot, `${liquid}_bucket`);
 }
 
+// pos のブロックが name になるまで最大 maxTicks 待つ（バケツを使った直後はサーバーからの更新がまだ届いていないことがある）
+export async function waitForBlock(bot, pos, name, maxTicks = 6) {
+  for (let t = 0; t < maxTicks; t++) {
+    if (bot.blockAt(pos)?.name === name) return true;
+    await bot.waitForTicks(1);
+  }
+  return bot.blockAt(pos)?.name === name;
+}
+
+// T に置いた溶岩が黒曜石にならなかったとき（水の狙いがずれた）: 水をかけ直す（最大 2 回）。
+// それでも溶岩のままなら、空のバケツでくみ戻す。溶岩を残すと足元へ流れてきて死ぬ。
+export async function fixFailedCast(ctx, T, { settleMs = 700 } = {}) {
+  const { bot } = ctx;
+  const lavaLeft = () => bot.blockAt(T)?.name === 'lava';
+  for (let i = 0; i < 2 && lavaLeft(); i++) {
+    if (!findItem(bot, 'water_bucket')) {
+      // 水がよそに置かれた: 近くの水源をくみ戻す
+      const w = findVisibleBlocks(bot, ['water'], { maxDistance: 6, count: 1, visibleOnly: false, extra: (b) => b.metadata === 0 })[0];
+      if (w) await scoop(ctx, 'water', w.position).catch(() => {});
+    }
+    if (!findItem(bot, 'water_bucket')) break;
+    ctx.log.warn(`(${T}) の溶岩が黒曜石にならなかった。水をかけ直す (${i + 1}/2)`);
+    await pourAt(bot, 'water_bucket', new Vec3(T.x, T.y + 1, T.z - 1));
+    await sleep(settleMs);
+    const w = bot.blockAt(T.offset(0, 1, 0));
+    if (w && w.name === 'water') await scoop(ctx, 'water', w.position).catch(() => {});
+  }
+  if (lavaLeft()) {
+    ctx.log.warn(`(${T}) の溶岩をくみ戻す`);
+    await scoop(ctx, 'lava', T).catch(() => {});
+  }
+  // よそに置いてしまった水が残っていれば、くみ戻しておく（水バケツを失うと fillWaterBucket からやり直しになる）
+  if (!findItem(bot, 'water_bucket') && findItem(bot, 'bucket')) {
+    const w = findVisibleBlocks(bot, ['water'], { maxDistance: 6, count: 1, visibleOnly: false, extra: (b) => b.metadata === 0 })[0];
+    if (w) await scoop(ctx, 'water', w.position).catch(() => {});
+  }
+  return !lavaLeft();
+}
+
 async function refillLava(ctx, stand) {
   const { bot } = ctx;
   if (findItem(bot, 'lava_bucket')) return;
@@ -138,11 +177,17 @@ export async function castNetherPortal(ctx) {
     });
     if (f.y >= 3 && !ctx.state.raised) { await pillarUp(ctx, 1); ctx.state.raised = true; }
     await pourAt(bot, 'lava_bucket', new Vec3(T.x, T.y, oz - 1)); // T に溶岩
+    if (!(await waitForBlock(bot, T, 'lava'))) {
+      // 溶岩が T に置けていない（狙いがずれた）。水をかけても意味がないので次へ（溶岩バケツが残っていれば次の周でそのまま使う）
+      ctx.log.warn(`(${T}) に溶岩を置けなかった: ${bot.blockAt(T)?.name}`);
+      continue;
+    }
     await pourAt(bot, 'water_bucket', new Vec3(T.x, T.y + 1, oz - 1)); // T の上に水
     await sleep(700);
     // 水を回収
     const water = bot.blockAt(T.offset(0, 1, 0));
     if (water && water.name === 'water') await scoop(ctx, 'water', water.position);
+    if (bot.blockAt(T)?.name === 'lava') await fixFailedCast(ctx, T);
     const made = bot.blockAt(T);
     if (!made || made.name !== 'obsidian') ctx.log.warn(`(${T}) が黒曜石にならなかった: ${made?.name}`);
   }
