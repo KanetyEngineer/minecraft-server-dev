@@ -249,3 +249,9 @@ test('ベッドを持っていて復活地点が未設定か遠ければ、昼�
   assert.equal(nextStep(at(fakeBot(noBed), 0, 0), fakeMemory()).skill, 'makeBed');
   assert.equal(nextStep(at(fakeBot(base), 0, 0), fakeMemory({}, { respawnRetryAt: Date.now() + 60_000 })).skill, 'getIronGear');
 });
+
+test('鉄インゴットがあれば、食料より先に鉄の道具と防具を作る', () => {
+  const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, iron_ingot: 40 });
+  const s = nextStep(b, fakeMemory());
+  assert.deepEqual([s.skill, s.args], ['getIronGear', { armor: false }]);
+});
