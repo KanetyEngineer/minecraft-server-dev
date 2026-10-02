@@ -14,8 +14,11 @@ let repeats = 0;
 let timer = null;
 let sending = false;
 
-export function startDiscordLog({ botToken, channelId } = {}) {
+let prefix = '';
+export function startDiscordLog({ botToken, channelId, prefix: name } = {}) {
   if (!botToken || !channelId) return false;
+  // 複数のボットが同じチャンネルに送るので、行の頭に名前を付けて見分ける
+  prefix = name ? `${name} ` : '';
   token = botToken;
   channel = channelId;
   timer = setInterval(() => { flush().catch(() => {}); }, FLUSH_MS);
@@ -34,7 +37,8 @@ export function queueDiscord(line) {
   if (body === lastBody) { repeats++; return; }
   closeRepeats();
   lastBody = body;
-  queue.push(line.length > 400 ? `${line.slice(0, 400)}…` : line);
+  const l = prefix + line;
+  queue.push(l.length > 400 ? `${l.slice(0, 400)}…` : l);
   if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE, '…（送りきれない分を省略）');
 }
 

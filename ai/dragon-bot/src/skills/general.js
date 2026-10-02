@@ -140,3 +140,33 @@ export async function bridge(ctx, { direction, x, z, length = 16 } = {}) {
   const n = await halfShiftBridge(ctx, { dx: d[0], dz: d[1], length });
   return `半シフトで橋をかけた（ブロック ${n} 個）`;
 }
+
+// チームの仲間（リーダー）に持ち物を渡す。そばまで行って、相手の方を向いて投げる（相手が近くで拾う）。
+// items: [{ item, count }]。仲間が見えなければ、チーム情報の場所へ向かう
+export async function deliverItems(ctx, { to, items = [] } = {}) {
+  const { bot } = ctx;
+  const target = () => bot.players[to]?.entity;
+  if (!target()) {
+    const m = ctx.team?.members().find((x) => x.name === to);
+    if (!m) throw new SkillError(`${to} の場所が分からない`);
+    await travelTo(ctx, m.pos.x, m.pos.z, { range: 4 });
+  }
+  if (!target()) throw new SkillError(`${to} が見つからない`);
+  const t = target().position;
+  await goTo(ctx, t.x, t.y, t.z, 2).catch(() => {});
+  const given = [];
+  for (const { item, count } of items) {
+    const id = bot.registry.itemsByName[item]?.id;
+    const have = bot.inventory.items().filter((i) => i.name === item).reduce((s, i) => s + i.count, 0);
+    const n = Math.min(count, have);
+    if (id === undefined || n <= 0) continue;
+    const tp = target()?.position;
+    if (tp) await bot.lookAt(tp.offset(0, 1, 0), true).catch(() => {});
+    await bot.toss(id, null, n).catch(() => {});
+    given.push(`${item}×${n}`);
+  }
+  ctx.memory.setFlag('deliveredAt', Date.now());
+  if (given.length === 0) throw new SkillError('渡せる物が無かった');
+  ctx.say?.(`${to} に ${given.join('、')} を渡した`);
+  return `${to} に ${given.join('、')} を渡した`;
+}

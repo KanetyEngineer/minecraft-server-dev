@@ -79,6 +79,46 @@ function hostilesNear(bot, r) {
   return Object.values(bot.entities).filter((e) => HOSTILE_NAMES.has(e.name) && e.name !== 'enderman' && e.position?.distanceTo?.(me) < r).length;
 }
 
+// チームの役割（index.js が設定する）。1 体で動くときは leader
+const teamCtx = { role: 'leader', team: null };
+export function setTeamContext({ role, team }) {
+  teamCtx.role = role ?? 'leader';
+  teamCtx.team = team ?? null;
+}
+
+// 係の進め方: 自分の身を守る準備（道具・食料・ベッド）→ リーダーのほしい物を持っていれば渡しに行く → 担当の物を集める
+function supporterStep(role, bot, memory, m, failedRecently) {
+  const c = m._counts;
+  const beds = bot.inventory.items().filter((i) => i.name.endsWith('_bed')).reduce((s, i) => s + i.count, 0);
+  // 渡せる物があれば渡しに行く（同じ物を続けて渡しすぎないよう、渡した後 90 秒はあける）
+  const give = teamCtx.team?.deliverable(bot) ?? [];
+  const lastGive = memory.flag?.('deliveredAt') ?? 0;
+  if (give.length && Date.now() - lastGive > 90_000 && !failedRecently('deliverItems', 3)) {
+    return { skill: 'deliverItems', args: { to: give[0].to, items: give.slice(0, 4) } };
+  }
+  if (c.food < 6 && !failedRecently('gatherFood', 10)) return { skill: 'gatherFood', args: { amount: 12 } };
+  if (beds < 1 && !((memory.flag?.('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
+  if (role === 'food') {
+    // 食料と木材を多めに蓄え、羊毛でベッドを作っておく（リーダーのベッド爆破用にもなる）
+    if (c.food < 24 && !failedRecently('gatherFood', 10)) return { skill: 'gatherFood', args: { amount: 24 } };
+    if (c.logs < 16) return { skill: 'gatherWood', args: { logs: 16 } };
+    if (beds < 3 && !((memory.flag?.('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: { count: 3 } };
+    if (!failedRecently('gatherFood', 10)) return { skill: 'gatherFood', args: { amount: 40 } };
+    return { skill: 'gatherWood', args: { logs: 32 } };
+  }
+  if (role === 'iron') {
+    // 自分の鉄のツルハシを先に作り、あとは鉄と石炭を掘って精錬し、インゴットにしておく
+    if (!m.ironPickaxe || !m.ironSword) return { skill: 'getIronGear', args: { armor: false } };
+    // 自分の防具も作る（係が死ぬと集めた物を失う）
+    if (!m.armor) return { skill: 'getIronGear', args: { armor: true } };
+    const raw = count(bot, 'raw_iron');
+    if (raw >= 6) return { skill: 'smeltItem', args: { item: 'raw_iron', count: raw } };
+    if (count(bot, 'coal') < 8) return { skill: 'mineBlock', args: { block: 'coal_ore,deepslate_coal_ore', count: 8 } };
+    return { skill: 'mineBlock', args: { block: 'iron_ore,deepslate_iron_ore', count: 9 } };
+  }
+  return { skill: 'explore', args: { steps: 2 } };
+}
+
 // 地上でやるスキル（地下にいても、まず地上に出てから行う）
 const SURFACE_SKILLS = new Set(['gatherFood', 'gatherWood', 'makeBed', 'lootVillage', 'fillWaterBucket', 'useRuinedPortal', 'huntEndermen']);
 
@@ -189,6 +229,8 @@ function nextStepRaw(bot, memory) {
   // 直前に「原木が足りない」で失敗していたら、先に木を集める
   if (Date.now() - (memory.flag?.('needWoodAt') ?? 0) < 3 * 60_000 && c.logs < 3) return { skill: 'gatherWood', args: { logs: 6 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
+  // チームの係（リーダー以外）は、本筋ではなく係の仕事をする
+  if (teamCtx.role && teamCtx.role !== 'leader') return supporterStep(teamCtx.role, bot, memory, m, failedRecently);
   // 村を見つけていれば、RTA の定石どおり先に村で集める（ベッド・パン・チェストの鉄・ゴーレムの鉄）。羊や牛を探すより速い
   if (memory.getPlace('village') && !memory.flag('villageLooted') && !((memory.flag('villageRetryAt') ?? 0) > Date.now())) {
     return { skill: 'lootVillage', args: { beds: 7, bread: 12 } };

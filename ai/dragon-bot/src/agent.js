@@ -5,7 +5,8 @@ import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
 import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, equipCheapestTool, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
-import { dimensionOf } from './brain/progress.js';
+import { dimensionOf, milestones } from './brain/progress.js';
+import { leaderNeeds } from './team.js';
 import { log } from './log.js';
 import { foodPoints, dropPlan } from './util/items.js';
 import { LoopGuard, inventoryKey } from './brain/loopguard.js';
@@ -23,8 +24,8 @@ export const INSTRUCTION_RE = /^\s*(?:\/?ai|@?dragonbot|!ai)[\s:：、,]+(.+)$/i
 const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack']);
 
 export class Agent {
-  constructor({ bot, cfg, memory, planner, chat }) {
-    Object.assign(this, { bot, cfg, memory, planner, chat });
+  constructor({ bot, cfg, memory, planner, chat, team = null }) {
+    Object.assign(this, { bot, cfg, memory, planner, chat, team });
     this.history = [];
     this.chatLog = [];
     this.instructions = []; // プレイヤーからの指示（チャット「ai 〜」やささやき）
@@ -825,7 +826,7 @@ export class Agent {
   }
 
   makeCtx(controller) {
-    return { bot: this.bot, cfg: this.cfg, memory: this.memory, log, signal: controller.signal, state: this.state, say: (t) => this.say(t) };
+    return { bot: this.bot, cfg: this.cfg, memory: this.memory, log, signal: controller.signal, state: this.state, say: (t) => this.say(t), team: this.team };
   }
 
   // ---------- メインループ ----------
@@ -834,6 +835,13 @@ export class Agent {
     this.attachEvents();
     const reflexTimer = setInterval(() => this.reflexTick().catch((e) => log.warn(e.message)), 500);
     const watchdog = setInterval(() => this.watchdogTick(), 2000);
+    // チーム: 5 秒ごとに自分の状態（リーダーはほしい物も）を共有する
+    const teamTimer = this.team ? setInterval(() => {
+      try {
+        if (this.team.role === 'leader') this.team.needs = leaderNeeds(this.bot, milestones(this.bot, this.memory));
+        this.team.publish(this.bot);
+      } catch {}
+    }, 5000) : null;
     try {
       let busySince = 0;
       while (this.running) {
@@ -887,6 +895,7 @@ export class Agent {
     } finally {
       clearInterval(reflexTimer);
       clearInterval(watchdog);
+      if (teamTimer) clearInterval(teamTimer);
     }
   }
 

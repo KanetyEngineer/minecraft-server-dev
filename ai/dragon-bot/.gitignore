@@ -3,3 +3,6 @@ data/
 .env
 *.log
 logs/
+team/
+data*/
+logs*/

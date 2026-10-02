@@ -89,6 +89,10 @@ export const SKILLS = [
     direction: { type: 'string', enum: ['east', 'west', 'south', 'north'], description: '進む向き' },
     x: int('目標の x', -30000000, 30000000), z: int('目標の z', -30000000, 30000000), length: int('最大の長さ', 1, 64),
   }),
+  def('deliverItems', noteFailAt('deliverItems', gen.deliverItems), 'チームの仲間（リーダー）のそばへ行き、持ち物を投げて渡す。', {
+    to: str('渡す相手の名前'),
+    items: { type: 'array', items: { type: 'object', properties: { item: str('アイテム名'), count: int('数', 1, 64) }, required: ['item', 'count'] } },
+  }, ['to', 'items']),
   def('comeToPlayer', gen.comeToPlayer, 'プレイヤーのそばへ行く（呼ばれたとき）。', { player: str('プレイヤー名') }, ['player']),
   def('wait', gen.wait, '少し待つ（夜が明けるのを待つなど）。', { seconds: int('秒', 1, 120) }),
 ];

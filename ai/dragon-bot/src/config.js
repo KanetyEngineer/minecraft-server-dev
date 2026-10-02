@@ -48,5 +48,8 @@ export function loadConfig() {
     // ブラウザで現在の状態を見る簡易ダッシュボード（0 で無効）
     statusPort: num('STATUS_PORT', 3007),
     logDir: process.env.LOG_DIR || 'logs',
+    // チームで協力するときの役割（leader / food / iron）と、状態を共有するフォルダ
+    role: process.env.ROLE || 'leader',
+    teamDir: process.env.TEAM_DIR || 'team',
   };
 }

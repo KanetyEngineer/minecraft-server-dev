@@ -9,12 +9,18 @@ import { Agent } from './agent.js';
 import { startStatusServer } from './status.js';
 import { log, startLogFile } from './log.js';
 import { startDiscordLog } from './discord.js';
+import { Team, ROLES } from './team.js';
+import { setTeamContext } from './brain/progress.js';
 
 const cfg = loadConfig();
 startLogFile(cfg.logDir);
-if (startDiscordLog({ botToken: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID })) log.info('AI の思考ログを Discord へ送る');
+if (startDiscordLog({ botToken: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, prefix: process.env.MC_USERNAME || 'DragonBot' })) log.info('AI の思考ログを Discord へ送る');
 const memory = new Memory(cfg.dataDir);
 const planner = new Planner(cfg);
+// チーム（TEAM_DIR のフォルダで仲間と状態を共有する）。役割は ROLE（leader / food / iron）
+const team = new Team({ dir: cfg.teamDir, name: cfg.username, role: cfg.role });
+setTeamContext({ role: cfg.role, team });
+log.info(`役割: ${cfg.role}（${ROLES[cfg.role] ?? '不明'}）`);
 const chat = new ChatResponder(cfg, planner.client);
 let agent = null;
 let stopping = false;
@@ -38,7 +44,7 @@ function connect() {
   bot.once('spawn', async () => {
     configureBody(bot);
     log.info(`スポーンしました (${bot.entity.position.floored()})`);
-    agent = new Agent({ bot, cfg, memory, planner, chat });
+    agent = new Agent({ bot, cfg, memory, planner, chat, team });
     await bot.waitForChunksToLoad().catch(() => {});
     agent.run().catch((e) => log.error(e.stack ?? e.message));
   });
