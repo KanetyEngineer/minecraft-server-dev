@@ -719,7 +719,15 @@ async function sleepInShelter(ctx, feet, bedItem) {
     await bot.look(Math.atan2(-dx, -dz), -0.6, true);
     await bot.equip(bedItem, 'hand');
     await bot.placeBlock(floors[0], new Vec3(0, 1, 0));
-    const bed = bot.blockAt(a);
+    // 置いた直後は、ベッドのもう半分がまだ届いていないことがある（「there's only half bed」で寝られなかった）。
+    // 両方そろうまで少し待ってから、頭の側のブロックで寝る
+    let bed = null;
+    for (let t = 0; t < 20; t++) {
+      const blocks = [bot.blockAt(a), bot.blockAt(b)].filter((x) => x?.name?.endsWith('_bed'));
+      if (blocks.length === 2) { bed = blocks.find((x) => x.getProperties?.().part === 'head') ?? blocks[0]; break; }
+      await bot.waitForTicks(1);
+    }
+    bed ??= bot.blockAt(a);
     if (!bed || !bed.name.endsWith('_bed')) continue;
     try {
       await bot.sleep(bed);

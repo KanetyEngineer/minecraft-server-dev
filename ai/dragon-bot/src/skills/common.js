@@ -423,10 +423,18 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
     for (let s = 0; s < length && got < n; s += 4) {
       abortable(ctx);
       const p = bot.entity.position.floored();
-      try {
-        await bot.pathfinder.goto(new goals.GoalBlock(p.x + dx * 4, p.y, p.z + dz * 4));
-      } catch (e) {
-        if (e.name === 'AbortError') throw e;
+      // 4 マス先まで掘り進む。12 秒で着かなければ（砂利が落ちてくる・段差にはまる などで固まる）、向きを変える
+      //（固まったまま 20 秒たってフリーズ回避で鉄集めごと中断されていた）
+      const moved = await Promise.race([
+        bot.pathfinder.goto(new goals.GoalBlock(p.x + dx * 4, p.y, p.z + dz * 4)).then(() => true, (e) => {
+          if (e.name === 'AbortError') throw e;
+          return false;
+        }),
+        sleep(12_000).then(() => 'timeout'),
+      ]);
+      if (moved !== true) {
+        try { bot.pathfinder.setGoal(null); } catch {}
+        if (moved === 'timeout') ctx.log.info('横掘りが進まないので向きを変える');
         break;
       }
       // 掘り進んだ先が水没していたら（地下の帯水層など）、息が続かないのでこの場所での横掘りをやめる
