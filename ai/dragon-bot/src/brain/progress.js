@@ -71,6 +71,13 @@ export function dimensionOf(bot) {
 
 // ルールベースの進め方: 上から順に、まだ満たしていない最初の項目に対応するスキルを返す。
 // skill と args は skills/index.js に登録された名前と同じ。
+const HOSTILE_NAMES = new Set(['zombie', 'husk', 'drowned', 'skeleton', 'stray', 'bogged', 'creeper', 'spider', 'cave_spider', 'witch', 'enderman', 'zombie_villager', 'phantom', 'pillager']);
+function hostilesNear(bot, r) {
+  const me = bot.entity?.position;
+  if (!me || !bot.entities) return 0;
+  return Object.values(bot.entities).filter((e) => HOSTILE_NAMES.has(e.name) && e.name !== 'enderman' && e.position?.distanceTo?.(me) < r).length;
+}
+
 // 地上でやるスキル（地下にいても、まず地上に出てから行う）
 const SURFACE_SKILLS = new Set(['gatherFood', 'gatherWood', 'makeBed', 'lootVillage', 'fillWaterBucket', 'useRuinedPortal', 'huntEndermen']);
 
@@ -90,6 +97,11 @@ export function nextStep(bot, memory) {
   if (night && dimensionOf(bot) === 'overworld' && SURFACE_SKILLS.has(step.skill) && step.skill !== 'huntEndermen') {
     const m = milestones(bot, memory);
     const weak = typeof bot.health === 'number' && bot.health < 16;
+    // 防具があっても、夜の地上に敵が 3 体以上いるなら出歩かない（鉄の防具のまま、ゾンビとクリーパーに囲まれて 3 回死んだ）
+    const crowded = hostilesNear(bot, 16) >= 3;
+    if (!m.armor || crowded) {
+      if (m.armor && crowded && !isUnderground(bot)) return { skill: 'shelterForNight', args: {} };
+    }
     if (!m.armor && (isUnderground(bot) || weak)) {
       // 地上の作業ができない夜は、穴で待つより地下でできる鉄集めをする（体力に余裕があり、石のツルハシがあれば）。
       // 鉄集めは y=24 まで階段で掘り下がって横掘りするので、ずっと地下にいる
