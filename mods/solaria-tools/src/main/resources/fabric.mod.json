@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "solariatools",
+  "version": "${version}",
+  "name": "Solaria Tools",
+  "description": "Solaria SMP helpers: a Server Waypoint button in Xaero's World Map, and shared build plans for Syncmatica schematics (material assignment, live stock, build areas, progress).",
+  "authors": ["kanety"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.kanety.solaria.SolariaTools"],
+    "client": ["dev.kanety.solaria.client.SolariaToolsClient"]
+  },
+  "mixins": [{ "config": "solariatools.mixins.json", "environment": "client" }],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "syncmatica": "*",
+    "xaeroworldmap": "*",
+    "server_waypoint": "*"
+  }
+}
