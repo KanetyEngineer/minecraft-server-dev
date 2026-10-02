@@ -196,6 +196,6 @@ export async function spreadOut(ctx) {
   const d = 50 + Math.random() * 40;
   const p = bot.entity.position;
   await travelTo(ctx, p.x + Math.cos(h) * d, p.z + Math.sin(h) * d, { range: 6 }).catch(() => {});
-  ctx.memory.setFlag('spreadDone', Date.now());
+  ctx.memory.setFlag('spreadDone2', Date.now());
   return `散らばった（${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.z)}）`;
 }

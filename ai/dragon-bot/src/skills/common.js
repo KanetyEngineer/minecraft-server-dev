@@ -139,9 +139,12 @@ export async function crossByBoat(ctx, x, z) {
 // 今の向きを少し優先して、ふらふらしないようにする（海辺のスポーンで沖へ出ていき、ドラウンドに倒されていた）
 // ボットの名前から決まる「好きな向き」（ラジアン）。ボットごとに違う向きへ散らばる
 export function favoriteHeading(bot) {
-  let h = 0;
-  for (const ch of String(bot.username ?? '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return ((h % 360) / 360) * Math.PI * 2;
+  // FNV-1a に最後のかき混ぜを加える（名前が 1 文字違うだけのボットでも、向きが大きく違うように。
+  //  単純な足し算では DragonBot2 と DragonBot7 が 5 度しか違わず、同じ所へ散らばっていた）
+  let h = 0x811c9dc5;
+  for (const ch of String(bot.username ?? '')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193); }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return ((h >>> 0) / 0x100000000) * Math.PI * 2;
 }
 
 export function chooseExploreHeading(bot, current) {

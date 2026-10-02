@@ -873,7 +873,7 @@ export class Agent {
         // チャットで「止まれ」と言われている間は何もしない（反射は動く）
         if (this.paused) { await sleep(1000); continue; }
         // 独立して動くときは、最初にほかのボットと別の方向へ散らばる
-        if (this.cfg.role === 'solo' && !this.memory.flag('spreadDone') && !this.order) this.order = { skill: 'spreadOut', args: {} };
+        if (this.cfg.role === 'solo' && !this.memory.flag('spreadDone2') && !this.order) this.order = { skill: 'spreadOut', args: {} };
         // チャットで頼まれたこと（来て・スキル名）を、進捗表より先に 1 回やる
         if (this.order) {
           const order = this.order;
