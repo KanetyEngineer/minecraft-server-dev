@@ -24,10 +24,4 @@ jobs:
       - name: dump
         run: bash research/decomp/dump.sh > dump.txt; wc -l dump.txt
       - name: part1
-        run: sed -n '1,3000p' dump.txt
-      - name: part2
-        run: sed -n '3001,6000p' dump.txt
-      - name: part3
-        run: sed -n '6001,9000p' dump.txt
-      - name: part4
-        run: sed -n '9001,12000p' dump.txt
+        run: cat dump.txt
