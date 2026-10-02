@@ -58,6 +58,13 @@ export function elapsedMinutes(memory) {
   return Math.floor((Date.now() - started) / 60_000);
 }
 
+// 地下にいるか: オーバーワールドで、頭の位置に空の光がほとんど届かない（洞窟・坑道の中）
+export function isUnderground(bot) {
+  if (dimensionOf(bot) !== 'overworld' || typeof bot.blockAt !== 'function' || !bot.entity?.position) return false;
+  const head = bot.blockAt(bot.entity.position.offset(0, 1.6, 0));
+  return typeof head?.skyLight === 'number' && head.skyLight <= 3;
+}
+
 export function dimensionOf(bot) {
   return String(bot.game?.dimension ?? 'overworld').replace('minecraft:', '');
 }
@@ -74,7 +81,7 @@ export function nextStep(bot, memory) {
   // 死んだら、落とした物が消える（5 分）前に拾いに戻る
   const death = memory.data?.deaths?.at(-1);
   // ただし防具の無い夜は回収より身を守るのが先（夜の海辺へ回収に戻り、トライデントのドラウンドにまた倒された）
-  const unsafeNight = night && !m.armor && dim === 'overworld';
+  const unsafeNight = night && !m.armor && dim === 'overworld' && !isUnderground(bot);
   if (death && !death.recovered && !unsafeNight && death.dimension === dim && Date.now() - Date.parse(death.at) < 4 * 60_000) {
     return { skill: 'recoverItems', args: {} };
   }
@@ -116,7 +123,8 @@ export function nextStep(bot, memory) {
   // 夜は穴にこもる（ベッドがあれば中で寝る）。ただし防具があってパール集めの段階なら、夜はエンダーマン狩りの時間
   // 体力が少ないうちは、掘ったり戦ったりせず穴で休んで回復する（弱ったまま作業を続けて死んでいた）
   if (typeof bot.health === 'number' && bot.health <= 8) return { skill: 'shelterForNight', args: { untilHealed: true } };
-  if (night) {
+  // 地下（空が見えない所）にいるときは、夜でも関係なく作業を続ける（地下は昼でも暗く、夜だからといって危険は変わらない）
+  if (night && !isUnderground(bot)) {
     if (m.armor && m.blazeRods && !m.enderPearls) return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     // ベッドがあれば穴の中で寝て朝にする（寝られなかった直後は飛ばす）。
     // 寝られなくても、石の道具があって体力があれば穴にこもらず作業を続ける（夜に 7 分待つのは大きなロス。敵は反射で対処する）

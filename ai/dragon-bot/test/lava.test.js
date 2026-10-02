@@ -7,7 +7,9 @@ import { lavaEdgeCost, lavaBeside, isBurning, inLava } from '../src/skills/lava.
 function world() {
   const lava = new Set();
   for (let x = -2; x <= 1; x++) for (let z = -2; z <= 2; z++) lava.add(`${x},63,${z}`);
-  const blockAt = (p) => {
+  const blockAt = (q) => {
+    // 本物の bot.blockAt と同じく、小数の座標はブロックの位置（切り捨て）にする
+    const p = { x: Math.floor(q.x), y: Math.floor(q.y), z: Math.floor(q.z) };
     const key = `${p.x},${p.y},${p.z}`;
     const pos = new Vec3(p.x, p.y, p.z);
     if (lava.has(key)) return { name: 'lava', boundingBox: 'empty', position: pos, metadata: 0 };

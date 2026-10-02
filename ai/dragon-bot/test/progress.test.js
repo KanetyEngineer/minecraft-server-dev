@@ -184,3 +184,14 @@ test('直前に「原木が足りない」で失敗していたら、道具が�
   assert.equal(nextStep(bot, fakeMemory({}, { needWoodAt: Date.now() })).skill, 'gatherWood');
   assert.equal(nextStep(bot, fakeMemory()).skill, 'makeBed');
 });
+
+test('地下にいるときは、夜でも穴にこもらず作業を続ける', () => {
+  const mk = (skyLight) => {
+    const b = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, white_bed: 1 }, { isDay: false });
+    b.entity = { position: { offset: () => ({}) } };
+    b.blockAt = () => ({ skyLight });
+    return b;
+  };
+  assert.equal(nextStep(mk(15), fakeMemory()).skill, 'shelterForNight'); // 地上の夜
+  assert.notEqual(nextStep(mk(0), fakeMemory()).skill, 'shelterForNight'); // 地下の夜
+});
