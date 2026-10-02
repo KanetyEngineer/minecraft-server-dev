@@ -150,10 +150,16 @@ async function choosePlot(ctx) {
   const { town, persona } = S(ctx);
   if (town.profile.house?.y !== undefined) return town.profile.house;
   const plaza = town.plaza() ?? town.setPlaza(bot.entity.position);
-  for (let shift = 0; shift <= 18; shift += 6) {
+  // たどり着けなかった区画（崖の上など。経路が見つからず立ち止まってフリーズ回避で中断される）は 2 回で諦めて外側を探す
+  const fails = (S(ctx).flags.plotFails ??= {});
+  for (let shift = 0; shift <= 30; shift += 6) {
     abortable(ctx);
+    if ((fails[shift] ?? 0) >= 2) continue;
     const c = plotCenter(plaza, persona.id, { shift });
+    fails[shift] = (fails[shift] ?? 0) + 1;
     await travelTo(ctx, c.x, c.z, { range: 3 });
+    if (Math.hypot(bot.entity.position.x - c.x, bot.entity.position.z - c.z) > 8) { ctx.log.info(`区画 (${c.x}, ${c.z}) にたどり着けない`); continue; }
+    fails[shift] = 0;
     const hint = Math.round(bot.entity.position.y);
     const ys = [];
     let water = 0;
