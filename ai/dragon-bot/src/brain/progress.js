@@ -129,6 +129,8 @@ export function nextStep(bot, memory) {
   }
   // ツルハシを失っても原木が 3 本以上あれば、木集めに戻らずそのまま道具を作る（makeTools が木のツルハシから作る）
   if (!m.woodenTools && c.logs < 3) return { skill: 'gatherWood', args: { logs: 8 } };
+  // 直前に「原木が足りない」で失敗していたら、先に木を集める
+  if (Date.now() - (memory.flag?.('needWoodAt') ?? 0) < 3 * 60_000 && c.logs < 3) return { skill: 'gatherWood', args: { logs: 6 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
   // 村を見つけていれば、RTA の定石どおり先に村で集める（ベッド・パン・チェストの鉄・ゴーレムの鉄）。羊や牛を探すより速い
   if (memory.getPlace('village') && !memory.flag('villageLooted') && !((memory.flag('villageRetryAt') ?? 0) > Date.now())) {

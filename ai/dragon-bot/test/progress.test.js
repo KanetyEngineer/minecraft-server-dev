@@ -178,3 +178,9 @@ test('夜でも寝られないとき、石の道具と体力があれば穴に�
   // 道具が無ければ穴にこもる
   assert.equal(nextStep(fakeBot({}, night), fakeMemory()).skill, 'shelterForNight');
 });
+
+test('直前に「原木が足りない」で失敗していたら、道具があっても木集めを選ぶ', () => {
+  const bot = fakeBot({ stone_pickaxe: 1, stone_sword: 1, cooked_beef: 20, white_wool: 3 });
+  assert.equal(nextStep(bot, fakeMemory({}, { needWoodAt: Date.now() })).skill, 'gatherWood');
+  assert.equal(nextStep(bot, fakeMemory()).skill, 'makeBed');
+});

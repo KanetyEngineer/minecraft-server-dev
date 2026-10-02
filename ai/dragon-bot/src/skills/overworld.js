@@ -549,6 +549,10 @@ export async function makeBed(ctx, { count: want = 1 } = {}) {
     ctx.memory.setFlag('bedRetryAt', Date.now() + 10 * 60_000);
     throw new SkillError('羊毛が 3 つそろわない');
   }
+  // 板材が足りなければ先に木を集める（「原木が足りない」で失敗を繰り返していた）
+  const planksNeed = (want - beds()) * 3;
+  const woodNow = countMatching(bot, isLog) * 4 + countMatching(bot, (n) => n.endsWith('_planks'));
+  if (woodNow < planksNeed) await gatherWood(ctx, { logs: Math.ceil((planksNeed - woodNow) / 4) + 1 });
   // 色ごとに 3 枚ずつそろっている分だけ作る
   for (const w of bot.inventory.items().filter((i) => i.name.endsWith('_wool'))) {
     for (let k = 0; k < Math.floor(w.count / 3) && beds() < want; k++) {

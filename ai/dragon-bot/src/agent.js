@@ -490,6 +490,9 @@ export class Agent {
       this.current = null;
     }
     log.skill(`${entry.ok ? '成功' : '失敗'} ${name}: ${entry.result}`);
+    // 「原木が足りない」で失敗したら、進捗表が次に木集めを選ぶよう記録する（道具はあるので木集めが選ばれず、同じ失敗を繰り返していた）
+    if (!entry.ok && /原木が足りない/.test(entry.result)) this.memory.setFlag('needWoodAt', Date.now());
+    if (entry.ok && name === 'gatherWood') this.memory.setFlag('needWoodAt', 0);
     this.history.push(entry);
     this.history = this.history.slice(-30);
     const moved = before.pos && this.bot.entity ? this.bot.entity.position.distanceTo(before.pos) : 0;
