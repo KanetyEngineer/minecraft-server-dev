@@ -480,13 +480,16 @@ export class Agent {
       .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0] ?? null;
   }
 
-  // 非常食: 満腹度が 6 以下でふつうの食べ物が無ければ、腐った肉やクモの目でも食べる
+  // 非常食: お腹が空いているか、体力を回復したいのにふつうの食べ物が無ければ、腐った肉やクモの目でも食べる
   // （食べ物が無いまま夜に出歩いて体力が戻らず、ゾンビ 1 体に 2 秒で倒された。腐った肉はゾンビを倒すと手に入る）
   emergencyEat() {
     const { bot } = this;
     if (Date.now() - (this.eatCheckAt ?? 0) < 4000 || bot.currentWindow || bot.autoEat?.isEating) return;
     this.eatCheckAt = Date.now();
-    if (typeof bot.food !== 'number' || bot.food > 6) return;
+    // 満腹度 6 以下、または体力が減っていて満腹度が 18 未満（18 以上でないと体力が自然に回復しない）のとき。
+    //（満腹度 17・体力 1 のまま、穴で 3 分休んでも回復しなかった）
+    if (typeof bot.food !== 'number') return;
+    if (!(bot.food <= 6 || (bot.health < 14 && bot.food < 18))) return;
     const banned = new Set(['rotten_flesh', 'spider_eye', 'poisonous_potato', 'pufferfish', 'chorus_fruit', 'suspicious_stew']);
     const foods = bot.registry.foodsByName ?? {};
     const items = bot.inventory.items();
