@@ -282,8 +282,7 @@ async function ensureIronIngots(ctx, n) {
         await craftItem(ctx, 'stick', 8).catch(() => {});
         if (count(bot, 'cobblestone') + count(bot, 'cobbled_deepslate') >= 6) await craftItem(ctx, 'stone_pickaxe', 2).catch(() => {});
         // y=16 まで降りると 50 段以上かかり 10 分の制限に届くので、鉄がまだ多い y=24 で掘る
-        // 鉄鉱石は y=16 付近がいちばん多い（1.18 以降の分布）
-        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 16);
+        await branchMine(ctx, [...IRON_ORE, ...COAL_ORE], (n - ingots() - count(bot, 'raw_iron')) * 2, 24);
       }
     } finally {
       if (mv && prevDrop !== undefined) mv.maxDropDown = prevDrop;
