@@ -3,7 +3,7 @@
 // 実行中も「反射」（危ないときの防御・逃走）を監視し、必要なら割り込む。
 import { snapshot, isHostile } from './world/perception.js';
 import { SKILL_MAP } from './skills/index.js';
-import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, neutralizeSpawner } from './skills/common.js';
+import { attackEntity, goals, pillarUp, pillarDown, fightFromAbove, placeWallToward, cheapBlock, halfShiftBridge, Vec3, digTunnel, isNextToLiquid, neutralizeSpawner } from './skills/common.js';
 import { sleep, jitter } from './body/humanize.js';
 import { dimensionOf } from './brain/progress.js';
 import { log } from './log.js';
@@ -432,6 +432,29 @@ export class Agent {
       || (this.state.holdStillUntil ?? 0) > Date.now() // 柱の上で戦っているなど、動かないのが正しい間
       || ['wait', 'sleepInBed', 'fightDragon', 'shelterForNight'].includes(this.current.name);
     const p = bot.entity.position;
+    // 狭い範囲（4 マス以内）を 90 秒うろうろしているだけなら、トンネルを掘って抜け出す
+    //（地下の水たまりの中で行ったり来たりして、フリーズ回避にもかからず 10 分以上出られなかった）
+    if (busy || !this.area || this.area.pos.distanceTo(p) > 4) this.area = { pos: p.clone(), since: Date.now() };
+    else if (Date.now() - this.area.since > 90_000 && bot.entity.position.y < 50) {
+      this.area = null;
+      this.interrupt('同じ場所から 90 秒出られない');
+      this.reflexBusy = true;
+      (async () => {
+        try {
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(() => Math.random() - 0.5);
+          const base = bot.entity.position.floored();
+          // 液体に触れない向きを選ぶ
+          const dir = dirs.find(([dx, dz]) => [1, 2, 3].every((k) => ![0, 1].some((dy) => isNextToLiquid(bot, base.offset(dx * k, dy, dz * k))))) ?? dirs[0];
+          log.warn(`同じ場所から出られないので、${dir} の向きにトンネルを掘って抜ける`);
+          await digTunnel(this.makeCtx(new AbortController()), dir[0], dir[1], 8);
+        } catch (e) {
+          log.warn(`トンネル: ${e.message}`);
+        } finally {
+          this.reflexBusy = false;
+        }
+      })();
+      return;
+    }
     if (busy || !this.still || this.still.pos.distanceTo(p) > 1.5) {
       this.still = { pos: p.clone(), since: Date.now() };
       return;

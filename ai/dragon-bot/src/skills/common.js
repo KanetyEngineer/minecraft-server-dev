@@ -389,6 +389,46 @@ export async function digOrRetry(bot, block, forceLook = false) {
   }
 }
 
+// (dx, dz) の向きに、高さ 2 のトンネルを n マス掘って進む（液体の隣に出たら止める）。進んだマス数を返す
+export async function digTunnel(ctx, dx, dz, n) {
+  const { bot } = ctx;
+  let moved = 0;
+  for (let k = 0; k < n; k++) {
+    abortable(ctx);
+    const p = bot.entity.position.floored();
+    const next = p.offset(dx, 0, dz);
+    if ([next, next.offset(0, 1, 0)].some((c) => isNextToLiquid(bot, c) || ['water', 'lava'].includes(bot.blockAt(c)?.name))) break;
+    for (const c of [next.offset(0, 1, 0), next]) {
+      const b = bot.blockAt(c);
+      if (b && b.boundingBox === 'block' && bot.canDigBlock(b)) {
+        await equipCheapestTool(bot, b).catch(() => {});
+        await bot.dig(b, true).catch(() => {});
+      }
+    }
+    // 足元が無ければ（空洞）ブロックを置いて渡る
+    const floor = bot.blockAt(next.offset(0, -1, 0));
+    if (floor && floor.boundingBox !== 'block' && floor.name !== 'lava') {
+      const item = cheapBlock(bot);
+      if (!item) break;
+      await bot.equip(item, 'hand').catch(() => {});
+      await bot.placeBlock(bot.blockAt(p.offset(0, -1, 0)), new Vec3(dx, 0, dz)).catch(() => {});
+    }
+    bot.setControlState('forward', true);
+    await bot.lookAt(next.offset(0.5, 1.6, 0.5), true).catch(() => {});
+    for (let t = 0; t < 20; t++) {
+      await bot.waitForTicks(1);
+      const f = bot.entity.position.floored();
+      if (f.x === next.x && f.z === next.z) break;
+    }
+    bot.setControlState('forward', false);
+    const f = bot.entity.position.floored();
+    if (f.x !== next.x || f.z !== next.z) break;
+    moved++;
+  }
+  bot.setControlState('forward', false);
+  return moved;
+}
+
 export function isNextToLiquid(bot, pos) {
   for (const [x, y, z] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1]]) {
     const b = bot.blockAt(pos.offset(x, y, z));
