@@ -230,6 +230,7 @@ export class Agent {
     const { bot } = this;
     if (!bot.entity || !this.current || this.reflexBusy) { this.still = null; return; }
     const busy = bot.targetDigBlock || bot.autoEat?.isEating || bot.isSleeping || bot.currentWindow
+      || (this.state.holdStillUntil ?? 0) > Date.now() // 柱の上で戦っているなど、動かないのが正しい間
       || ['wait', 'sleepInBed', 'fightDragon', 'shelterForNight'].includes(this.current.name);
     const p = bot.entity.position;
     if (busy || !this.still || this.still.pos.distanceTo(p) > 1.5) {

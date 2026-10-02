@@ -5,6 +5,7 @@ import * as sh from './stronghold.js';
 import * as end from './end.js';
 import * as gen from './general.js';
 import * as portal from './portal.js';
+import * as st from './structures.js';
 
 const int = (description, minimum = 1, maximum = 640) => ({ type: 'integer', description, minimum, maximum });
 const str = (description) => ({ type: 'string', description });
@@ -52,6 +53,8 @@ export const SKILLS = [
   def('castNetherPortal', countFailures('castNetherPortal', portal.castNetherPortal), 'RTA 式: 溶岩溜まりの横で、溶岩バケツと水バケツを使って黒曜石を 1 つずつ作りネザーゲートを建てる（ダイヤ不要。水入りバケツ・空バケツ・丸石 30 個が必要）。'),
   def('buildNetherPortal', ow.buildNetherPortal, '黒曜石 10 個で近くにネザーポータルを建てて火打石で着火する。'),
   def('gatherBlocks', ow.gatherBlocks, '橋や柱に使う丸石を集める（エンドに行く前に 64 個以上推奨）。', { count: int('個数', 8, 256) }),
+  def('lootVillage', st.lootVillage, '見つけた村で RTA の定石どおり物資を集める: ベッドを壊して回収、チェストの鉄とパン、干し草からパン、アイアンゴーレムを柱の上から倒して鉄。', { beds: int('持っておくベッドの数', 1, 8), bread: int('目標の食料数', 1, 32) }),
+  def('useRuinedPortal', st.useRuinedPortal, '見つけた廃ポータルのチェストを漁り、黒曜石が足りれば枠を埋めて着火し、そのままネザーゲートにする（溶岩から黒曜石を作る工程を省ける）。'),
   def('makeBed', ow.makeBed, '羊を倒して羊毛を集め、ベッドを作る（count 個持つまで。エンドのベッド爆破用に 3〜5 個）。', { count: int('持っておくベッドの数', 1, 8) }),
   def('shelterForNight', ow.shelterForNight, '夜、防具が無いうちはその場で 3 マス掘り下がって頭上をふさぎ、朝まで待つ。', { untilHealed: { type: 'boolean', description: '体力が少ないとき、昼でも穴で休んで回復を待つ' } }),
   def('sleepInBed', ow.sleepInBed, '夜にベッドで寝て朝にする（ベッドの場所も覚える）。'),

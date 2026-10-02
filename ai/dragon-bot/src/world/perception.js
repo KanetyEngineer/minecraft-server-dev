@@ -1,6 +1,8 @@
 // 今の状況を、LLM が読める短いテキスト/JSON にまとめる。
 import { milestones, dimensionOf } from '../brain/progress.js';
 import { findVisibleBlocks } from '../body/humanize.js';
+import { noteStructures } from '../skills/structures.js';
+import { elapsedMinutes, TIME_BUDGET } from '../brain/progress.js';
 
 const HOSTILE = new Set(['zombie', 'skeleton', 'creeper', 'spider', 'cave_spider', 'enderman', 'witch', 'drowned',
   'husk', 'stray', 'slime', 'magma_cube', 'blaze', 'ghast', 'piglin_brute', 'hoglin', 'zoglin', 'wither_skeleton',
@@ -39,9 +41,14 @@ export function snapshot(bot, memory, cfg) {
     seen[b.name] = { ...rounded(b.position), dist: Math.round(b.position.distanceTo(pos)) };
   }
 
+  // 見かけた構造物（村・廃ポータル・溶岩溜まり・砦・要塞）を覚える
+  try { noteStructures(bot, memory); } catch { /* 判断を止めない */ }
   const m = milestones(bot, memory);
   const { _counts, ...flags } = m;
+  const elapsed = elapsedMinutes(memory);
   return {
+    elapsedMinutes: elapsed,
+    timeBudget: TIME_BUDGET,
     position: rounded(pos),
     dimension: dimensionOf(bot),
     health: Math.round(bot.health),

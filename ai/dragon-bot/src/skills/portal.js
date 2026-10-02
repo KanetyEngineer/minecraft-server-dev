@@ -7,7 +7,7 @@
 // 溶岩は 1.5 秒ほどで流れ始めるので、溶岩を置いたらすぐに水を置く。
 // 角の 4 つは何のブロックでもよいので丸石を置く。最後に中の丸石などを片付けて火打石で着火する。
 import {
-  SkillError, abortable, goTo, mineBlocks, craftItem, placeNear, pillarUp, pillarDown, Vec3,
+  SkillError, abortable, goTo, travelTo, mineBlocks, craftItem, placeNear, pillarUp, pillarDown, Vec3,
 } from './common.js';
 import { count, findItem } from '../util/items.js';
 import { findVisibleBlocks, sleep } from '../body/humanize.js';
@@ -84,8 +84,15 @@ export async function castNetherPortal(ctx) {
   if (cobbleCount() < 34) await mineBlocks(ctx, ['stone', 'cobblestone', 'deepslate'], 34 - cobbleCount(), { maxExplore: 4 });
   if (cobbleCount() < 30) throw new SkillError('丸石が足りない（30 個必要）');
 
-  // 1. 溶岩溜まりを探す
-  const pool = findVisibleBlocks(bot, ['lava'], { maxDistance: 48, count: 12, extra: (b) => b.metadata === 0 });
+  // 1. 溶岩溜まりを探す（探索中に見かけて覚えた地表の溶岩溜まりがあれば、まずそこへ行く）
+  const findPool = () => findVisibleBlocks(bot, ['lava'], { maxDistance: 48, count: 12, extra: (b) => b.metadata === 0 });
+  let pool = findPool();
+  const known = memory.getPlace('lava_pool');
+  if (pool.length < 3 && known) {
+    ctx.log.info(`覚えている溶岩溜まり (${known.x}, ${known.z}) へ向かう`);
+    await travelTo(ctx, known.x, known.z, { range: 6 }).catch((e) => { if (e.name === 'AbortError') throw e; });
+    pool = findPool();
+  }
   if (pool.length < 3) throw new SkillError('溶岩溜まり（源 3 つ以上）が見つからない');
   const origin = findSite(bot, pool[0].position);
   if (!origin) throw new SkillError('溶岩溜まりの近くに平らな場所がない');

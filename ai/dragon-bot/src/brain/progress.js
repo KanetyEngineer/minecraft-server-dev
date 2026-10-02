@@ -48,6 +48,16 @@ export function milestones(bot, memory) {
   };
 }
 
+// 1 時間討伐の時間配分（分）。各工程が「ここまでに終わっていてほしい」経過時間。遅れていれば省けるものを省く
+export const TIME_BUDGET = { stoneToolsFood: 8, bedsAndIron: 20, netherPortal: 25, nether: 42, stronghold: 52, dragon: 60 };
+
+// ランの経過時間（分）。最初の判断のときに開始時刻を覚える
+export function elapsedMinutes(memory) {
+  const started = memory.flag?.('runStartedAt');
+  if (!started) { memory.setFlag?.('runStartedAt', Date.now()); return 0; }
+  return Math.floor((Date.now() - started) / 60_000);
+}
+
 export function dimensionOf(bot) {
   return String(bot.game?.dimension ?? 'overworld').replace('minecraft:', '');
 }
@@ -81,6 +91,11 @@ export function nextStep(bot, memory) {
     if (!m.enderPearls && memory.getPlace('warped_forest') && hasBoat(bot)) {
       return { skill: 'huntEndermen', args: { pearls: c.eyesNeeded - c.pearls - c.eyes } };
     }
+    // 砦の遺跡を先に見つけていれば、RTA の順（砦で金 → 交易でパール → 要塞でロッド）で進める
+    if (!m.enderPearls && memory.getPlace('bastion') && count(bot, 'gold_ingot') < 8 && !failedRecently('raidBastionGold', 30)
+      && ['iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe'].some((n) => has(bot, n))) {
+      return { skill: 'raidBastionGold', args: { ingots: 32 } };
+    }
     if (!m.blazeRods) return { skill: 'huntBlazes', args: { rods: Math.ceil(c.eyesNeeded / 2) } };
     // パール: ネザーのエンダーマンは昼夜に関係なく湧く（オーバーワールドは夜だけ）。
     // 交易（金があれば）→ エンダーマン狩り（歪んだ森を探しながら）→ 廃要塞で金集め、の順に、最近失敗したものを飛ばして試す
@@ -108,12 +123,17 @@ export function nextStep(bot, memory) {
   // ツルハシを失っても原木が 3 本以上あれば、木集めに戻らずそのまま道具を作る（makeTools が木のツルハシから作る）
   if (!m.woodenTools && c.logs < 3) return { skill: 'gatherWood', args: { logs: 8 } };
   if (!m.stoneTools) return { skill: 'makeTools', args: { tier: 'stone' } };
+  // 村を見つけていれば、RTA の定石どおり先に村で集める（ベッド・パン・チェストの鉄・ゴーレムの鉄）。羊や牛を探すより速い
+  if (memory.getPlace('village') && !memory.flag('villageLooted') && !((memory.flag('villageRetryAt') ?? 0) > Date.now())) {
+    return { skill: 'lootVillage', args: { beds: 7, bread: 12 } };
+  }
   if (!m.food) return { skill: 'gatherFood', args: { amount: 12 } };
   // 昼のうちにベッドを作っておく（羊が見つからなければしばらく飛ばす）
   const hasBed = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
   if (!hasBed && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: {} };
   if (!m.ironPickaxe || !m.ironSword || !m.bucket) return { skill: 'getIronGear', args: { armor: false } };
-  if (!m.armor || !m.shield) return { skill: 'getIronGear', args: { armor: true } };
+  // 鉄の防具一式（鉄 24 個）は RTA では作らない。盾だけ必ず作り、防具は余った鉄があるときだけ（getIronGear の中で）作る
+  if (!m.shield) return { skill: 'getIronGear', args: { armor: false } };
   if (!m.waterBucket) return { skill: 'fillWaterBucket', args: {} };
   if (!m.netherPortal) {
     // ネザーの板材ではボートを作れないので、歪んだ森でのエンダーマン捕獲用に 1 つ持っていく
@@ -121,6 +141,8 @@ export function nextStep(bot, memory) {
       const boat = boatRecipeFor(bot);
       return boat ? { skill: 'craftTo', args: { item: boat, count: 1 } } : { skill: 'gatherWood', args: { logs: 4 } };
     }
+    // 廃ポータルを見つけていれば、チェストの黒曜石と火打石で完成させるのがいちばん速い（useRuinedPortal。無理なら旗を立てて次へ）
+    if (memory.getPlace('ruined_portal') && !memory.flag('ruinedPortalUnusable')) return { skill: 'useRuinedPortal', args: {} };
     // RTA 式: ダイヤを使わず、溶岩溜まりで溶岩バケツと水バケツから黒曜石を作ってゲートを建てる（castNetherPortal）。
     // 水入りバケツのほかに空のバケツがもう 1 つ要るので、鉄 3 個を先に用意する。
     // 3 回続けて失敗したら、従来どおりダイヤのツルハシで黒曜石を掘る方式に切り替える。
@@ -155,7 +177,10 @@ export function nextStep(bot, memory) {
   if (!m.endPortalFound) return { skill: 'findEndPortal', args: {} };
   // エンドのドラゴン戦（ベッド爆破）用に、ベッドを 7 個持ってから入る（RTA の目安。羊が見つからなければ飛ばす）
   const bedCount = bot.inventory.items().filter((i) => i.name.endsWith('_bed')).reduce((s, i) => s + i.count, 0);
-  if (bedCount < 7 && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) return { skill: 'makeBed', args: { count: 7 } };
+  if (bedCount < 7 && !((memory.flag('bedRetryAt') ?? 0) > Date.now())) {
+    if (memory.getPlace('village') && !memory.flag('villageBedsTaken')) return { skill: 'lootVillage', args: { beds: 7, bread: 12 } };
+    return { skill: 'makeBed', args: { count: 7 } };
+  }
   return { skill: 'activateEndPortal', args: {} };
 }
 
