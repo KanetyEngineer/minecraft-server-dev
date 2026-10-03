@@ -6,9 +6,9 @@
 |---|---|---|
 | ロビー | stamina-proves.tun.ply.gg（:14610） | 稼働中 |
 | ハロウィン | rails-backups.tun.ply.gg（:5858） | 移動OK（accepts-transfers=true 済み） |
-| 銃MOD | stamina-snugness.tun.ply.gg（:14611） | 移動OK（26.1.x の Fabric クライアントのみ） |
-| クラロワ | stamina-crab.tun.ply.gg（:14612） | 移動OK |
-| アニメ技 | なし | トンネル待ち（playit 無料枠の上限） |
+| 銃MOD | stamina-snugness.tun.ply.gg（:14611） | 移動OK（26.1.x の Fabric クライアントのみ、鯖が動いているとき） |
+| クラロワ | stamina-smokiness.tun.ply.gg（:44748） | 移動OK |
+| アニメ技 | なし | ロビーのトンネル共用の中継（router/router.js）を用意、起動はユーザーの承認待ち |
 
 ## ロビーへ戻る導線（任意・各鯖の担当が入れる）
 

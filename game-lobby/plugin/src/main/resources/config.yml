@@ -50,8 +50,8 @@ destinations:
     pad-block: BLUE_CONCRETE
     frame-block: GOLD_BLOCK
     particle: ELECTRIC_SPARK
-    host: "stamina-crab.tun.ply.gg"
-    port: 14612
+    host: "stamina-smokiness.tun.ply.gg"
+    port: 44748
     version: "26.2"
     require-brand: ""
     info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
