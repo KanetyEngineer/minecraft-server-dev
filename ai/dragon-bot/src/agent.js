@@ -503,6 +503,16 @@ export class Agent {
     if (Date.now() - this.still.since > limit) {
       this.still = null;
       this.interrupt(`${limit / 1000} 秒動けなかった（フリーズ回避）`);
+      // フリーズ回避が 5 分に 4 回続くのは、経路探索が壊れて戻らない状態（RTA 2026-10-04 で 01 が 3 時間以上止まり、
+      // 「20 秒動けなかった」が 749 回くり返された。入り直すと直る）。入り直して作り直す（自動で再接続する）
+      this.freezes = (this.freezes ?? []).filter((t) => Date.now() - t < 5 * 60_000);
+      this.freezes.push(Date.now());
+      if (this.freezes.length >= 4) {
+        this.freezes = [];
+        log.warn('動けない状態が続くので、いったん入り直して経路探索を作り直す');
+        bot.quit('動けない状態が続いた');
+        return;
+      }
       // 木の上などに取り残されたら、体力が残る範囲で落下ダメージを受け入れて飛び降りる
       const below = bot.blockAt(p.offset(0, -1, 0));
       if (below && /(_leaves|_log|_wood)$/.test(below.name) && bot.pathfinder.movements) {
