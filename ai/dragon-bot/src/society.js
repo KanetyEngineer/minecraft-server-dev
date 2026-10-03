@@ -30,6 +30,8 @@ cfg.role = 'society';
 cfg.port = Number(process.env.MC_PORT || 25573);
 // 社会モードは会話も行動も「ほどほどの深さ」で十分。重いと立ち止まる時間が長くなる
 cfg.llm.effort = process.env.CLAUDE_EFFORT_SOCIETY || 'low';
+// 社会モードは 10 人が判断と会話で何度も呼ぶので、料金の安い Sonnet を使う（DragonBot 側の CLAUDE_MODEL とは別に設定できる）
+cfg.llm.model = process.env.CLAUDE_MODEL_SOCIETY || 'claude-sonnet-5-5';
 
 process.on('unhandledRejection', (e) => { try { log.warn(`処理されなかったエラー（続行）: ${e?.message ?? e}`); } catch {} });
 process.on('uncaughtException', (e) => { try { log.warn(`想定外のエラー（続行）: ${e?.message ?? e}`); } catch {} });
