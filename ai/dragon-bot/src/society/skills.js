@@ -279,29 +279,54 @@ export async function buildHouse(ctx) {
   return `家づくり（${house.stage}）`;
 }
 
-async function furnish(ctx, house, plan) {
+// 玄関の下のマス
+function doorCell(house) {
+  return new Vec3(house.x + house.door[0] * 2, house.y, house.z + house.door[1] * 2);
+}
+
+export function hasDoor(bot, house) {
+  const b = bot.blockAt(doorCell(house));
+  return !!b && b.name.endsWith('_door');
+}
+
+// 扉を付ける（作れなければ木を切ってから作り直す）。付けられたら true
+//（扉の無い家が 4 軒あり、夜に家の中までゾンビが入ってきて、その 4 人が特によく死んでいた）
+export async function ensureDoor(ctx, house) {
   const { bot } = ctx;
-  // 扉: 持っている板材の木の種類の扉を作る
-  const planks = bot.inventory.items().find((i) => isPlanks(i.name));
-  const doorName = planks ? planks.name.replace('_planks', '_door') : 'oak_door';
-  if (!countMatching(bot, (n) => n.endsWith('_door')) && bot.registry.itemsByName[doorName]) {
-    await ensurePlanks(ctx, 6, planks?.name).catch(() => {});
+  if (hasDoor(bot, house)) { house.doorOk = true; return true; }
+  for (let attempt = 0; attempt < 2 && !bot.inventory.items().some((i) => i.name.endsWith('_door')); attempt++) {
+    abortable(ctx);
+    if (countMatching(bot, isLog) * 4 + countMatching(bot, isPlanks) < 6) await gatherWood(ctx, { logs: 3 }).catch(() => {});
+    const planks = bot.inventory.items().filter((i) => isPlanks(i.name)).sort((a, b) => b.count - a.count)[0];
+    const log = bot.inventory.items().find((i) => isLog(i.name));
+    const plankName = planks && planks.count >= 6 ? planks.name : log ? log.name.replace(/^stripped_/, '').replace(/_(log|stem)$/, '_planks') : planks?.name;
+    const doorName = plankName ? plankName.replace('_planks', '_door') : 'oak_door';
+    if (!bot.registry.itemsByName[doorName]) break;
+    await ensurePlanks(ctx, 6, plankName).catch(() => {});
     await craftItem(ctx, doorName, 1).catch((e) => ctx.log.warn(`扉を作れなかった: ${e.message}`));
   }
   const doorItem = bot.inventory.items().find((i) => i.name.endsWith('_door'));
-  const doorPos = plan.doorCells.sort((a, b) => a.y - b.y)[0];
-  if (doorItem && doorPos && isAir(bot.blockAt(doorPos))) {
-    const floor = bot.blockAt(doorPos.offset(0, -1, 0));
+  const pos = doorCell(house);
+  if (doorItem && isAir(bot.blockAt(pos)) && isAir(bot.blockAt(pos.offset(0, 1, 0)))) {
     // 家の中から外を向いて置く
     await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
     try {
       await bot.equip(doorItem, 'hand');
-      await bot.lookAt(doorPos.offset(0.5, 0.5, 0.5), true);
-      await bot._placeBlockWithOptions(floor, new Vec3(0, 1, 0), { swingArm: 'right', forceLook: true });
+      await bot.lookAt(pos.offset(0.5, 0.5, 0.5), true);
+      await bot._placeBlockWithOptions(bot.blockAt(pos.offset(0, -1, 0)), new Vec3(0, 1, 0), { swingArm: 'right', forceLook: true });
     } catch (e) {
       ctx.log.warn(`扉を置けなかった: ${e.message}`);
     }
+    await bot.waitForTicks(4);
   }
+  house.doorOk = hasDoor(bot, house);
+  if (house.doorOk) ctx.society?.town.event('door', `${ctx.society.persona.call}が家に扉を付けた`);
+  return house.doorOk;
+}
+
+async function furnish(ctx, house, plan) {
+  const { bot } = ctx;
+  await ensureDoor(ctx, house).catch((e) => { if (e.name === 'AbortError') throw e; });
   // 明かり（暗い家の中ではモンスターが湧くので、松明を 1 本）
   if (!findItem(bot, 'torch')) {
     if (!count(bot, 'coal') && !count(bot, 'charcoal') && countMatching(bot, isLog) >= 2) {
@@ -355,6 +380,18 @@ export async function goHome(ctx) {
   if (!house || house.stage !== 'done') throw new SkillError('まだ家が無い');
   await travelTo(ctx, house.x, house.z, { range: 3 });
   await goTo(ctx, house.x, house.y, house.z, 1).catch(() => {});
+  // 扉が無ければ付ける。付けられず夜なら、玄関を土でふさぐ（朝に掘って出る。土は経路探索でも掘れる）
+  if (!hasDoor(bot, house)) {
+    await ensureDoor(ctx, house).catch((e) => { if (e.name === 'AbortError') throw e; });
+    if (!hasDoor(bot, house) && !bot.time.isDay && count(bot, 'dirt') >= 2) {
+      await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
+      const pos = doorCell(house);
+      await placeAt(ctx, pos, 'dirt').catch(() => false);
+      await placeAt(ctx, pos.offset(0, 1, 0), 'dirt').catch(() => false);
+    }
+  }
+  house.doorOk = hasDoor(bot, house);
+  S(ctx).town.publish(bot);
   // 持っているベッドを家に置く
   const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
   if (bedItem && !ctx.memory.getPlace('bed')) await placeBed(ctx, house);

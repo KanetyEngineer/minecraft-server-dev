@@ -65,6 +65,8 @@ export function options(bot, soc, history = []) {
     const r = recent(history, 'buildHouse');
     add('buildHouse', 38 + t.conscientiousness * 35 + (pick ? 5 : -20) - r.fails * 15, house ? '家づくりの続き' : '自分の家を建てたい');
   } else {
+    // 扉の無い家は夜に敵が入ってくるので、昼のうちに付けに帰る
+    if (house.doorOk !== true && !night && minutes('lastHomeAt') > 8) add('goHome', 55, '家に扉を付ける');
     // 家具: ベッド
     const bedPlaced = !!soc.flags.hasBed;
     if (!bedPlaced && !has(bot, /_bed$/) && minutes('lastBedTryAt') > 10) add('makeBed', 30 + t.conscientiousness * 15, '家にベッドがほしい', { count: 1 });
@@ -127,7 +129,7 @@ export function options(bot, soc, history = []) {
 
 // スキルが終わったときに、欲求の「最後にやった時刻」を進める
 const MARKS = { socialize: 'lastTalkAt', explore: 'lastExploreAt', tendFarm: 'lastFarmAt', postNotice: 'lastNoticeAt',
-  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt' };
+  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt', goHome: 'lastHomeAt' };
 
 export class SocietyPlanner {
   constructor(cfg, soc, { client } = {}) {
