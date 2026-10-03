@@ -79,3 +79,54 @@ test('プレイヤーからの指示は最優先として指示文に入る', as
   assert.match(seen[0].messages[0].content, /プレイヤーからの指示/);
   assert.match(seen[0].messages[0].content, /kanetyyy.*木を集めて/);
 });
+
+const llmPick = (name = 'gatherWood') => ({ stop_reason: 'tool_use', content: [{ type: 'text', text: '相談の答え' }, { type: 'tool_use', id: 't', name, input: {} }] });
+const assistCfg = () => ({ ...cfg, llm: { ...cfg.llm, mode: 'assist', checkEveryMs: 5 * 60_000 } });
+
+test('assist: 順調なときは Claude に聞かず進捗表どおり、定期の見直しの時刻になったら聞く', async () => {
+  const seen = [];
+  const p = new Planner(assistCfg(), { client: mockClient(llmPick(), seen) });
+  const first = await p.decide(input());
+  assert.equal(first.source, 'llm', '最初の 1 回は見直しとして聞く');
+  assert.match(first.thought, /定期の見直し/);
+  const ok = [{ skill: 'gatherWood', args: {}, ok: true, result: '完了' }];
+  const d = await p.decide({ ...input(), history: ok });
+  assert.equal(d.source, 'rules');
+  assert.equal(seen.length, 1, '順調な間は聞かない');
+  p.lastAskedAt = Date.now() - 6 * 60_000;
+  assert.equal((await p.decide({ ...input(), history: ok })).source, 'llm');
+  assert.equal(seen.length, 2);
+});
+
+test('assist: 失敗が続く・歩き回るだけ・指示がある・ループ検知のときは Claude に聞く', async () => {
+  const p = new Planner(assistCfg(), { client: mockClient(llmPick(), []) });
+  const fail = (skill) => ({ skill, args: {}, ok: false, result: '失敗' });
+  const okStep = (skill) => ({ skill, args: {}, ok: true, result: '完了' });
+  const cases = [
+    [{ history: [fail('craftTools'), fail('gatherFood')] }, /2 回続けて失敗/],
+    [{ history: [fail('gatherWood'), okStep('explore'), fail('gatherWood'), okStep('explore')] }, /gatherWood が最近 2 回失敗/],
+    [{ history: ['explore', 'explore', 'explore', 'explore'].map(okStep) }, /歩き回って/],
+    [{ instructions: [{ username: 'kanetyyy', text: '村へ行って', at: Date.now() }] }, /指示/],
+    [{ banned: ['gatherWood'] }, /ループ検知/],
+  ];
+  for (const [extra, re] of cases) {
+    p.lastAskedAt = Date.now();
+    const d = await p.decide({ ...input(), ...extra });
+    assert.equal(d.source, 'llm', String(re));
+    assert.match(d.thought, re);
+  }
+});
+
+test('5 回続けて失敗したらルールベースにして、10 分たったら試し直す', async () => {
+  let fail = true;
+  const create = async () => { if (fail) throw new Error('credit balance is too low'); return llmPick(); };
+  const p = new Planner(cfg, { client: { messages: { create }, beta: { messages: { create } } } });
+  for (let i = 0; i < 5; i++) assert.equal((await p.decide(input())).source, 'rules');
+  assert.equal(p.usingLLM, false, '止めている間は聞かない');
+  fail = false;
+  assert.equal((await p.decide(input())).source, 'rules');
+  p.retryAt = Date.now() - 1;
+  assert.equal(p.usingLLM, true);
+  assert.equal((await p.decide(input())).source, 'llm');
+  assert.equal(p.failStreak, 0);
+});

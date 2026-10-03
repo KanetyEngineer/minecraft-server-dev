@@ -17,24 +17,50 @@ export class Planner {
     this.failStreak = 0;
   }
 
+  // 5 回続けて失敗したら（クレジット切れ・混雑など）ルールベースに切り替え、10 分ごとに 1 回だけ試し直す
+  //（前は再起動するまで二度と使わず、クレジットを足しても戻らなかった）
   get usingLLM() {
-    return !!this.client && this.failStreak < 5;
+    if (!this.client) return false;
+    if (this.failStreak < 5) return true;
+    return Date.now() >= (this.retryAt ?? 0);
+  }
+
+  // 「順調なときは進捗表どおり、困ったときだけ Claude に聞く」かどうかを決める（llm.mode = 'assist'）。
+  // 毎回聞くと、1 回ごとに数秒〜数十秒立ち止まり、料金もかかる。進捗表で足りる場面は聞かずにすぐ動く
+  needsLLM({ history = [], banned = [], instructions = [], hint }) {
+    if (this.cfg.llm.mode !== 'assist') return 'always';
+    if (instructions.length) return 'プレイヤーの指示がある';
+    if (banned.length) return 'ループ検知で禁止中のスキルがある';
+    const recent = history.slice(-6).filter((h) => !/ループ検知/.test(h.skill));
+    const last2 = recent.slice(-2);
+    if (last2.length === 2 && last2.every((h) => !h.ok)) return '2 回続けて失敗した';
+    if (hint && recent.filter((h) => h.skill === hint.skill && !h.ok).length >= 2) return `${hint.skill} が最近 2 回失敗している`;
+    const last4 = recent.slice(-4);
+    if (last4.length === 4 && last4.every((h) => h.skill === 'explore')) return '目的なく歩き回っている';
+    if (Date.now() - (this.lastAskedAt ?? 0) >= (this.cfg.llm.checkEveryMs ?? 5 * 60_000)) return '定期の見直し';
+    return null;
   }
 
   async decide({ bot, memory, snapshot, history, chatLog, banned = [], instructions = [] }) {
     const hint = nextStep(bot, memory);
     if (!this.usingLLM) return { ...hint, hint, source: 'rules', thought: '（ルールベース）進捗表の次の項目' };
+    const why = this.needsLLM({ history, banned, instructions, hint });
+    if (!why) return { ...hint, hint, source: 'rules', thought: '（ルールベース）順調なので進捗表どおり' };
+    this.lastAskedAt = Date.now();
     try {
       const started = Date.now();
       const d = await this.askClaude({ snapshot, history, chatLog, hint, banned, instructions });
       const sec = Math.round((Date.now() - started) / 1000);
       if (sec >= 15) log.warn(`LLM の判断に ${sec} 秒かかった（その間は立ち止まっている）`);
       d.hint = hint;
+      if (why !== 'always') d.thought = `（${why}ので Claude に相談）${d.thought ?? ''}`;
+      if (this.failStreak >= 5) log.info('LLM がまた使えるようになった');
       this.failStreak = 0;
       return d;
     } catch (e) {
       this.failStreak++;
-      log.warn(`LLM 判断に失敗（${this.failStreak} 回目）: ${e.message}。ルールベースで続行`);
+      if (this.failStreak >= 5) this.retryAt = Date.now() + 10 * 60_000;
+      log.warn(`LLM 判断に失敗（${this.failStreak} 回目）: ${e.message}。ルールベースで続行${this.failStreak >= 5 ? '（10 分後に試し直す）' : ''}`);
       return { ...hint, source: 'rules', thought: 'LLM が使えないのでルールベース' };
     }
   }

@@ -13,6 +13,12 @@ import { Team, ROLES, strategyFor } from './team.js';
 import { setTeamContext } from './brain/progress.js';
 
 const cfg = loadConfig();
+// MBTI 社会実験と同じ使い方にする: 同じ .env の ANTHROPIC_API_KEY で、速くて安い Sonnet を low で使い、
+// 順調なときは進捗表どおりに動いて、困ったときだけ相談する（毎回 Opus に聞くと 1 回ごとに長く立ち止まっていた）。
+// 変えたいときは .env に CLAUDE_MODEL_DRAGON / CLAUDE_EFFORT_DRAGON / LLM_MODE を書く
+cfg.llm.model = process.env.CLAUDE_MODEL_DRAGON || 'claude-sonnet-5-5';
+cfg.llm.effort = process.env.CLAUDE_EFFORT_DRAGON || 'low';
+cfg.llm.mode = process.env.LLM_MODE || 'assist';
 // 待ち時間切れ（CPU が混んで「2 ティック待ったが来ない」など）の取りこぼしたエラーで、ボットごと落ちないようにする。
 // 記録だけして動き続ける（100 体の試験で、CPU 100% のときに 2 体がこれで落ちた）
 process.on('unhandledRejection', (e) => { try { log.warn(`処理されなかったエラー（続行）: ${e?.message ?? e}`); } catch {} });
@@ -33,7 +39,7 @@ let agent = null;
 let stopping = false;
 
 startStatusServer(cfg.statusPort, () => agent);
-log.info(`方針判断: ${planner.usingLLM ? `Claude (${cfg.llm.model})` : 'ルールベース（ANTHROPIC_API_KEY 未設定）'}`);
+log.info(`方針判断: ${planner.usingLLM ? `Claude (${cfg.llm.model}, effort ${cfg.llm.effort}, ${cfg.llm.mode === 'assist' ? '困ったときだけ相談' : '毎回相談'})` : 'ルールベース（ANTHROPIC_API_KEY 未設定）'}`);
 log.info(`チャット: ${chat.usingLLM ? 'Claude で自由に会話' : '決まった話しかけに返す（自由な会話には ANTHROPIC_API_KEY が必要）'}`);
 
 function connect() {

@@ -32,6 +32,10 @@ export function loadConfig() {
       chat: bool('LLM_CHAT', true),
       // 1 回の判断をこれ以上待たない（ミリ秒）。超えたらルールベースで動く
       timeoutMs: num('LLM_TIMEOUT_MS', 45_000),
+      // always: 毎回 Claude に聞く ／ assist: 順調なときは進捗表どおり、困ったとき・指示があるとき・定期の見直しだけ聞く
+      mode: process.env.LLM_MODE || 'always',
+      // assist のとき、困っていなくても見直す間隔（ミリ秒）
+      checkEveryMs: num('LLM_CHECK_EVERY_MS', 5 * 60_000),
     },
 
     // 人間らしさの調整
