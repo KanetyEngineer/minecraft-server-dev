@@ -23,6 +23,12 @@ const isAir = (b) => !b || AIR.has(b.name);
 const isSolid = (b) => !!b && b.boundingBox === 'block' && !/_leaves$/.test(b.name);
 const isFluid = (b) => !!b && (b.name === 'water' || b.name === 'lava');
 
+// 待っている間はフリーズ回避（20 秒動かないと中断）にかからないようにする
+async function holdStill(ctx, ms) {
+  ctx.state.holdStillUntil = Date.now() + ms + 3000;
+  await sleep(ms);
+}
+
 const S = (ctx) => {
   if (!ctx.society) throw new SkillError('社会モードではない');
   return ctx.society;
@@ -366,7 +372,7 @@ export async function goHome(ctx) {
       }
     }
     // 寝られなければ朝まで家の中で過ごす（壁と屋根があるので安全）
-    for (let i = 0; i < 24 && !bot.time.isDay; i++) { abortable(ctx); await sleep(5000); }
+    for (let i = 0; i < 24 && !bot.time.isDay; i++) { abortable(ctx); await holdStill(ctx, 5000); }
     return '家で夜を過ごした';
   }
   return '家に帰った';
@@ -626,7 +632,7 @@ export async function socialize(ctx, { with: target } = {}) {
   const rel = soc.rel.get(name);
   const opener = await soc.speak('greet', { to: name, call, affinity: rel.affinity });
   ctx.say?.(opener);
-  await sleep(6000 + Math.random() * 3000);
+  await holdStill(ctx, 6000 + Math.random() * 3000);
   // 世間話をひとつ（相手の返事は相手のチャットの処理で返ってくる）
   const third = soc.rel.ranked().filter((r) => r.name !== name && Math.abs(r.affinity) >= 15)[0];
   const state = {
@@ -640,7 +646,7 @@ export async function socialize(ctx, { with: target } = {}) {
   soc.rel.talked(name);
   soc.rel.adjust(name, 1 + soc.traits.agreeableness, '話をした');
   soc.town.event('talk', `${soc.persona.call}が${call}と話した`, { with: name, text: topic ?? opener });
-  await sleep(5000 + Math.random() * 4000);
+  await holdStill(ctx, 5000 + Math.random() * 4000);
   return `${call}と話した`;
 }
 
@@ -680,7 +686,7 @@ export async function callMeeting(ctx, { topic } = {}) {
   // 集まるのを待つ（最大 90 秒）
   const attendees = () => soc.town.residents().filter((r) => r.online && bot.players[r.name]?.entity
     && bot.players[r.name].entity.position.distanceTo(bot.entity.position) < 14).map((r) => r.name);
-  for (let t = 0; t < 18 && attendees().length < 4; t++) { abortable(ctx); await sleep(5000); }
+  for (let t = 0; t < 18 && attendees().length < 4; t++) { abortable(ctx); await holdStill(ctx, 5000); }
   const who = attendees();
   if (!who.length) {
     soc.town.profile.meeting = null;
@@ -692,8 +698,8 @@ export async function callMeeting(ctx, { topic } = {}) {
   }
   // 仕事の割り振り（一人ずつ、名前を呼んで）
   const lines = soc.assignTasks(who);
-  for (const line of lines) { abortable(ctx); ctx.say?.(line); await sleep(3500); }
-  await sleep(15_000); // 返事を聞く
+  for (const line of lines) { abortable(ctx); ctx.say?.(line); await holdStill(ctx, 3500); }
+  await holdStill(ctx, 15_000); // 返事を聞く
   ctx.say?.(await soc.speak('free', { text: 'じゃあ、みんなよろしく。解散！' }));
   soc.town.profile.meeting = null;
   soc.town.publish(bot);
@@ -713,7 +719,7 @@ export async function attendMeeting(ctx) {
   ctx.say?.(await soc.speak('free', { text: say.arriveLine(soc.persona) }));
   soc.flags.attendedMeetingAt = Date.now();
   // 集会が終わるまで（最大 2 分）そこにいる。割り振りへの返事はチャットの処理で行う
-  for (let t = 0; t < 24 && soc.town.meetings().some((x) => x.by === m.by); t++) { abortable(ctx); await sleep(5000); }
+  for (let t = 0; t < 24 && soc.town.meetings().some((x) => x.by === m.by); t++) { abortable(ctx); await holdStill(ctx, 5000); }
   soc.rel.adjust(m.by, 1, '集会に出た');
   return `${personaByName(m.by)?.call ?? m.by}の集会に出た`;
 }
