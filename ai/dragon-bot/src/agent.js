@@ -283,8 +283,11 @@ export class Agent {
     // 体力は 12 しかないので、近くに来たら攻撃される前に剣で倒す。スポナーが近くにあれば壊す（壊すまで湧き続ける）
     const caveSpider = bot.nearestEntity((e) => e.name === 'cave_spider' && e.position.distanceTo(pos) < 4);
     const spawner = this.findSpawnerNearby(12);
+    // ウォーデンは戦っても勝てない。見えたら何より先に遠くへ逃げる
+    const warden = bot.nearestEntity((e) => e.name === 'warden' && e.position.distanceTo(pos) < 32);
     let action = null;
-    if (creeper) action = { kind: 'creeper', from: creeper };
+    if (warden) action = { kind: 'warden', from: warden };
+    else if (creeper) action = { kind: 'creeper', from: creeper };
     else if (caveSpider && bot.health <= 6) action = { kind: 'flee', from: caveSpider };
     else if (caveSpider && !inCombat) action = { kind: 'fight', target: caveSpider };
     else if (spawner && !recentlyHurt && bot.health >= 12 && !this.spawnerBusyUntil) action = { kind: 'spawner', block: spawner };
@@ -446,6 +449,11 @@ export class Agent {
         }
       } else if (action.kind === 'fight') {
         await attackEntity(ctx, action.target, { timeoutMs: 15000 }).catch(() => {});
+      } else if (action.kind === 'warden') {
+        log.warn('ウォーデンがいるので、遠くへ逃げる');
+        const zone = action.from.position.floored(); zone.r = 48;
+        (this.state.dangerZones ??= []).push(zone);
+        await Promise.race([runAway(action.from, 40), sleep(20_000)]);
       } else {
         await runAway(action.from, 14);
       }
@@ -652,13 +660,21 @@ export class Agent {
     const id = (n) => bot.registry.blocksByName[n]?.id;
     const spawner = id('spawner') !== undefined ? bot.findBlock({ matching: id('spawner'), maxDistance: 16 }) : null;
     const webs = id('cobweb') !== undefined ? bot.findBlocks({ matching: id('cobweb'), maxDistance: 10, count: 4 }) : [];
-    const at = spawner?.position ?? (webs.length >= 4 ? webs[0] : null);
+    // ディープダーク（スカルク）: 叫ぶスカルクやセンサーを鳴らすとウォーデンが出る。ウォーデンには勝てないので広く避ける
+    //（RTA 2026-10-03 でダイヤを探して入り込み、ウォーデンに倒された）
+    const sculkIds = ['sculk_shrieker', 'sculk_sensor', 'sculk_catalyst', 'sculk'].map(id).filter((v) => v !== undefined);
+    const sculk = sculkIds.length ? bot.findBlocks({ matching: sculkIds, maxDistance: 12, count: 6 }) : [];
+    const deepDark = sculk.length >= 6 ? sculk[0] : null;
+    const at = spawner?.position ?? (webs.length >= 4 ? webs[0] : null) ?? deepDark;
     if (!at) return;
     const zones = (this.state.dangerZones ??= []);
     if (zones.some((z) => z.distanceTo(at) < 16)) return;
-    zones.push(at.clone());
+    const zone = at.clone();
+    if (at === deepDark) zone.r = 48;
+    zones.push(zone);
     if (zones.length > 20) zones.shift();
-    log.warn(`廃坑を見つけた（${spawner ? 'スポナー' : 'クモの巣'} (${at.x}, ${at.y}, ${at.z})）。半径 24 マスでは掘らない`);
+    if (at === deepDark) log.warn(`ディープダーク（スカルク (${at.x}, ${at.y}, ${at.z})）を見つけた。ウォーデンが出るので半径 48 マスでは掘らない`);
+    else log.warn(`廃坑を見つけた（${spawner ? 'スポナー' : 'クモの巣'} (${at.x}, ${at.y}, ${at.z})）。半径 24 マスでは掘らない`);
   }
 
   // 息ができる所まで逃げる。息ができるまで（最大 25 秒）は作業に戻さない

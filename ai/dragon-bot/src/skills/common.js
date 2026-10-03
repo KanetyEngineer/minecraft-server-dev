@@ -216,7 +216,7 @@ export function isUnreachable(ctx, pos) {
 // 廃坑など危険な場所（ドクグモのスポナーやクモの巣の多い所）。近くでは掘らない（agent.js が見つけて記録する）
 export const DANGER_RADIUS = 24;
 export function nearDanger(ctx, pos, r = DANGER_RADIUS) {
-  return (ctx.state?.dangerZones ?? []).some((z) => z.distanceTo(pos) < r);
+  return (ctx.state?.dangerZones ?? []).some((z) => z.distanceTo(pos) < (z.r ?? r));
 }
 
 // 危険な場所から離れる（遠ざかる向きに探索）

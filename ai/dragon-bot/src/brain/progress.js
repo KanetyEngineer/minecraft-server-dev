@@ -230,7 +230,10 @@ function nextStepRaw(bot, memory) {
     const hasBedNow = bot.inventory.items().some((i) => i.name.endsWith('_bed'));
     const sleepFailed = Date.now() - (memory.flag('sleepFailAt') ?? 0) < 10 * 60_000;
     // 防具が無いときは、体力に余裕（16 以上）が無ければ地上の夜は出歩かない（体力 13 で出てスケルトンに撃たれた）
-    const canWork = m.stoneTools && (typeof bot.health !== 'number' || bot.health >= (m.armor ? 12 : 16));
+    // 防具なしで最近（30 分以内）死んでいたら、夜の地上には出ない（RTA 2026-10-03 で夜のゾンビに何度も倒され、持ち物を失い続けた）
+    const diedRecently = (memory.data?.deaths ?? []).some((d) => Date.now() - Date.parse(d.at) < 30 * 60_000);
+    const canWork = m.stoneTools && !(diedRecently && !m.armor)
+      && (typeof bot.health !== 'number' || bot.health >= (m.armor ? 12 : 16));
     if (hasBedNow && !sleepFailed) return { skill: 'shelterForNight', args: {} };
     if (!canWork) return { skill: 'shelterForNight', args: {} };
     // 作業可能: 昼と同じ進め方に進む

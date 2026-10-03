@@ -34,3 +34,13 @@ test('経路探索が「着いた」と返して動かないときは探索を�
   assert.match(await explore(ctx, { steps: 1 }), /探索した/);
   assert.equal(ctx.state.stuckExplores, 0);
 });
+
+test('ディープダークの危険地帯は通常より広く（半径 48）避ける', async () => {
+  const { nearDanger } = await import('../src/skills/common.js');
+  const zone = new Vec3(0, -30, 0); zone.r = 48;
+  const ctx = { state: { dangerZones: [zone] } };
+  assert.equal(nearDanger(ctx, new Vec3(40, -30, 0)), true);
+  assert.equal(nearDanger(ctx, new Vec3(60, -30, 0)), false);
+  const mine = new Vec3(0, 20, 0); // 廃坑はこれまでどおり 24
+  assert.equal(nearDanger({ state: { dangerZones: [mine] } }, new Vec3(30, 20, 0)), false);
+});

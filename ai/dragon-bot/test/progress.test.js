@@ -178,6 +178,10 @@ test('夜でも寝られないとき、石の道具と体力があれば穴に�
   assert.equal(nextStep(weak, fakeMemory()).skill, 'shelterForNight');
   // 道具が無ければ穴にこもる
   assert.equal(nextStep(fakeBot({}, night), fakeMemory()).skill, 'shelterForNight');
+  // 防具なしで最近死んでいたら、夜の地上には出ない（夜のゾンビに何度も倒された）
+  const died = fakeMemory({}, { bedRetryAt: Date.now() + 60_000 });
+  died.data.deaths.push({ at: new Date(Date.now() - 5 * 60_000).toISOString() });
+  assert.equal(nextStep(fakeBot(tools, night), died).skill, 'shelterForNight');
 });
 
 test('直前に「原木が足りない」で失敗していたら、道具があっても木集めを選ぶ', () => {
