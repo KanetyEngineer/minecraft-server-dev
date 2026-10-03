@@ -18,7 +18,7 @@ export const SOCIETY_SKILLS = [
   ...BASIC.map((n) => SKILL_MAP[n]).filter(Boolean),
   def('buildHouse', soc.buildHouse, '広場のまわりの自分の区画に、5×5 の家（壁・屋根・扉・明かり・作業台・チェスト・ベッド）を建てる。材料が足りなければ木を切って板材にする。何回かに分けて進めてよい。'),
   def('goHome', soc.goHome, '自分の家に帰る。夜ならベッドで寝る（ベッドが無ければ家の中で朝を待つ）。'),
-  def('tendFarm', soc.tendFarm, '家の裏の 3×3 の畑を世話する: 草を刈って種を集め、鍬で耕して小麦を植え、実ったら収穫してパンを作る。'),
+  def('tendFarm', soc.tendFarm, '家の裏の 3×3 の畑を世話する: 真ん中に水を引き（畑は水から 4 マス以内でないと乾いて作れないので、水入りバケツか、鉄 3 個で作るバケツが要る）、草を刈って種を集め、鍬で耕して小麦を植え、実ったら収穫してパンを作る。'),
   def('depositToStorage', soc.depositToStorage, '広場の共同倉庫（無ければ作る）に、自分の取り分を残して余った食料・木材・石・鉄などを入れる。'),
   def('takeFromStorage', soc.takeFromStorage, '共同倉庫から物を出す（困ったときだけ）。', { item: str('food / planks / logs / アイテム名'), count: int('数', 1, 32) }),
   def('socialize', soc.socialize, '町の住人のそばへ行って話しかける（あいさつと世間話）。with を省くと、仲の良さと近さから相手を選ぶ。', { with: str('話しかける住人のゲーム内の名前') }),

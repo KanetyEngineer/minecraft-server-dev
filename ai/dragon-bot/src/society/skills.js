@@ -6,7 +6,7 @@ import {
   SkillError, abortable, goTo, travelTo, goals, craftItem, ensurePlanks, mineBlocks, pickUpItems, placeNear, cheapBlock,
   equipCheapestTool, ensureCraftingTable, smelt,
 } from '../skills/common.js';
-import { gatherWood } from '../skills/overworld.js';
+import { gatherWood, fillWaterBucket } from '../skills/overworld.js';
 import { deliverItems } from '../skills/general.js';
 import { count, countMatching, findItem, foodPoints, isLog, isPlanks, FOODS } from '../util/items.js';
 import { sleep } from '../body/humanize.js';
@@ -508,6 +508,50 @@ export function farmCells(house) {
   return { cx, cz, cells };
 }
 
+// 水が (x, z) から水平 4 マス以内・同じ高さか 1 段下にあるか（耕地が乾かない条件）
+export function hasWaterNear(bot, x, y, z, r = 4) {
+  for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) for (const dy of [0, -1]) {
+    const b = bot.blockAt(new Vec3(x + dx, y + dy, z + dz));
+    if (b && (b.name === 'water' || b.getProperties?.().waterlogged === true)) return true;
+  }
+  return false;
+}
+
+// 畑の真ん中に水を用意する。用意できた（すでにある）なら true
+async function ensureFarmWater(ctx, farm, hint) {
+  const { bot } = ctx;
+  const g = groundY(bot, farm.cx, farm.cz, hint);
+  if (!g) return false;
+  if (g.water || hasWaterNear(bot, farm.cx, g.y, farm.cz, 3)) return true;
+  // 水入りバケツが無ければ、バケツ（無ければ鉄 3 個から作る）で近くの水をくんでくる
+  if (!findItem(bot, 'water_bucket')) {
+    if (!findItem(bot, 'bucket') && count(bot, 'iron_ingot') < 3) return false;
+    await fillWaterBucket(ctx).catch((e) => ctx.log.warn(`水をくめなかった: ${e.message}`));
+    if (!findItem(bot, 'water_bucket')) return false;
+    await travelTo(ctx, farm.cx, farm.cz, { range: 2, step: 32 });
+  }
+  // 真ん中の土を 1 マス掘り、その穴に水を入れる
+  const hole = new Vec3(farm.cx, g.y, farm.cz);
+  await goTo(ctx, farm.cx + 1, g.y + 1, farm.cz, 1).catch(() => {});
+  const top = bot.blockAt(hole.offset(0, 1, 0));
+  if (top && SOFT.test(top.name)) await clearAt(ctx, top.position);
+  const soil = bot.blockAt(hole);
+  if (soil && soil.boundingBox === 'block') { await equipCheapestTool(bot, soil).catch(() => {}); await bot.dig(soil, true).catch(() => {}); }
+  const bottom = bot.blockAt(hole.offset(0, -1, 0));
+  if (!bottom || bottom.boundingBox !== 'block') return false;
+  try {
+    await bot.equip(findItem(bot, 'water_bucket'), 'hand');
+    await bot.lookAt(hole.offset(0.5, 0.1, 0.5), true);
+    bot.activateItem();
+    await bot.waitForTicks(6);
+  } catch (e) {
+    ctx.log.warn(`水を置けなかった: ${e.message}`);
+  }
+  const ok = bot.blockAt(hole)?.name === 'water';
+  if (ok) S(ctx).town.event('farm-water', `${S(ctx).persona.call}が畑に水を引いた`);
+  return ok;
+}
+
 export async function tendFarm(ctx) {
   const { bot } = ctx;
   const { town, persona } = S(ctx);
@@ -526,10 +570,18 @@ export async function tendFarm(ctx) {
     await ensurePlanks(ctx, 4).catch(() => {});
     await craftItem(ctx, tier, 1).catch((e) => { throw new SkillError(`鍬を作れない: ${e.message}`); });
   }
-  await travelTo(ctx, farm.cx, farm.cz, { range: 2, step: 32 });
+  // 畑は水から 4 マス以内でないと耕した土が乾いて元に戻り、小麦も育たない（Minecraft の仕様）。
+  // 畑の真ん中を 1 マス掘って水を入れ、まわりの 8 マスを畑にする（どのマスも水から 1 マス）
   const hint = house.y - 1;
+  await travelTo(ctx, farm.cx, farm.cz, { range: 2, step: 32 });
+  if (!(await ensureFarmWater(ctx, farm, hint))) {
+    town.profile.farm = { x: farm.cx, z: farm.cz, water: false, at: Date.now() };
+    throw new SkillError('畑の近く（4 マス以内）に水が無い。水入りバケツ（鉄 3 個でバケツ）を用意してから耕す');
+  }
+  await travelTo(ctx, farm.cx, farm.cz, { range: 2, step: 32 });
   for (const c of farm.cells) {
     abortable(ctx);
+    if (c.center) continue; // 真ん中は水
     const g = groundY(bot, c.x, c.z, hint);
     if (!g || g.water) continue;
     const soil = bot.blockAt(new Vec3(c.x, g.y, c.z));
@@ -587,7 +639,8 @@ const KEEP = (name, soc) => {
   if (['cobblestone', 'cobbled_deepslate'].includes(name)) return 32;
   if (['coal', 'charcoal'].includes(name)) return 4;
   if (name === 'wheat_seeds') return 8;
-  if (['iron_ingot', 'raw_iron', 'wheat', 'string', 'feather', 'leather', 'bone', 'arrow', 'gunpowder'].includes(name) ) return 0;
+  if (name === 'iron_ingot') return 3; // 畑に水を運ぶバケツ用に残す
+  if (['raw_iron', 'wheat', 'string', 'feather', 'leather', 'bone', 'arrow', 'gunpowder'].includes(name) ) return 0;
   if (name.endsWith('_wool')) return 6; // ベッド用に残す
   return null; // それ以外（道具・防具など）は納めない
 };

@@ -82,7 +82,10 @@ export function options(bot, soc, history = []) {
       else if (minutes('lastBedTryAt') > 6) add('makeBed', 48 + t.conscientiousness * 15, '夜に寝るベッドがほしい', { count: 1 });
     }
     // 畑
-    if (minutes('lastFarmAt') > 6) add('tendFarm', 22 + (1 - t.openness) * 18 + t.conscientiousness * 8, '畑の世話をする');
+    // 畑は水から 4 マス以内でないと作れない。水入りバケツ・バケツ・鉄 3 個のどれも無く、畑に水も無ければ、先に鉄を取りに行く
+    const canWater = has(bot, /^(water_bucket|bucket)$/) || bot.inventory.items().some((i) => i.name === 'iron_ingot' && i.count >= 3) || town.profile.farm?.water !== false;
+    if (minutes('lastFarmAt') > 6 && canWater) add('tendFarm', 22 + (1 - t.openness) * 18 + t.conscientiousness * 8, '畑の世話をする');
+    else if (minutes('lastFarmAt') > 6 && !night && pick) add('getIronGear', 20 + (1 - t.openness) * 12, '畑に水を引くバケツ用の鉄がほしい', { armor: false });
   }
   // 共同倉庫に余りを納める
   const extra = surplus(bot, soc);
