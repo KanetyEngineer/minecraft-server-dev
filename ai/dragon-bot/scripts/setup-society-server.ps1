@@ -71,7 +71,7 @@ function Get-OfflineUuid([string]$name) {
 $ops = "[`n  {`n    `"uuid`": `"$(Get-OfflineUuid $Op)`",`n    `"name`": `"$Op`",`n    `"level`": 4,`n    `"bypassesPlayerLimit`": false`n  }`n]`n"
 [System.IO.File]::WriteAllText((Join-Path $Dir "ops.json"), $ops)
 
-$bat = "@echo off`r`ncd /d %~dp0`r`njava -Xms$Xmx -Xmx$Xmx -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar $jar nogui`r`npause`r`n"
+$bat = "@echo off`r`nchcp 65001 > nul`r`ncd /d %~dp0`r`njava -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Xms$Xmx -Xmx$Xmx -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar $jar nogui`r`npause`r`n"
 [System.IO.File]::WriteAllText((Join-Path $Dir "start.bat"), $bat)
 
 Write-Host ""

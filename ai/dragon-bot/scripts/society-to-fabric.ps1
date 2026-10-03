@@ -56,7 +56,7 @@ foreach ($slug in @("fabric-api", "fabric-language-kotlin", "server-replay")) {
 }
 
 # 4) start.bat
-$bat = "@echo off`r`ncd /d %~dp0`r`njava -Xms$Xmx -Xmx$Xmx -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar $launcher nogui`r`npause`r`n"
+$bat = "@echo off`r`nchcp 65001 > nul`r`ncd /d %~dp0`r`njava -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Xms$Xmx -Xmx$Xmx -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar $launcher nogui`r`npause`r`n"
 [System.IO.File]::WriteAllText((Join-Path $Dir "start.bat"), $bat)
 Write-Host ""
 Write-Host "準備完了: start.bat で Fabric の鯖として起動します。録画は node scripts\society-rcon.mjs record で始めます"
