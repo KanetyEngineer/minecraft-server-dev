@@ -71,6 +71,14 @@ function connect() {
     for (const [name, b] of Object.entries(bot.registry.blocksByName)) if (PROTECTED.test(name)) mv.blocksCantBreak.add(b.id);
     // 家の扉を開けて出入りする
     mv.canOpenDoors = true;
+    // 出入りは扉からだけ: 家の壁・屋根・床は経路探索で壊さず、玄関に足場も置かない。直接掘ることもしない
+    mv.exclusionAreasBreak.push((block) => (society.isHouseShell(block.position) ? 100 : 0));
+    mv.exclusionAreasPlace.push((block) => (society.isHouseShell(block.position) || society.isIndoors(block.position) ? 100 : 0));
+    const dig = bot.dig.bind(bot);
+    bot.dig = async (block, ...rest) => {
+      if (block?.position && society.isHouseShell(block.position)) throw new Error('家の壁・屋根・床は掘らない（出入りは扉から）');
+      return dig(block, ...rest);
+    };
     log.info(`スポーンしました (${bot.entity.position.floored()})`);
     society.bot = bot;
     society.publish(bot);

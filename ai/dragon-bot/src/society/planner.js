@@ -189,6 +189,8 @@ export class SocietyPlanner {
     this.lastAskAt = Date.now();
     try {
       const d = await this.askClaude({ bot, opts: opts.slice(0, 7), history, chatLog, banned, instructions });
+    // 家があるなら、夜に穴を掘ってこもらない（家の中は安全なので家に帰る）
+    if (d.skill === 'shelterForNight' && this.soc.town.profile.house?.stage === 'done') Object.assign(d, { skill: 'goHome', args: {} });
       d.hint = hint;
       this.failStreak = 0;
       return d;

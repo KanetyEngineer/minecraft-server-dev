@@ -194,3 +194,26 @@ export function relationLabel(a) {
   if (a > -30) return '苦手';
   return '嫌い';
 }
+
+// 町の家の「殻」（壁・屋根・床）。出入りは扉からだけにするため、ここは誰も掘らない・経路探索でも壊さない。
+// 家の中（3×3×3）と玄関の 2 マスは殻に含めない。壁ができる前（整地中・壁づくり中）の家は守らない
+export function houseOf(houses, p) {
+  const x = Math.floor(p.x); const y = Math.floor(p.y); const z = Math.floor(p.z);
+  return houses.find((h) => Math.abs(x - h.x) <= 2 && Math.abs(z - h.z) <= 2 && y >= h.y - 1 && y <= h.y + 3) ?? null;
+}
+
+export function isHouseShell(houses, p) {
+  const h = houseOf(houses, p);
+  if (!h) return false;
+  const dx = Math.floor(p.x) - h.x; const dy = Math.floor(p.y) - h.y; const dz = Math.floor(p.z) - h.z;
+  const door = h.door ?? [0, 0];
+  if (dx === door[0] * 2 && dz === door[1] * 2 && (dy === 0 || dy === 1)) return false; // 玄関
+  return Math.abs(dx) === 2 || Math.abs(dz) === 2 || dy === -1 || dy === 3;
+}
+
+export function isInsideHouse(houses, p) {
+  const h = houseOf(houses, p);
+  if (!h) return false;
+  const dx = Math.floor(p.x) - h.x; const dy = Math.floor(p.y) - h.y; const dz = Math.floor(p.z) - h.z;
+  return Math.abs(dx) <= 1 && Math.abs(dz) <= 1 && dy >= 0 && dy <= 2;
+}

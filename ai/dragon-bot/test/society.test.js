@@ -101,3 +101,16 @@ test('社会モードのスキル表にエンドラ専用スキルが無い', ()
   assert.ok(SOCIETY_SKILL_MAP.buildHouse && SOCIETY_SKILL_MAP.gatherWood && SOCIETY_SKILL_MAP.socialize);
   assert.equal(SOCIETY_SKILL_MAP.fightDragon, undefined);
 });
+
+test('家の殻（壁・屋根・床）は守り、玄関と家の中は通れる', async () => {
+  const { isHouseShell, isInsideHouse } = await import('../src/society/town.js');
+  const houses = [{ x: 0, y: 64, z: 0, door: [0, -1] }];
+  assert.equal(isHouseShell(houses, { x: 2, y: 65, z: 0 }), true); // 壁
+  assert.equal(isHouseShell(houses, { x: 0, y: 67, z: 0 }), true); // 屋根
+  assert.equal(isHouseShell(houses, { x: 1, y: 63, z: 1 }), true); // 床
+  assert.equal(isHouseShell(houses, { x: 0, y: 64, z: -2 }), false); // 玄関
+  assert.equal(isHouseShell(houses, { x: 0, y: 66, z: -2 }), true); // 玄関の上は壁
+  assert.equal(isHouseShell(houses, { x: 5, y: 64, z: 0 }), false); // 外
+  assert.equal(isInsideHouse(houses, { x: 0.5, y: 64, z: 0.5 }), true);
+  assert.equal(isInsideHouse(houses, { x: 3, y: 64, z: 0 }), false);
+});

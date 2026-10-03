@@ -1,7 +1,7 @@
 // 住人ひとりの「社会的な頭」: 性格・町の台帳・人間関係をまとめ、会話（チャット）を受け答えし、集会の仕事の割り振りを決める。
 // Claude（ANTHROPIC_API_KEY）があれば会話を性格どおりに自由に作り、無ければ dialogue.js の決まった言い回しで返す。
 import { traitsOf, personaByName, PERSONAS } from './personas.js';
-import { relationLabel } from './town.js';
+import { relationLabel, isHouseShell, isInsideHouse } from './town.js';
 import * as D from './dialogue.js';
 import { foodPoints, FOODS, isPlanks, isLog } from '../util/items.js';
 import { log } from '../log.js';
@@ -95,6 +95,20 @@ export class Society {
   }
 
   importPlaces() { return []; }
+
+  // 壁のできた家（自分の家も含む）。10 秒ごとに台帳から読み直す
+  houses() {
+    if (!this.housesCache || Date.now() - this.housesCache.at > 10_000) {
+      const list = [this.town.profile, ...this.town.residents()].map((r) => r.house)
+        .filter((h) => h && ['roof', 'door', 'done'].includes(h.stage));
+      this.housesCache = { at: Date.now(), list };
+    }
+    return this.housesCache.list;
+  }
+
+  isHouseShell(p) { return isHouseShell(this.houses(), p); }
+
+  isIndoors(p) { return isInsideHouse(this.houses(), p); }
 
   wants(bot) {
     if (!bot?.inventory) return [];

@@ -1175,6 +1175,8 @@ export async function ascendToSurface(ctx, { maxSteps = 48 } = {}) {
   const { bot } = ctx;
   const sky = () => (openSkyAbove(bot) ? 15 : (bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floored())?.skyLight ?? 15));
   if (sky() >= 12) return false;
+  // 家の中（屋根の下）は地下ではない。屋根を掘って出ない（社会モード）
+  if (ctx.society?.isIndoors?.(bot.entity.position)) return false;
   ctx.log.info(`地下にいるので地上へ掘り上がる（y=${Math.floor(bot.entity.position.y)}）`);
   // まず洞窟の通路を歩いて上へ向かう（ツルハシが無いと石を掘るのは非常に遅いので、歩ける道があればそちらが速い）
   {
