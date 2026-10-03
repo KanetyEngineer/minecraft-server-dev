@@ -42,11 +42,13 @@ export function options(bot, soc, history = []) {
   if (night) {
     if (houseDone) add('goHome', 95, '夜になったので家に帰って休む');
     else add('shelterForNight', 75, '夜なのにまだ家が無いので、穴にこもって朝を待つ');
-  } else if (houseDone && tod > 10000) {
+  } else if (houseDone && (tod > 9000 || Math.hypot((bot.entity?.position.x ?? house.x) - house.x, (bot.entity?.position.z ?? house.z) - house.z) > 150)) {
+    // 遠出しすぎ（羊や動物を追って数百マス離れ、夜に帰れなくなっていた）か夕方なら、町へ戻る
     // 夕方: 家から遠ければ暗くなる前に帰り始める（夜道でゾンビやスケルトンに倒されることが多かった）
     const p = bot.entity?.position;
     const far = p ? Math.hypot(p.x - house.x, p.z - house.z) : 0;
-    if (far > 24) add('goHome', 60 + Math.min(30, far / 4), '日が暮れる前に家へ帰る');
+    if (far > 150) add('goHome', 70 + Math.min(20, far / 40), '町から離れすぎたので家へ戻る');
+    else if (far > 24 && tod > 9000) add('goHome', 60 + Math.min(30, far / 4), '日が暮れる前に家へ帰る');
   }
   // 空腹
   if (bot.food <= 8 && food < 2) {

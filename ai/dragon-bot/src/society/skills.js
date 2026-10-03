@@ -163,7 +163,7 @@ async function choosePlot(ctx) {
     if ((fails[shift] ?? 0) >= 2) continue;
     const c = plotCenter(plaza, persona.id, { shift });
     fails[shift] = (fails[shift] ?? 0) + 1;
-    await travelTo(ctx, c.x, c.z, { range: 3 });
+    await travelTo(ctx, c.x, c.z, { range: 3, step: 32 });
     if (Math.hypot(bot.entity.position.x - c.x, bot.entity.position.z - c.z) > 8) { ctx.log.info(`区画 (${c.x}, ${c.z}) にたどり着けない`); continue; }
     fails[shift] = 0;
     const hint = Math.round(bot.entity.position.y);
@@ -220,7 +220,7 @@ export async function buildHouse(ctx) {
   const need = Math.max(8, Math.min(90, remaining() + 6));
   if (buildingCount(bot) < Math.min(need, 40)) await ensureBuildingBlocks(ctx, need);
   if (buildingCount(bot) < 8) throw new SkillError('建築に使うブロックが足りない');
-  await travelTo(ctx, house.x, house.z, { range: 4 });
+  await travelTo(ctx, house.x, house.z, { range: 4, step: 32 });
 
   // 1) 敷地をならす: 中と壁の位置の邪魔な物を取り除き、床の穴を埋める
   if (house.stage === 'foundation') {
@@ -432,7 +432,7 @@ export async function goHome(ctx) {
   const { bot } = ctx;
   const house = S(ctx).town.profile.house;
   if (!house || house.stage !== 'done') throw new SkillError('まだ家が無い');
-  await travelTo(ctx, house.x, house.z, { range: 3 });
+  await travelTo(ctx, house.x, house.z, { range: 3, step: 32 });
   // 扉が無ければ付ける。付けられず夜なら、玄関を土でふさぐ（朝に掘って出る。土は経路探索でも掘れる）
   if (!hasDoor(bot, house)) {
     await ensureDoor(ctx, house).catch((e) => { if (e.name === 'AbortError') throw e; });
@@ -503,7 +503,7 @@ export async function tendFarm(ctx) {
     await ensurePlanks(ctx, 4).catch(() => {});
     await craftItem(ctx, tier, 1).catch((e) => { throw new SkillError(`鍬を作れない: ${e.message}`); });
   }
-  await travelTo(ctx, farm.cx, farm.cz, { range: 2 });
+  await travelTo(ctx, farm.cx, farm.cz, { range: 2, step: 32 });
   const hint = house.y - 1;
   for (const c of farm.cells) {
     abortable(ctx);
@@ -596,7 +596,7 @@ async function ensureStorage(ctx) {
     await craftItem(ctx, 'chest', 1);
   }
   const x = plaza.x + STORAGE_OFFSET.x; const z = plaza.z + STORAGE_OFFSET.z;
-  await travelTo(ctx, x, z, { range: 2 });
+  await travelTo(ctx, x, z, { range: 2, step: 32 });
   const g = groundY(bot, x, z, Math.round(bot.entity.position.y));
   if (!g) throw new SkillError('倉庫の場所の地面が分からない');
   const pos = new Vec3(x, g.y + 1, z);
@@ -614,7 +614,7 @@ async function ensureStorage(ctx) {
 async function openStorage(ctx) {
   const { bot } = ctx;
   const st = await ensureStorage(ctx);
-  await travelTo(ctx, st.x, st.z, { range: 2 });
+  await travelTo(ctx, st.x, st.z, { range: 2, step: 32 });
   await goTo(ctx, st.x, st.y, st.z, 2).catch(() => {});
   const block = bot.blockAt(new Vec3(st.x, st.y, st.z));
   if (!block || block.name !== 'chest') throw new SkillError('倉庫のチェストが無い');
@@ -694,7 +694,7 @@ async function approach(ctx, name, range = 3) {
   let p = whereIs(bot, town, name);
   if (!p) throw new SkillError(`${name} の居場所が分からない`);
   if (p.distanceTo(bot.entity.position) > 160) throw new SkillError(`${name} は遠すぎる`);
-  await travelTo(ctx, p.x, p.z, { range: 4 });
+  await travelTo(ctx, p.x, p.z, { range: 4, step: 32 });
   const e = bot.players[name]?.entity;
   if (!e) throw new SkillError(`${name} が見当たらない`);
   p = e.position;
@@ -775,7 +775,7 @@ export async function callMeeting(ctx, { topic } = {}) {
   const { bot } = ctx;
   const soc = S(ctx);
   const plaza = soc.town.plaza() ?? soc.town.setPlaza(bot.entity.position);
-  await travelTo(ctx, plaza.x, plaza.z, { range: 2 });
+  await travelTo(ctx, plaza.x, plaza.z, { range: 2, step: 32 });
   topic ||= soc.meetingTopic();
   soc.town.profile.meeting = { at: Date.now(), topic, x: plaza.x, y: plaza.y, z: plaza.z };
   soc.town.publish(bot);
@@ -813,7 +813,7 @@ export async function attendMeeting(ctx) {
   const soc = S(ctx);
   const m = soc.town.meetings()[0];
   if (!m) throw new SkillError('開かれている集会が無い');
-  await travelTo(ctx, m.x, m.z, { range: 4 });
+  await travelTo(ctx, m.x, m.z, { range: 4, step: 32 });
   ctx.say?.(await soc.speak('free', { text: say.arriveLine(soc.persona) }));
   soc.flags.attendedMeetingAt = Date.now();
   // 集会が終わるまで（最大 2 分）そこにいる。割り振りへの返事はチャットの処理で行う
@@ -827,7 +827,7 @@ export async function postNotice(ctx, { text } = {}) {
   const { bot } = ctx;
   const soc = S(ctx);
   const plaza = soc.town.plaza() ?? soc.town.setPlaza(bot.entity.position);
-  await travelTo(ctx, plaza.x, plaza.z, { range: 4 });
+  await travelTo(ctx, plaza.x, plaza.z, { range: 4, step: 32 });
   text ||= soc.noticeText();
   if (!text) throw new SkillError('貼り紙に書くことが無い');
   soc.town.postNotice(text);
@@ -841,7 +841,7 @@ export async function goToPlaza(ctx) {
   const { bot } = ctx;
   const soc = S(ctx);
   const plaza = soc.town.plaza() ?? soc.town.setPlaza(bot.entity.position);
-  await travelTo(ctx, plaza.x, plaza.z, { range: 4 });
+  await travelTo(ctx, plaza.x, plaza.z, { range: 4, step: 32 });
   const ns = soc.town.notices(bot) ?? [];
   soc.flags.readNotices = ns;
   return ns.length ? `掲示板: ${ns.slice(0, 4).map((n) => `${personaByName(n.by)?.call ?? n.by}「${n.text}」`).join(' / ')}` : '広場に来た（貼り紙なし）';
