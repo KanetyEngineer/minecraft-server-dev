@@ -67,6 +67,8 @@ function connect() {
     configureBody(bot);
     const mv = bot.pathfinder.movements;
     for (const [name, b] of Object.entries(bot.registry.blocksByName)) if (PROTECTED.test(name)) mv.blocksCantBreak.add(b.id);
+    // 家の扉を開けて出入りする
+    mv.canOpenDoors = true;
     log.info(`スポーンしました (${bot.entity.position.floored()})`);
     society.bot = bot;
     society.publish(bot);

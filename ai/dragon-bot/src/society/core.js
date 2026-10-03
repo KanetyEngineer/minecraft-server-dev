@@ -94,7 +94,7 @@ export class Society {
     const house = this.town.profile.house;
     const blocks = bot.inventory.items().filter((i) => isPlanks(i.name) || isLog(i.name) || i.name === 'cobblestone').reduce((s, i) => s + i.count, 0);
     if (house && house.stage !== 'done' && blocks < 20) w.push('planks');
-    if (house?.stage === 'done' && !bot.inventory.items().some((i) => i.name.endsWith('_bed')) && !this.flags.hasBed) w.push('wool');
+    if (house?.stage === 'done' && !house.bed && !bot.inventory.items().some((i) => i.name.endsWith('_bed'))) w.push('wool');
     return w;
   }
 

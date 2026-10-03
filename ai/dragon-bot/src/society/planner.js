@@ -68,8 +68,17 @@ export function options(bot, soc, history = []) {
     // 扉の無い家は夜に敵が入ってくるので、昼のうちに付けに帰る
     if (house.doorOk !== true && !night && minutes('lastHomeAt') > 8) add('goHome', 55, '家に扉を付ける');
     // 家具: ベッド
-    const bedPlaced = !!soc.flags.hasBed;
-    if (!bedPlaced && !has(bot, /_bed$/) && minutes('lastBedTryAt') > 10) add('makeBed', 30 + t.conscientiousness * 15, '家にベッドがほしい', { count: 1 });
+    // 夜はベッドで寝たいので、ベッドが無ければ昼のうちに用意する（倉庫に羊毛やベッドがあればもらう）
+    const bedPlaced = !!house.bed;
+    const storedWool = Object.entries(stored).filter(([n]) => n.endsWith('_wool')).reduce((s2, [, c]) => Math.max(s2, c), 0);
+    const storedBed = Object.entries(stored).some(([n, c]) => n.endsWith('_bed') && c > 0);
+    if (house.bed === undefined && !night) add('goHome', 50, '家のベッドを確かめに帰る');
+    else if (!bedPlaced && has(bot, /_bed$/)) add('goHome', 65, '作ったベッドを家に置く');
+    else if (!bedPlaced && !night) {
+      if (storedBed) add('takeFromStorage', 60, '倉庫のベッドをもらう', { item: 'bed', count: 1 });
+      else if (storedWool >= 3 && countMatching(bot, (n) => n.endsWith('_wool')) < 3) add('takeFromStorage', 55, '倉庫の羊毛でベッドを作る', { item: 'wool', count: 3 });
+      else if (minutes('lastBedTryAt') > 6) add('makeBed', 48 + t.conscientiousness * 15, '夜に寝るベッドがほしい', { count: 1 });
+    }
     // 畑
     if (minutes('lastFarmAt') > 6) add('tendFarm', 22 + (1 - t.openness) * 18 + t.conscientiousness * 8, '畑の世話をする');
   }
@@ -87,6 +96,11 @@ export function options(bot, soc, history = []) {
   if (food >= 8 && t.agreeableness > 0.5) {
     const hungry = online.find((r) => (r.wants ?? []).includes('food'));
     if (hungry) add('giveGift', 30 + t.agreeableness * 30 + Math.max(0, soc.rel.get(hungry.name).affinity) / 3, `${personaByName(hungry.name)?.call ?? hungry.name}が食べ物に困っている`, { to: hungry.name, item: 'food', count: 4 });
+  }
+  const myWool = bot.inventory.items().filter((i) => i.name.endsWith('_wool')).sort((a, b) => b.count - a.count)[0];
+  if (myWool && myWool.count >= 3 && houseDone && house.bed) {
+    const needy = online.find((r) => (r.wants ?? []).includes('wool'));
+    if (needy) add('giveGift', 30 + t.agreeableness * 30, `${personaByName(needy.name)?.call ?? needy.name}がベッドの羊毛に困っている`, { to: needy.name, item: myWool.name, count: 3 });
   }
   if (wood >= 40 && t.agreeableness > 0.5) {
     const builder = online.find((r) => (r.wants ?? []).includes('planks'));

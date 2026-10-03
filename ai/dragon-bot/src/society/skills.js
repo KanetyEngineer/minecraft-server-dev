@@ -366,59 +366,112 @@ async function furnish(ctx, house, plan) {
   if (bed) await placeBed(ctx, house).catch(() => {});
 }
 
+// 家の中のベッド（家の 3×3 の床の上）。無ければ null
+export function bedInHouse(bot, house) {
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    const b = bot.blockAt(new Vec3(house.x + dx, house.y, house.z + dz));
+    if (b?.name.endsWith('_bed')) return b;
+  }
+  return null;
+}
+
 async function placeBed(ctx, house) {
   const { bot } = ctx;
   const bed = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
   if (!bed) return false;
-  await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
+  await enterHouse(ctx, house);
   const placed = await placeNear(ctx, bed.name).catch(() => null);
-  if (placed) {
-    ctx.memory.setPlace('bed', placed.position, 'overworld');
+  const inHouse = bedInHouse(bot, house);
+  if (inHouse) {
+    house.bed = { x: inHouse.position.x, y: inHouse.position.y, z: inHouse.position.z };
+    ctx.society.town.publish(bot);
     ctx.society.town.event('bed', `${ctx.society.persona.call}が家にベッドを置いた`);
+  } else if (placed) {
+    // 家の外に置いてしまったら回収する
+    await bot.dig(placed, true).catch(() => {});
+    await pickUpItems(ctx, 4).catch(() => {});
   }
-  return !!placed;
+  return !!inHouse;
 }
 
-// 家に帰る（夜はベッドがあれば寝る）
+// 家の中に入る。扉が閉まっていれば開けて入り、入ったら閉める（経路探索は扉を開けられないことがある）
+export async function enterHouse(ctx, house) {
+  const { bot } = ctx;
+  const inside = () => Math.abs(bot.entity.position.x - (house.x + 0.5)) < 1.7 && Math.abs(bot.entity.position.z - (house.z + 0.5)) < 1.7
+    && Math.abs(bot.entity.position.y - house.y) < 1.2;
+  if (inside()) return true;
+  const door = doorCell(house);
+  const [dx, dz] = house.door;
+  // 玄関の外側に立つ
+  await goTo(ctx, door.x + dx, house.y, door.z + dz, 1).catch(() => {});
+  const d = bot.blockAt(door);
+  if (d?.name.endsWith('_door') && d.getProperties?.().open === false) {
+    await bot.lookAt(door.offset(0.5, 0.5, 0.5), true).catch(() => {});
+    await bot.activateBlock(d).catch(() => {});
+    await bot.waitForTicks(4);
+  }
+  await goTo(ctx, house.x, house.y, house.z, 0).catch(() => {});
+  if (!inside()) {
+    // 最後の手段: 扉の方を向いてまっすぐ歩いて入る
+    await bot.lookAt(new Vec3(house.x + 0.5, house.y + 1.6, house.z + 0.5), true).catch(() => {});
+    bot.setControlState('forward', true);
+    for (let t = 0; t < 30 && !inside(); t++) await bot.waitForTicks(1);
+    bot.setControlState('forward', false);
+  }
+  // 入ったら扉を閉める
+  const d2 = bot.blockAt(door);
+  if (inside() && d2?.name.endsWith('_door') && d2.getProperties?.().open === true) {
+    await bot.lookAt(door.offset(0.5, 0.5, 0.5), true).catch(() => {});
+    await bot.activateBlock(d2).catch(() => {});
+  }
+  return inside();
+}
+
+// 家に帰る（夜はベッドで寝る。寝られなければ家の中で朝を待つ）
 export async function goHome(ctx) {
   const { bot } = ctx;
   const house = S(ctx).town.profile.house;
   if (!house || house.stage !== 'done') throw new SkillError('まだ家が無い');
   await travelTo(ctx, house.x, house.z, { range: 3 });
-  await goTo(ctx, house.x, house.y, house.z, 1).catch(() => {});
   // 扉が無ければ付ける。付けられず夜なら、玄関を土でふさぐ（朝に掘って出る。土は経路探索でも掘れる）
   if (!hasDoor(bot, house)) {
     await ensureDoor(ctx, house).catch((e) => { if (e.name === 'AbortError') throw e; });
-    if (!hasDoor(bot, house) && !bot.time.isDay && count(bot, 'dirt') >= 2) {
-      await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
-      const pos = doorCell(house);
-      await placeAt(ctx, pos, 'dirt').catch(() => false);
-      await placeAt(ctx, pos.offset(0, 1, 0), 'dirt').catch(() => false);
-    }
+  }
+  await enterHouse(ctx, house);
+  if (!hasDoor(bot, house) && !bot.time.isDay && count(bot, 'dirt') >= 2) {
+    const pos = doorCell(house);
+    await placeAt(ctx, pos, 'dirt').catch(() => false);
+    await placeAt(ctx, pos.offset(0, 1, 0), 'dirt').catch(() => false);
   }
   house.doorOk = hasDoor(bot, house);
+  // ベッド: 家の中に無く、持っていれば置く
+  let bed = bedInHouse(bot, house);
+  if (!bed && bot.inventory.items().some((i) => i.name.endsWith('_bed'))) { await placeBed(ctx, house); bed = bedInHouse(bot, house); }
+  house.bed = bed ? { x: bed.position.x, y: bed.position.y, z: bed.position.z } : null;
+  S(ctx).flags.hasBed = !!bed;
   S(ctx).town.publish(bot);
-  // 持っているベッドを家に置く
-  const bedItem = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
-  if (bedItem && !ctx.memory.getPlace('bed')) await placeBed(ctx, house);
-  if (!bot.time.isDay) {
-    const bedPos = ctx.memory.getPlace('bed');
-    const bed = bedPos ? bot.blockAt(new Vec3(bedPos.x, bedPos.y, bedPos.z)) : null;
-    if (bed && bed.name.endsWith('_bed')) {
-      try {
-        await goTo(ctx, bed.position.x, bed.position.y, bed.position.z, 2).catch(() => {});
-        await bot.sleep(bed);
-        await Promise.race([new Promise((r) => bot.once('wake', r)), sleep(5 * 60_000)]);
-        return '家のベッドで寝た';
-      } catch (e) {
-        ctx.log.info(`寝られなかった: ${e.message}`);
-      }
+  if (bot.time.isDay && (bot.time.timeOfDay ?? 0) < 12300) return bed ? '家に帰った' : '家に帰った（ベッドが無い）';
+  // 夜: ベッドで寝る。近くに敵がいる・まだ寝られる時間でない、などで断られたら、家の中で少し待って寝直す
+  let lastErr = null;
+  for (let i = 0; i < 40 && !bot.time.isDay; i++) {
+    abortable(ctx);
+    bed = bedInHouse(bot, house);
+    if (!bed) break;
+    try {
+      await bot.sleep(bed);
+      ctx.state.holdStillUntil = Date.now() + 6 * 60_000;
+      await Promise.race([new Promise((r) => bot.once('wake', r)), sleep(6 * 60_000)]);
+      S(ctx).rel.diary('自分の家のベッドでぐっすり眠った。');
+      return '家のベッドで寝た';
+    } catch (e) {
+      if (lastErr !== e.message) ctx.log.info(`寝られなかった（待って寝直す）: ${e.message}`);
+      lastErr = e.message;
+      if (/cant click/.test(e.message)) await enterHouse(ctx, house);
+      await holdStill(ctx, 5000);
     }
-    // 寝られなければ朝まで家の中で過ごす（壁と屋根があるので安全）
-    for (let i = 0; i < 24 && !bot.time.isDay; i++) { abortable(ctx); await holdStill(ctx, 5000); }
-    return '家で夜を過ごした';
   }
-  return '家に帰った';
+  for (let i = 0; i < 24 && !bot.time.isDay; i++) { abortable(ctx); await holdStill(ctx, 5000); }
+  return bed ? '寝られなかったが家で夜を過ごした' : '家で夜を過ごした（ベッドが無い）';
 }
 
 // ---------- 畑 ----------
@@ -511,7 +564,8 @@ const KEEP = (name, soc) => {
   if (['cobblestone', 'cobbled_deepslate'].includes(name)) return 32;
   if (['coal', 'charcoal'].includes(name)) return 4;
   if (name === 'wheat_seeds') return 8;
-  if (['iron_ingot', 'raw_iron', 'wheat', 'string', 'feather', 'leather', 'bone', 'arrow', 'gunpowder'].includes(name) || name.endsWith('_wool')) return 0;
+  if (['iron_ingot', 'raw_iron', 'wheat', 'string', 'feather', 'leather', 'bone', 'arrow', 'gunpowder'].includes(name) ) return 0;
+  if (name.endsWith('_wool')) return 6; // ベッド用に残す
   return null; // それ以外（道具・防具など）は納めない
 };
 
@@ -605,7 +659,8 @@ export async function takeFromStorage(ctx, { item = 'food', count: n = 4 } = {})
   const win = await openStorage(ctx);
   const got = [];
   try {
-    const want = (name) => (item === 'food' ? FOODS.has(name) : name === item || (item === 'planks' && isPlanks(name)) || (item === 'logs' && isLog(name)));
+    const want = (name) => (item === 'food' ? FOODS.has(name) : name === item || (item === 'planks' && isPlanks(name)) || (item === 'logs' && isLog(name))
+      || (item === 'wool' && name.endsWith('_wool')) || (item === 'bed' && name.endsWith('_bed')));
     let left = n;
     for (const it of win.containerItems()) {
       if (left <= 0) break;
