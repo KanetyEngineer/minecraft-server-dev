@@ -194,6 +194,12 @@ export async function makeTools(ctx, { tier = 'stone' } = {}) {
       }
     }
     if (!findItem(bot, 'furnace')) await craftItem(ctx, 'furnace', 1);
+    // 持ち物の同期がずれると、クラフトが成功を返しても実際には作れていない。手元で確かめてから「完成」と言う
+    //（RTA 2026-10-03 で「石のツールとかまど完成」を 10 分くり返していた）。失敗にすれば同期ずれの入り直しも働く
+    const missing = [];
+    if (countMatching(bot, (n) => n.endsWith('_pickaxe') && !n.startsWith('wooden')) === 0) missing.push('石のツルハシ');
+    if (!findItem(bot, 'furnace')) missing.push('かまど');
+    if (missing.length) throw new SkillError(`作ったはずの ${missing.join('・')} が持ち物に無い（updateSlot did not fire の疑い）`);
     return '石のツールとかまど完成';
   }
   throw new SkillError(`tier=${tier} は getIronGear / mineDiamonds を使う`);
