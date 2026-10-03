@@ -68,6 +68,14 @@ export class Society {
     return !!this.client && this.cfg.llm.chat && Date.now() > (this.llmOffUntil ?? 0);
   }
 
+  // API の節約: Claude で会話を作るのは SOCIETY_LLM_CHAT_SEC 秒（既定 60 秒）に 1 回まで
+  chatBudget() {
+    if (!this.usingLLM) return false;
+    if (Date.now() - (this.lastLlmChatAt ?? 0) < (Number(process.env.SOCIETY_LLM_CHAT_SEC) || 60) * 1000) return false;
+    this.lastLlmChatAt = Date.now();
+    return true;
+  }
+
   get assignment() {
     const a = this.rel.data.assignment;
     return a && a.until > Date.now() ? a : null;
@@ -110,7 +118,8 @@ export class Society {
       return D.voice(p, v.text ?? '');
     };
     // 決まった形のもの（集会の呼びかけ）と自由発言はそのまま。会話の出だしと世間話だけ Claude に作らせる
-    if (!this.usingLLM || !['greet', 'smalltalk'].includes(kind)) return canned();
+    // 会話の出だしと世間話を Claude に作らせるのは 3 回に 1 回だけ（API の節約）
+    if (!this.chatBudget() || !['greet', 'smalltalk'].includes(kind) || Math.random() > 0.35) return canned();
     const rel = v.to ? this.rel.get(v.to) : null;
     const intent = kind === 'greet'
       ? `${v.call} に会ったので話しかける（あなたから見て ${relationLabel(rel?.affinity ?? 0)}、好感度 ${rel?.affinity ?? 0}）。`
@@ -188,7 +197,8 @@ export class Society {
       this.flags.pendingGift = { to: username, item: 'food', count: 3, at: Date.now() };
     }
     let text = null;
-    if (this.usingLLM) {
+    // 名指しされたときだけ Claude で返事を作る（口出しは決まった言い回し。API の節約）
+    if (direct && this.chatBudget()) {
       text = await this.llmLine(`${call} がチャットで「${message}」と言った（${direct ? 'あなたに向けて' : '近くで'}）。`
         + `あなたから見た ${call} は ${relationLabel(rel.affinity)}（好感度 ${rel.affinity}）。返事をする。`);
     }

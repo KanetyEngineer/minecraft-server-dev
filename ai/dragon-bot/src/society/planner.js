@@ -181,7 +181,12 @@ export class SocietyPlanner {
     const opts = options(bot, this.soc, history).filter((o) => !banned.includes(o.skill));
     const top = opts[0] ?? { skill: 'wait', args: { seconds: 20 }, why: 'することが無い' };
     const hint = { skill: top.skill, args: top.args };
-    if (!this.usingLLM) return { ...hint, hint, source: 'rules', thought: `（${this.soc.persona.mbti} の気分）${top.why}` };
+    // API の節約: Claude に聞くのは SOCIETY_LLM_DECIDE_SEC 秒（既定 180 秒）に 1 回まで。
+    // その間と、夜に家へ帰る・空腹・道具が無いなど性格で迷わない場面は性格ルールで決める
+    const obvious = top.score >= 70 || (opts[1] && top.score - opts[1].score > 25);
+    const due = Date.now() - (this.lastAskAt ?? 0) > (Number(process.env.SOCIETY_LLM_DECIDE_SEC) || 180) * 1000;
+    if (!this.usingLLM || obvious || !due) return { ...hint, hint, source: 'rules', thought: `（${this.soc.persona.mbti} の気分）${top.why}` };
+    this.lastAskAt = Date.now();
     try {
       const d = await this.askClaude({ bot, opts: opts.slice(0, 7), history, chatLog, banned, instructions });
       d.hint = hint;
@@ -228,7 +233,7 @@ export class SocietyPlanner {
     ].join('\n');
     const req = {
       model: this.cfg.llm.model,
-      max_tokens: 16000,
+      max_tokens: 4000,
       system: [{ type: 'text', text: `${personaPrompt(soc.persona, soc.traits)}\n夜は家に帰る・お腹がすいたら食べる、など生活の基本は守ってください。死ぬと持ち物を失います。`, cache_control: { type: 'ephemeral' } }],
       tools: this.tools,
       tool_choice: { type: 'auto', disable_parallel_tool_use: true },
