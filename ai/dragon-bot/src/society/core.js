@@ -64,7 +64,8 @@ export class Society {
   }
 
   get usingLLM() {
-    return !!this.client && this.cfg.llm.chat;
+    // 失敗が続いたら（残高切れなど）10 分は決まった言い回しで話す
+    return !!this.client && this.cfg.llm.chat && Date.now() > (this.llmOffUntil ?? 0);
   }
 
   get assignment() {
@@ -128,11 +129,14 @@ export class Society {
         system: [{ type: 'text', text: `${personaPrompt(this.persona, this.traits)}\n${CHAT_RULES}`, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: `最近のチャット:\n${recent || '（なし）'}\n人間関係: ${rels || 'まだ誰とも話していない'}\nいまやっていること: ${D.doing(this.currentSkill())}\n\n${intent}\n発言だけを書いてください。` }, ...conversation],
       });
+      this.llmFails = 0;
       if (res.stop_reason === 'refusal') return null;
       const t = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
       return t ? t.replace(/^["「]|["」]$/g, '').slice(0, 100) : null;
     } catch (e) {
       log.warn(`会話の生成に失敗: ${e.message}`);
+      this.llmFails = (this.llmFails ?? 0) + 1;
+      if (this.llmFails >= 3) { this.llmOffUntil = Date.now() + 10 * 60_000; this.llmFails = 0; }
       return null;
     }
   }

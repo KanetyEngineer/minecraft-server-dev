@@ -158,6 +158,8 @@ export class SocietyPlanner {
   }
 
   get usingLLM() {
+    // 5 回続けて失敗したら（残高切れなど）しばらく性格ルールだけで動き、10 分ごとに Claude を試し直す
+    if (this.failStreak >= 5 && Date.now() - (this.lastFailAt ?? 0) > 10 * 60_000) this.failStreak = 4;
     return !!this.client && this.failStreak < 5;
   }
 
@@ -187,6 +189,7 @@ export class SocietyPlanner {
       return d;
     } catch (e) {
       this.failStreak++;
+      this.lastFailAt = Date.now();
       log.warn(`LLM 判断に失敗（${this.failStreak} 回目）: ${e.message}。性格ルールで続行`);
       return { ...hint, hint, source: 'rules', thought: top.why };
     }
