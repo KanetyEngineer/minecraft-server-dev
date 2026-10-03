@@ -380,7 +380,30 @@ async function placeBed(ctx, house) {
   const bed = bot.inventory.items().find((i) => i.name.endsWith('_bed'));
   if (!bed) return false;
   await enterHouse(ctx, house);
-  const placed = await placeNear(ctx, bed.name).catch(() => null);
+  // ベッドは向いている方向に 2 マスになる。家の中（3×3）で、立つマス S から dir の向きに 2 マス空いている組を探し、
+  // S に立って dir を向いて足元側のマスに置く（家の真ん中から置くと頭側が壁にぶつかって置けなかった）
+  const free = (dx, dz) => Math.abs(dx) <= 1 && Math.abs(dz) <= 1 && isAir(bot.blockAt(new Vec3(house.x + dx, house.y, house.z + dz)))
+    && isAir(bot.blockAt(new Vec3(house.x + dx, house.y + 1, house.z + dz)));
+  let placed = null;
+  for (const [sx, sz] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    for (const [ddx, ddz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      if (placed || !free(sx, sz) || !free(sx + ddx, sz + ddz) || !free(sx + 2 * ddx, sz + 2 * ddz)) continue;
+      const foot = new Vec3(house.x + sx + ddx, house.y, house.z + sz + ddz);
+      const floor = bot.blockAt(foot.offset(0, -1, 0));
+      if (!floor || floor.boundingBox !== 'block') continue;
+      await goTo(ctx, house.x + sx, house.y, house.z + sz, 0).catch(() => {});
+      try {
+        await bot.equip(bot.inventory.items().find((i) => i.name.endsWith('_bed')), 'hand');
+        // 向きだけ dir に合わせ、少し下を見て足元側のマスの床をクリックする
+        await bot.look(Math.atan2(-ddx, -ddz), -0.9, true);
+        await bot._placeBlockWithOptions(floor, new Vec3(0, 1, 0), { swingArm: 'right', forceLook: 'ignore' });
+      } catch (e) {
+        ctx.log.info(`ベッドを置けなかった: ${e.message}`);
+      }
+      await bot.waitForTicks(4);
+      if (bedInHouse(bot, house)) placed = bedInHouse(bot, house);
+    }
+  }
   const inHouse = bedInHouse(bot, house);
   if (inHouse) {
     house.bed = { x: inHouse.position.x, y: inHouse.position.y, z: inHouse.position.z };
