@@ -8,14 +8,14 @@
 | ハロウィン | rails-backups.tun.ply.gg（:5858） | 移動OK（accepts-transfers=true 済み） |
 | 銃MOD | stamina-snugness.tun.ply.gg（:14611） | 移動OK（26.1.x の Fabric クライアントのみ、鯖が動いているとき） |
 | クラロワ | stamina-smokiness.tun.ply.gg（:44748） | 移動OK |
-| アニメ技 | なし | ロビーのトンネル共用の中継（router/router.js）を用意、起動はユーザーの承認待ち |
+| アニメ技 | stamina-proves.tun.ply.gg.（:14610、末尾の "." でロビーの入口の中継が振り分け） | 移動OK |
 
 ## ロビーへ戻る導線（任意・各鯖の担当が入れる）
 
 `addons/lobby_return.zip` をワールドの `datapacks/` に入れ、`server.properties` を `function-permission-level=3` にして再起動。
 プレイヤーは `/trigger lobby` でロビーへ戻れる（`/transfer` は権限レベル 3 が必要なため）。Paper 26.2 で動作確認済み。
 
-ロビー: `Documents\ClaudeCode\game-lobby\server`（Paper 26.2 + ViaVersion/ViaBackwards、ポート 25576、online-mode=true）。
+ロビー: `Documents\ClaudeCode\game-lobby\server`（Paper 26.2 + ViaVersion/ViaBackwards、本体 25579、入口の中継 25576、online-mode=true）。
 移動は Minecraft 標準の「転送（transfer）」で行う。プロキシ（Velocity）は使わないので、各サーバーの online-mode や UUID はそのままでよい。
 転送ではプレイヤーのクライアントが行き先へ自分でつなぎ直すため、行き先ごとに **プレイヤーから届く公開アドレス** が必要。
 

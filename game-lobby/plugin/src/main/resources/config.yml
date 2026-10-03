@@ -66,8 +66,9 @@ destinations:
     pad-block: CYAN_CONCRETE
     frame-block: PURPUR_BLOCK
     particle: END_ROD
-    host: ""
-    port: 25590
+    # ロビーのトンネルを共用。末尾の "." を見て router/router.js がアニメ技（25590）へ振り分ける
+    host: "stamina-proves.tun.ply.gg."
+    port: 14610
     version: "26.2"
     require-brand: ""
     info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
