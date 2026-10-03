@@ -3,6 +3,7 @@
 import { SKILL_MAP } from '../skills/index.js';
 import * as soc from './skills.js';
 import * as animals from './animals.js';
+import * as family from './family.js';
 
 const int = (description, minimum = 1, maximum = 64) => ({ type: 'integer', description, minimum, maximum });
 const str = (description) => ({ type: 'string', description });
@@ -30,6 +31,9 @@ export const SOCIETY_SKILLS = [
   def('breedAnimals', animals.breedAnimals, '近くの同じ種類の動物 2 匹に好物をあげて繁殖させる（牛・羊は小麦、豚はニンジン・ジャガイモ、ニワトリは種。5 分は再び繁殖しない）。食料と羊毛を絶やさないため。', { animal: str('cow / sheep / pig / chicken（省略可）') }),
   def('shearSheep', animals.shearSheep, '羊を倒さずにハサミ（鉄 2 個）で毛を刈ってベッドを作る（毛はまた生える）。ハサミも鉄も無ければ羊を倒して羊毛を取る。', { wool: int('集める羊毛の数', 3, 16) }),
   def('lightHome', soc.lightHome, '家の中と家のまわりに松明を置く（暗い所にしか敵は湧かない）。石炭・木炭が無ければ原木を焼いて木炭を作る。'),
+  def('propose', family.propose, '好きな人（結婚していない異性の大人）のそばへ行ってプロポーズする。相手も自分を好きなら結婚できる。', { to: str('相手のゲーム内の名前') }, ['to']),
+  def('haveChild', family.haveChild, '結婚相手のそばへ行き、子どもを授かることを話し合う（両親とも 20〜45 歳、前の子から 3 年、子は 4 人まで）。'),
+  def('careForChild', family.careForChild, '自分の子ども・孫のそばへ行って話しかけ、食べ物を分ける（子育て）。', { child: str('子どものゲーム内の名前') }, ['child']),
   def('goToPlaza', soc.goToPlaza, '広場へ行って掲示板を読む。'),
   def('say', soc.chatSay, 'チャットで発言する（みんなに呼びかける・意見を言うなど）。', { message: str('発言（40 文字くらいまで）') }, ['message']),
 ];

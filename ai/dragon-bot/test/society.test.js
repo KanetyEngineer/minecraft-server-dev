@@ -123,3 +123,32 @@ test('小麦を持っていて近くに牛が 2 頭いれば繁殖を考える',
   const o = options(b, soc).find((x) => x.skill === 'breedAnimals');
   assert.equal(o?.args.animal, 'cow');
 });
+
+test('人口: 子どもの MBTI は両親から 1 文字ずつ、結婚の条件、年齢の段階', async () => {
+  const pop = await import('../src/society/population.js');
+  for (let i = 0; i < 50; i++) assert.match(pop.childMbti('INTJ', 'ESFP'), /^[EI][NS][FT][JP]$/);
+  assert.equal(pop.lifeStage(5), 'child');
+  assert.equal(pop.lifeStage(15), 'teen');
+  assert.equal(pop.lifeStage(30), 'adult');
+  assert.equal(pop.lifeStage(70), 'elder');
+  const now = Date.now();
+  const mk = (name, sex, age, extra = {}) => ({ name, sex, born: now - age * pop.YEAR_MS, alive: true, spouse: null, children: [], parents: [], lastBirthAt: 0, ...extra });
+  assert.ok(pop.canMarry(mk('a', 'F', 25), mk('b', 'M', 27)));
+  assert.ok(!pop.canMarry(mk('a', 'F', 25), mk('b', 'F', 27))); // 同性は出産できないので結婚相手にしない
+  assert.ok(!pop.canMarry(mk('a', 'F', 15), mk('b', 'M', 27))); // 18 歳未満
+  assert.ok(!pop.canMarry(mk('a', 'F', 25, { parents: ['x', 'y'] }), mk('b', 'M', 27, { parents: ['x', 'z'] }))); // きょうだい
+  const world = { people: { a: mk('a', 'F', 25, { spouse: 'b' }), b: mk('b', 'M', 27, { spouse: 'a' }) } };
+  assert.ok(pop.canHaveChild(world, world.people.a));
+  world.people.a.lastBirthAt = now;
+  assert.ok(!pop.canHaveChild(world, world.people.a)); // 前の子から 3 年
+});
+
+test('人口: 子どもは両親の名前と被らない名前・16 文字以内で生まれる', async () => {
+  const pop = await import('../src/society/population.js');
+  const world = pop.initialWorld();
+  const c = pop.makeChild(world, world.people.Rin_INTJ, world.people.Kaito_ENTP);
+  assert.match(c.name, /^[A-Za-z0-9_]{3,16}$/);
+  assert.equal(c.generation, 2);
+  assert.deepEqual(c.parents, ['Rin_INTJ', 'Kaito_ENTP']);
+  assert.ok(c.persona.call && c.persona.style.first);
+});

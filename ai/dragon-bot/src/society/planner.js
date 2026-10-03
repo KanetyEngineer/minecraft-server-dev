@@ -8,6 +8,7 @@ import { sanitizeArgs } from '../skills/index.js';
 import { personaPrompt, TASKS } from './core.js';
 import { surplus, buildingCount } from './skills.js';
 import { BREED_FOOD } from './animals.js';
+import { canHaveChild, ageOf, ADULT_AGE } from './population.js';
 import { relationLabel } from './town.js';
 import { personaByName } from './personas.js';
 import { foodPoints, FOODS, countMatching, isLog, isPlanks } from '../util/items.js';
@@ -139,6 +140,51 @@ export function options(bot, soc, history = []) {
   if (pick && minutes('lastIronAt') > 30 && !night) add('getIronGear', 10 + t.craftsmanship * 25, '鉄の道具を作りたい', { armor: false });
   if (!houseDone && buildingCount(bot) < 30 && pick) add('gatherBlocks', 8 + t.craftsmanship * 15, '家の材料に石を集める', { count: 32 });
 
+  // ---------- 人生（年齢・結婚・子育て）。行動原理は「子孫の繁栄と文明の発展」 ----------
+  const life = soc.life;
+  const world = soc.world;
+  if (life && world) {
+    const me = world.people[bot.username];
+    // 結婚: 大人でひとり身なら、好きな異性に近づき、十分に好きならプロポーズする
+    if (me && !me.spouse && ['adult', 'elder'].includes(life.stage) && life.age < 50 && !night) {
+      const candidates = Object.values(world.people)
+        .filter((p) => p.alive && p.name !== me.name && !p.spouse && p.sex !== me.sex && ageOf(p) >= ADULT_AGE && ageOf(p) < 50
+          && !me.parents.includes(p.name) && !(me.parents.length && me.parents.some((x) => p.parents?.includes(x))))
+        .map((p) => ({ p, a: soc.rel.get(p.name).affinity }))
+        .filter((c) => online.some((r) => r.name === c.p.name))
+        .sort((x, y) => y.a - x.a);
+      const best = candidates[0];
+      if (best && best.a >= 50 && Date.now() - (soc.flags.proposedAt ?? 0) > 15 * 60_000) {
+        add('propose', 55 + t.extraversion * 10 + best.a / 5, `${personaByName(best.p.name)?.call}のことが好きなのでプロポーズする（子孫の繁栄）`, { to: best.p.name });
+      } else if (best && best.a >= 10) {
+        add('socialize', 28 + t.extraversion * 15 + best.a / 4, `気になる${personaByName(best.p.name)?.call}と仲良くなりたい`, { with: best.p.name });
+      }
+    }
+    // 子ども: 結婚していて条件がそろえば、子どもを授かる
+    if (me?.spouse && canHaveChild(world, me) && !night && Date.now() - (soc.flags.childAskAt ?? 0) > 10 * 60_000) {
+      add('haveChild', 50 + t.agreeableness * 15, `${personaByName(me.spouse)?.call}と家族を増やしたい（子孫の繁栄）`);
+    }
+    // 子育て: 幼い子・孫がいれば世話をする
+    const kids = (me?.children ?? []).map((c) => world.people[c]).filter((c) => c?.alive && ageOf(c) < ADULT_AGE && online.some((r) => r.name === c.name));
+    if (kids.length && !night && minutes('lastCareAt') > 8) {
+      const kid = kids.sort((a, b) => soc.rel.get(a.name).lastTalkAt - soc.rel.get(b.name).lastTalkAt)[0];
+      add('careForChild', 42 + t.agreeableness * 20, `子どもの${personaByName(kid.name)?.call}の世話をする`, { child: kid.name });
+    }
+    // 年齢による違い
+    const CHILD_OK = new Set(['goHome', 'socialize', 'explore', 'gatherFood', 'tendFarm', 'goToPlaza', 'attendMeeting', 'shelterForNight', 'gatherWood', 'takeFromStorage', 'breedAnimals', 'wait']);
+    for (const o of out) {
+      if (life.stage === 'child' && !CHILD_OK.has(o.skill)) o.score = -100;
+      if (life.stage === 'child' && o.skill === 'explore') { o.args = { steps: 1 }; o.score -= 10; }
+      if (life.stage === 'teen' && ['buildHouse', 'callMeeting', 'propose', 'haveChild'].includes(o.skill)) o.score = -100;
+      if (life.stage === 'elder') {
+        if (['socialize', 'careForChild', 'callMeeting', 'giveGift', 'goHome'].includes(o.skill)) o.score += 10;
+        else if (['getIronGear', 'gatherBlocks', 'explore', 'mineBlock'].includes(o.skill)) o.score *= 0.6;
+      }
+      // 文明の発展: 町や次の世代に残るものを少し優先する
+      if (['depositToStorage', 'tendFarm', 'lightHome', 'breedAnimals'].includes(o.skill)) o.score += 8;
+    }
+  }
+
   // 集会で任された仕事はしばらく優先する
   const a = soc.assignment;
   if (a) {
@@ -159,7 +205,7 @@ export function options(bot, soc, history = []) {
 
 // スキルが終わったときに、欲求の「最後にやった時刻」を進める
 const MARKS = { socialize: 'lastTalkAt', explore: 'lastExploreAt', tendFarm: 'lastFarmAt', postNotice: 'lastNoticeAt',
-  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt', goHome: 'lastHomeAt', breedAnimals: 'lastBreedAt', shearSheep: 'lastBedTryAt', lightHome: 'lastLightAt' };
+  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt', goHome: 'lastHomeAt', careForChild: 'lastCareAt', breedAnimals: 'lastBreedAt', shearSheep: 'lastBedTryAt', lightHome: 'lastLightAt' };
 
 export class SocietyPlanner {
   constructor(cfg, soc, { client } = {}) {

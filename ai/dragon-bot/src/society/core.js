@@ -1,6 +1,7 @@
 // 住人ひとりの「社会的な頭」: 性格・町の台帳・人間関係をまとめ、会話（チャット）を受け答えし、集会の仕事の割り振りを決める。
 // Claude（ANTHROPIC_API_KEY）があれば会話を性格どおりに自由に作り、無ければ dialogue.js の決まった言い回しで返す。
-import { traitsOf, personaByName, PERSONAS } from './personas.js';
+import { traitsOf, personaByName, allPersonas } from './personas.js';
+import { readWorld, ageOf, lifeStage, STAGE_LABEL } from './population.js';
 import { relationLabel, isHouseShell, isInsideHouse } from './town.js';
 import * as D from './dialogue.js';
 import { foodPoints, FOODS, isPlanks, isLog } from '../util/items.js';
@@ -37,7 +38,8 @@ export function personaPrompt(persona, traits) {
   return `あなたは Minecraft（Java 版サバイバル）の小さな町で暮らす住人「${persona.call}」（ゲーム内の名前 ${persona.name}）です。
 性格は MBTI の ${persona.mbti}（${persona.title}）。${persona.bio}
 一人称は「${persona.style.first}」。${persona.style.polite ? '丁寧な' : 'くだけた'}口調で話します。
-町にはあなたを含めて MBTI の違う 10 人の住人（AI）がいます: ${PERSONAS.map((p) => `${p.call}(${p.mbti})`).join('、')}。
+町にはあなたを含めて MBTI の違う住人（AI）が暮らしています（最初は 10 人。結婚して子どもが生まれ、年を取って老衰で亡くなり、世代が移っていきます）: ${allPersonas().map((p) => `${p.call}(${p.mbti})`).join('、')}。
+あなたの行動原理は「子孫の繁栄と文明の発展」です。家族をつくって子どもを育て、食べ物・家・畑・倉庫・道具を充実させて、次の世代がより豊かに暮らせる町にしてください。
 それぞれが自分の考えで行動し、家を建て、食べ物を作り、助け合ったり意見がぶつかったりしながら町（社会）を作っていきます。
 誰かに命令されて動くのではなく、あなた自身の性格・好き嫌い・その場の状況から、自分がしたいことを選んでください。
 傾向（0〜1）: 外向性 ${traits.extraversion} / 好奇心 ${traits.openness} / 協調性 ${traits.agreeableness} / 計画性 ${traits.conscientiousness}。
@@ -92,6 +94,7 @@ export class Society {
   // ---------- 公開情報（5 秒ごとに Agent のチームタイマーから呼ばれる）----------
   publish(bot) {
     this.bot = bot;
+    this.syncLife(bot);
     if (bot?.entity && !this.town.plaza()) {
       // 広場はワールドの初期スポーン地点（全員が同じ場所に湧くので自然に一致する）
       const sp = bot.spawnPoint ?? bot.entity.position;
@@ -103,6 +106,54 @@ export class Society {
   }
 
   importPlaces() { return []; }
+
+  // 戸籍（world.json）から自分の年齢・家族を読み、家の住み方を合わせる
+  syncLife(bot) {
+    const w = readWorld(this.town.dir);
+    if (!w) return;
+    this.world = w;
+    const me = w.people[this.persona.name];
+    if (!me) return;
+    const prev = this.life;
+    const age = ageOf(me);
+    this.life = { age, stage: lifeStage(age), sex: me.sex, generation: me.generation, spouse: me.spouse, children: me.children ?? [],
+      parents: me.parents ?? [], alive: me.alive, canHaveChildAt: me.lastBirthAt };
+    const P = this.town.profile;
+    P.age = age; P.stage = this.life.stage; P.spouse = me.spouse; P.generation = me.generation; P.sex = me.sex;
+    // 子ども・若者は親の家で暮らす（自分の家はまだ建てない）
+    if (this.life.stage === 'child' || this.life.stage === 'teen') {
+      if (!P.house || P.house.shared) {
+        const parentHouse = (me.parents ?? []).map((n) => this.town.resident(n)?.house).find((h) => h?.stage === 'done');
+        if (parentHouse) P.house = { ...parentHouse, shared: true };
+      }
+    } else if (P.house?.shared && !me.inheritHouse) {
+      P.house = null; // 大人になったので自分の家を建てる
+      this.rel.diary('大人になった。自分の家を建てよう。');
+    }
+    // 親の家を継ぐ
+    if (me.inheritHouse && (!P.house || P.house.shared || P.house.stage !== 'done') && !P.inheritedFrom) {
+      P.house = { ...me.inheritHouse, shared: false };
+      P.inheritedFrom = me.inheritHouse.from;
+      this.rel.diary(`${personaByName(me.inheritHouse.from)?.call ?? me.inheritHouse.from}の家を継いだ。`);
+    }
+    // 出来事を日記に残し、ひとこと言う
+    const say = (t) => { try { bot?.chat(D.voice(this.persona, t)); } catch {} };
+    if (prev) {
+      if (!prev.spouse && me.spouse) { this.rel.diary(`${personaByName(me.spouse)?.call}と結婚した。`); say(`${personaByName(me.spouse)?.call}と結婚したよ、みんなありがとう。`); }
+      if ((me.children?.length ?? 0) > prev.children.length) {
+        const c = personaByName(me.children.at(-1));
+        this.rel.diary(`子どもの${c?.call ?? me.children.at(-1)}が生まれた。`);
+        say(`${c?.call ?? ''}が生まれた！大事に育てるね。`);
+        this.rel.adjust(me.children.at(-1), 60, '自分の子ども');
+      }
+      if (prev.stage !== this.life.stage) this.rel.diary(`${STAGE_LABEL[this.life.stage]}になった（${age} 歳）。`);
+    } else if (me.parents?.length && !this.rel.data.relations[me.parents[0]]) {
+      for (const p of me.parents) this.rel.adjust(p, 60, '自分の親');
+    }
+  }
+
+  // 戸籍の人（生きている人）
+  person(name) { return this.world?.people?.[name] ?? null; }
 
   // 壁のできた家（自分の家も含む）。10 秒ごとに台帳から読み直す
   houses() {
@@ -211,7 +262,9 @@ export class Society {
     // 話しかけられると少し親しくなる（相性が悪いと、たまに気に障る）
     if (from) {
       const cold = rel.affinity < -10 || (Math.random() < 0.08 && this.traits.agreeableness < 0.5);
-      this.rel.adjust(username, cold ? -2 : 1, cold ? `${call}の言い方が気に障った` : null);
+      const me = this.world?.people?.[this.persona.name]; const o = this.world?.people?.[username];
+      const romance = direct && me && o && !me.spouse && !o.spouse && me.sex !== o.sex && ['adult', 'elder'].includes(this.life?.stage);
+      this.rel.adjust(username, cold ? -2 : romance ? 2 : 1, cold ? `${call}の言い方が気に障った` : null);
       this.rel.talked(username);
     }
     // 食べ物を頼まれたら、分けられるなら届ける予定を立てる

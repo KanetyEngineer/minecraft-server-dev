@@ -6,14 +6,17 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PERSONAS } from '../src/society/personas.js';
+import { allPersonas } from '../src/society/personas.js';
+import { readWorld, ageOf, lifeStage, STAGE_LABEL } from '../src/society/population.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'society');
 const port = Number(process.argv[2] || 3300);
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 
 function state() {
-  const residents = PERSONAS.map((p) => {
+  const world = readWorld(path.join(root, 'town'));
+  const residents = allPersonas().map((p) => {
+    const w = world?.people?.[p.name];
     const pub = readJson(path.join(root, 'town', `${p.name}.json`)) ?? {};
     const mem = readJson(path.join(root, 'data', p.name, 'memory.json')) ?? {};
     const social = mem.social ?? {};
@@ -24,6 +27,8 @@ function state() {
       notices: pub.notices ?? [], assignment: social.assignment ?? null,
       relations: Object.fromEntries(Object.entries(social.relations ?? {}).map(([k, v]) => [k, v.affinity])),
       diary: (social.diary ?? []).slice(-5), deaths: (mem.deaths ?? []).length,
+      age: w ? ageOf(w) : null, stage: w ? STAGE_LABEL[lifeStage(ageOf(w))] : null, alive: w ? w.alive : true, lifespan: w?.lifespan ?? null,
+      spouse: w?.spouse ?? null, generation: w?.generation ?? 1, sex: w?.sex ?? p.sex, children: w?.children ?? [], parents: w?.parents ?? [],
     };
   });
   let events = [];
@@ -33,7 +38,11 @@ function state() {
   } catch {}
   const counts = {};
   for (const e of events) counts[e.kind] = (counts[e.kind] ?? 0) + 1;
-  return { at: new Date().toISOString(), residents, events, counts };
+  const alive = residents.filter((r) => r.alive);
+  const pop = { alive: alive.length, born: world?.births?.length ?? 0, married: world?.marriages?.length ?? 0, died: world?.deaths?.length ?? 0,
+    generations: Math.max(1, ...alive.map((r) => r.generation)), houses: alive.filter((r) => r.house === 'done').length,
+    yearMin: world ? world.yearMs / 60000 : null };
+  return { at: new Date().toISOString(), residents, events, counts, pop };
 }
 
 const PAGE = `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -50,6 +59,7 @@ table{border-collapse:collapse;background:var(--card);font-size:12px}td,th{borde
 .wrap{overflow-x:auto}.ev{font-size:13px;padding:3px 0;border-bottom:1px solid var(--line)}
 </style>
 <h1>MBTI 社会実験</h1><div class="muted" id="at"></div>
+<div id="pop" class="muted"></div>
 <h2>住人</h2><div class="grid" id="res"></div>
 <h2>好感度（行の人から見た列の人）</h2><div class="wrap"><table id="rel"></table></div>
 <h2>出来事</h2><div id="cnt" class="muted"></div><div id="ev"></div>
@@ -60,9 +70,11 @@ function color(v){if(v===undefined)return'';const a=Math.min(1,Math.abs(v)/60);r
 async function tick(){
   const s=await (await fetch('/state.json')).json();
   document.getElementById('at').textContent='更新 '+new Date(s.at).toLocaleTimeString();
-  document.getElementById('res').innerHTML=s.residents.map(r=>'<div class="card '+(r.online?'':'off')+'"><b>'+esc(r.call)+'</b> <span class="tag">'+r.mbti+'</span><span class="muted">'+esc(r.job??r.title)+'</span>'
+  const P=s.pop;document.getElementById('pop').textContent='人口 '+P.alive+' 人 / 生まれた '+P.born+' / 結婚 '+P.married+' / 老衰 '+P.died+' / 第 '+P.generations+' 世代まで / 完成した家 '+P.houses+'（1 年 = '+P.yearMin+' 分）';
+  const callOf=n=>(s.residents.find(x=>x.name===n)||{}).call||n;
+  document.getElementById('res').innerHTML=s.residents.filter(r=>r.alive||r.age!==null).map(r=>'<div class="card '+(r.online&&r.alive?'':'off')+'"><b>'+esc(r.call)+'</b> <span class="tag">'+r.mbti+'</span><span class="tag">'+(r.sex==='F'?'女':'男')+' '+(r.age??'?')+'歳 '+esc(r.stage??'')+'</span>'+(r.generation>1?'<span class="tag">第'+r.generation+'世代</span>':'')+(r.alive?'':'<span class="tag">故人</span>')+'<br><span class="muted">'+esc(r.job??r.title)+'</span>'
     +'<div>'+(r.online?esc(r.doing??'考え中'):'留守')+'</div>'
-    +'<div class="muted">体力 '+(r.health??'-')+' / 満腹 '+(r.food??'-')+' / 家 '+(HOUSE[r.house]??'なし')+' / 死亡 '+r.deaths+'</div>'
+    +((r.spouse||r.children.length||r.parents.length)?'<div class="muted">'+(r.spouse?'配偶者 '+esc(callOf(r.spouse))+' ':'')+(r.children.length?'子 '+r.children.map(c=>esc(callOf(c))).join('・')+' ':'')+(r.parents.length?'親 '+r.parents.map(c=>esc(callOf(c))).join('・'):'')+'</div>':'')+'<div class="muted">体力 '+(r.health??'-')+' / 満腹 '+(r.food??'-')+' / 家 '+(HOUSE[r.house]??'なし')+' / 死亡 '+r.deaths+'</div>'
     +(r.wants.length?'<div class="muted">ほしい: '+esc(r.wants.join('・'))+'</div>':'')
     +(r.assignment&&r.assignment.until>Date.now()?'<div class="muted">任された仕事: '+esc(r.assignment.task)+'</div>':'')
     +(r.diary.length?'<div class="muted">日記: '+esc(r.diary.at(-1).text)+'</div>':'')+'</div>').join('');

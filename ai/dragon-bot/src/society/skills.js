@@ -781,6 +781,12 @@ async function approach(ctx, name, range = 3) {
   return e;
 }
 
+// ひとり身の大人の異性どうしか
+export function isCourtship(soc, name) {
+  const w = soc.world; const me = w?.people?.[soc.persona.name]; const o = w?.people?.[name];
+  return !!(me && o && !me.spouse && !o.spouse && me.sex !== o.sex && ['adult', 'elder'].includes(soc.life?.stage) && o.alive && (Date.now() - o.born) / (w.yearMs || 600000) >= 18);
+}
+
 // 誰と話すか: 好きな相手ほど選ばれやすいが、知らない相手にも時々話しかける
 export function chooseCompanion(bot, soc, { exclude = [] } = {}) {
   const online = soc.town.residents().filter((r) => r.online && !exclude.includes(r.name));
@@ -820,7 +826,9 @@ export async function socialize(ctx, { with: target } = {}) {
   const topic = await soc.speak('smalltalk', { to: name, call, state });
   if (topic) ctx.say?.(topic);
   soc.rel.talked(name);
-  soc.rel.adjust(name, 1 + soc.traits.agreeableness, '話をした');
+  // ひとり身の大人の異性どうしは、話すほど惹かれ合う（結婚・子孫の繁栄につながる）
+  const romance = isCourtship(soc, name);
+  soc.rel.adjust(name, 1 + soc.traits.agreeableness + (romance ? 2 : 0), romance ? '一緒に過ごしてどきどきした' : '話をした');
   soc.town.event('talk', `${soc.persona.call}が${call}と話した`, { with: name, text: topic ?? opener });
   await holdStill(ctx, 5000 + Math.random() * 4000);
   return `${call}と話した`;

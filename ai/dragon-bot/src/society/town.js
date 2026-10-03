@@ -18,8 +18,10 @@ export const STORAGE_OFFSET = { x: 3, z: 3 };
 export const NOTICE_RANGE = 24;
 
 export function plotCenter(plaza, id, { radius = PLOT_RADIUS, shift = 0 } = {}) {
-  const a = ((id - 1) * 36) * (Math.PI / 180);
-  const r = radius + shift;
+  // 11 人目からは 1 つ外側の輪に並べる（輪ごとに 14 マス外側、18 度ずらす）
+  const ring = Math.floor((id - 1) / 10);
+  const a = (((id - 1) % 10) * 36 + ring * 18) * (Math.PI / 180);
+  const r = radius + ring * 14 + shift;
   return { x: Math.round(plaza.x + Math.cos(a) * r), z: Math.round(plaza.z + Math.sin(a) * r) };
 }
 

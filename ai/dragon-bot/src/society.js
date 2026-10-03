@@ -17,10 +17,13 @@ import { Town, Relations } from './society/town.js';
 import { Society } from './society/core.js';
 import { SocietyPlanner } from './society/planner.js';
 import { SOCIETY_SKILL_MAP } from './society/skillset.js';
+import { readWorld } from './society/population.js';
 
-const persona = personaById(process.env.PERSONA) ?? personaByName(process.env.MC_USERNAME);
+// 生まれた子どもの性格は戸籍（society/town/world.json）にあるので、先に読み込んでおく
+readWorld(process.env.SOCIETY_DIR || 'society/town');
+const persona = personaByName(process.env.PERSONA_NAME ?? '') ?? personaById(process.env.PERSONA) ?? personaByName(process.env.MC_USERNAME);
 if (!persona) {
-  console.error('PERSONA（1〜10）か MC_USERNAME（Rin_INTJ など）を指定してください');
+  console.error('PERSONA_NAME（Rin_INTJ など）か PERSONA（1〜10）を指定してください');
   process.exit(1);
 }
 process.env.MC_USERNAME = persona.name;

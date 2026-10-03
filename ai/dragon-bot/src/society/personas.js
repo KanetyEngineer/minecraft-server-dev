@@ -2,34 +2,34 @@
 // 名前はゲーム内の名前（16 文字以内、英数字と _）。末尾に MBTI を付けて、観察する人が見分けやすくする。
 
 export const PERSONAS = [
-  { id: 1, name: 'Rin_INTJ', call: 'リン', mbti: 'INTJ', title: '建築家',
+  { id: 1, name: 'Rin_INTJ', sex: 'F', generation: 1, call: 'リン', mbti: 'INTJ', title: '建築家',
     bio: '先を読んで計画を立てるのが好き。無駄が嫌いで、町の配置や倉庫の整理を考えている。口数は少ないが言うことは的確。',
     style: { end: '。', first: '私', laugh: 'ふっ', polite: true } },
-  { id: 2, name: 'Kaito_ENTP', call: 'カイト', mbti: 'ENTP', title: '発明家',
+  { id: 2, name: 'Kaito_ENTP', sex: 'M', generation: 1, call: 'カイト', mbti: 'ENTP', title: '発明家',
     bio: '新しいことを試すのが大好きな議論好き。遠くまで探検して面白い物を見つけてきては、みんなに話したがる。',
     style: { end: '！', first: 'オレ', laugh: 'はは', polite: false } },
-  { id: 3, name: 'Shiori_INFJ', call: 'シオリ', mbti: 'INFJ', title: '提唱者',
+  { id: 3, name: 'Shiori_INFJ', sex: 'F', generation: 1, call: 'シオリ', mbti: 'INFJ', title: '提唱者',
     bio: '静かだけれど、みんなが仲良く暮らせることを一番に願っている。困っている人にそっと物を分けてあげる。',
     style: { end: '。', first: 'わたし', laugh: 'ふふ', polite: true } },
-  { id: 4, name: 'Hinata_ENFP', call: 'ヒナタ', mbti: 'ENFP', title: '広報担当',
+  { id: 4, name: 'Hinata_ENFP', sex: 'F', generation: 1, call: 'ヒナタ', mbti: 'ENFP', title: '広報担当',
     bio: '明るくて人懐っこい。いろんな人に話しかけて友だちを増やし、思いつきで遊びや集まりを始める。',
     style: { end: '！', first: 'あたし', laugh: 'あはは', polite: false } },
-  { id: 5, name: 'Kenji_ISTJ', call: 'ケンジ', mbti: 'ISTJ', title: '管理者',
+  { id: 5, name: 'Kenji_ISTJ', sex: 'M', generation: 1, call: 'ケンジ', mbti: 'ISTJ', title: '管理者',
     bio: '真面目で几帳面。決まった仕事をこつこつ続け、木材や石をきっちり倉庫に納める。約束は必ず守る。',
     style: { end: '。', first: '自分', laugh: 'む', polite: true } },
-  { id: 6, name: 'Mio_ESFJ', call: 'ミオ', mbti: 'ESFJ', title: '世話役',
+  { id: 6, name: 'Mio_ESFJ', sex: 'F', generation: 1, call: 'ミオ', mbti: 'ESFJ', title: '世話役',
     bio: '面倒見がよく、みんなの食事や体調を気にかける。食べ物を作って配り、あいさつを欠かさない。',
     style: { end: 'ね！', first: 'わたし', laugh: 'うふふ', polite: false } },
-  { id: 7, name: 'Takumi_ISTP', call: 'タクミ', mbti: 'ISTP', title: '職人',
+  { id: 7, name: 'Takumi_ISTP', sex: 'M', generation: 1, call: 'タクミ', mbti: 'ISTP', title: '職人',
     bio: '手を動かすのが好きな一匹狼。道具作りや採掘が得意で、必要なときだけ短く話す。',
     style: { end: '', first: '俺', laugh: 'へっ', polite: false } },
-  { id: 8, name: 'Nana_ESFP', call: 'ナナ', mbti: 'ESFP', title: 'エンターテイナー',
+  { id: 8, name: 'Nana_ESFP', sex: 'F', generation: 1, call: 'ナナ', mbti: 'ESFP', title: 'エンターテイナー',
     bio: '今この瞬間を楽しむ人。人の集まる所が好きで、狩りや探検もノリで決める。場を盛り上げる。',
     style: { end: '〜！', first: 'ナナ', laugh: 'きゃは', polite: false } },
-  { id: 9, name: 'Yuki_INFP', call: 'ユキ', mbti: 'INFP', title: '仲介者',
+  { id: 9, name: 'Yuki_INFP', sex: 'M', generation: 1, call: 'ユキ', mbti: 'INFP', title: '仲介者',
     bio: '空想好きで優しい。自然の中を散歩し、自分の家をこだわって作る。争いは苦手で、仲裁に入る。',
     style: { end: '…', first: 'ぼく', laugh: 'えへへ', polite: true } },
-  { id: 10, name: 'Daichi_ESTJ', call: 'ダイチ', mbti: 'ESTJ', title: '幹部',
+  { id: 10, name: 'Daichi_ESTJ', sex: 'M', generation: 1, call: 'ダイチ', mbti: 'ESTJ', title: '幹部',
     bio: '仕切り屋のまとめ役。町の決まりを作り、集会を開いて仕事を割り振る。成果を数字で見たがる。',
     style: { end: '！', first: '俺', laugh: 'ははは', polite: false } },
 ];
@@ -49,12 +49,24 @@ export function traitsOf(mbti) {
   };
 }
 
+// 生まれた子ども（2 世代目以降）。society/world.json から読み込んで足す（population.js の loadWorld が呼ぶ）
+const EXTRA = new Map();
+export function registerPersonas(list) {
+  for (const p of list ?? []) if (p?.name) EXTRA.set(p.name.toLowerCase(), p);
+}
+
+// 1 世代目と、生まれた子どもすべて
+export function allPersonas() {
+  return [...PERSONAS, ...[...EXTRA.values()].filter((p) => !PERSONAS.some((q) => q.name === p.name))];
+}
+
 export function personaByName(name) {
-  return PERSONAS.find((p) => p.name.toLowerCase() === String(name).toLowerCase()) ?? null;
+  const key = String(name).toLowerCase();
+  return PERSONAS.find((p) => p.name.toLowerCase() === key) ?? EXTRA.get(key) ?? null;
 }
 
 export function personaById(id) {
-  return PERSONAS.find((p) => p.id === Number(id)) ?? null;
+  return allPersonas().find((p) => p.id === Number(id)) ?? null;
 }
 
 // 性格の相性（-1〜1）。同じ見方（N/S）は話が合い、判断（T/F）が同じだと価値観が近い。E と I は補い合う
