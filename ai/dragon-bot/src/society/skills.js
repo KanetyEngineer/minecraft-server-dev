@@ -313,7 +313,8 @@ export async function ensureDoor(ctx, house) {
     for (const p of [pos, pos.offset(0, 1, 0)]) if (!isAir(bot.blockAt(p)) && !bot.blockAt(p)?.name.endsWith('_door')) await clearAt(ctx, p);
   }
   const free = (b) => isAir(b) || b?.name === 'water' || SOFT.test(b?.name ?? '');
-  if (doorItem && free(bot.blockAt(pos)) && free(bot.blockAt(pos.offset(0, 1, 0)))) {
+  // 家から遠く、まわりが読み込まれていない（blockAt が null）ときは置かない
+  if (doorItem && bot.blockAt(pos.offset(0, -1, 0)) && bot.blockAt(pos) && free(bot.blockAt(pos)) && free(bot.blockAt(pos.offset(0, 1, 0)))) {
     // 家の中から外を向いて置く
     await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
     try {
