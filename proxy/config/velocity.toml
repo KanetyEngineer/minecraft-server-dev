@@ -1,0 +1,45 @@
+# Velocity 設定（setup.ps1 が run/proxy にコピーする）
+config-version = "2.7"
+bind = "0.0.0.0:25565"
+motd = "<aqua>Kanety Network"
+show-max-players = 50
+online-mode = true
+force-key-authentication = true
+prevent-client-proxy-connections = false
+# 各鯖の FabricProxy-Lite と forwarding.secret を共有する
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+announce-forge = false
+kick-existing-players = false
+ping-passthrough = "DISABLED"
+enable-player-address-logging = true
+
+[servers]
+lobby = "127.0.0.1:30001"
+s1 = "127.0.0.1:30002"
+c1 = "127.0.0.1:30003"
+dev = "127.0.0.1:30004"
+try = ["lobby"]
+
+[forced-hosts]
+
+[advanced]
+compression-threshold = 256
+compression-level = -1
+login-ratelimit = 3000
+connection-timeout = 5000
+read-timeout = 30000
+haproxy-protocol = false
+tcp-fast-open = false
+bungee-plugin-message-channel = true
+show-ping-requests = false
+failover-on-unexpected-server-disconnect = true
+announce-proxy-commands = true
+log-command-executions = false
+log-player-connections = true
+
+[query]
+enabled = false
+port = 25565
+map = "Velocity"
+show-plugins = false
