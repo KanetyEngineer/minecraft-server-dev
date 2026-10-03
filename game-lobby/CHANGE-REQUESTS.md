@@ -1,5 +1,20 @@
 # ロビーから移動させるために、各サーバーに必要な変更
 
+## いまの状態（2026-10-04）
+
+| 行き先 | 公開アドレス | 状態 |
+|---|---|---|
+| ロビー | stamina-proves.tun.ply.gg（:14610） | 稼働中 |
+| ハロウィン | rails-backups.tun.ply.gg（:5858） | 移動OK（accepts-transfers=true 済み） |
+| 銃MOD | stamina-snugness.tun.ply.gg（:14611） | 移動OK（26.1.x の Fabric クライアントのみ） |
+| クラロワ | stamina-crab.tun.ply.gg（:14612） | 移動OK |
+| アニメ技 | なし | トンネル待ち（playit 無料枠の上限） |
+
+## ロビーへ戻る導線（任意・各鯖の担当が入れる）
+
+`addons/lobby_return.zip` をワールドの `datapacks/` に入れ、`server.properties` を `function-permission-level=3` にして再起動。
+プレイヤーは `/trigger lobby` でロビーへ戻れる（`/transfer` は権限レベル 3 が必要なため）。Paper 26.2 で動作確認済み。
+
 ロビー: `Documents\ClaudeCode\game-lobby\server`（Paper 26.2 + ViaVersion/ViaBackwards、ポート 25576、online-mode=true）。
 移動は Minecraft 標準の「転送（transfer）」で行う。プロキシ（Velocity）は使わないので、各サーバーの online-mode や UUID はそのままでよい。
 転送ではプレイヤーのクライアントが行き先へ自分でつなぎ直すため、行き先ごとに **プレイヤーから届く公開アドレス** が必要。
