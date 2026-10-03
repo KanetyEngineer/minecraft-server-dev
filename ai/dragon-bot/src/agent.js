@@ -294,7 +294,9 @@ export class Agent {
     //（洞窟でスケルトンに壁を作っている間に、そばのドクグモに倒された）
     // スケルトンが 2 体以上、または防具なしで体力が少ないときは、壁で耐えずに射程の外まで離れる
     //（洞窟で複数のスケルトンに撃たれ、壁を作っている間に死んだ）
+    // ただし、すぐそばに殴ってくる敵がいるなら先にそちらを倒す（逃げる途中でゾンビに後ろから倒された、RTA 2026-10-03）
     else if (archer && recentlyHurt && !inCombat && ['skeleton', 'stray', 'bogged'].includes(archer.name)
+      && !(threat && threat.position.distanceTo(pos) < 3.5)
       && (this.countArchers(20) >= 2 || (!this.hasArmor() && bot.health < 14))) action = { kind: 'outrange', from: archer };
     else if (archer && recentlyHurt && archer.position.distanceTo(pos) > 4 && !inCombat
       && !(threat && threat.position.distanceTo(pos) < 3.5)) action = { kind: 'shield', from: archer };
@@ -338,10 +340,20 @@ export class Agent {
       if (action.kind === 'outrange') {
         // スケルトンたちの真ん中から反対向きに、射程（約 16 マス）の外まで走る。盾があれば背中側に構えながら
         const archers = Object.values(bot.entities).filter((e) => ['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(bot.entity.position) < 20);
-        const cx = archers.reduce((a, e) => a + e.position.x, 0) / archers.length;
-        const cz = archers.reduce((a, e) => a + e.position.z, 0) / archers.length;
-        log.warn(`スケルトン ${archers.length} 体に撃たれているので、射程の外へ離れる`);
-        await Promise.race([runAway({ position: { x: cx, z: cz }, name: 'skeleton' }, 22), sleep(12_000)]);
+        // 近くのゾンビなども逃げる向きの計算に入れる（スケルトンだけ見て、ゾンビの方へ走っていた）
+        const melee = Object.values(bot.entities).filter((e) => isHostile(e) && !archers.includes(e) && e.position.distanceTo(bot.entity.position) < 10);
+        const away = [...archers, ...melee];
+        const cx = away.reduce((a, e) => a + e.position.x, 0) / away.length;
+        const cz = away.reduce((a, e) => a + e.position.z, 0) / away.length;
+        log.warn(`スケルトン ${archers.length} 体に撃たれているので、射程の外へ離れる${melee.length ? `（近くの ${melee.map((e) => e.name).join('・')} も避ける）` : ''}`);
+        // 走っている間に殴ってくる敵が追いついたら、背中を見せ続けずに止まって反射に任せる
+        const caught = (async () => {
+          for (let t = 0; t < 48; t++) {
+            await sleep(250);
+            if (bot.nearestEntity((e) => isHostile(e) && !['skeleton', 'stray', 'bogged'].includes(e.name) && e.position.distanceTo(bot.entity.position) < 2.5)) return;
+          }
+        })();
+        await Promise.race([runAway({ position: { x: cx, z: cz }, name: 'skeleton' }, 22), sleep(12_000), caught]);
         try { bot.pathfinder.setGoal(null); } catch {}
         bot.setControlState('sprint', false);
         this.history.push({ skill: '反射:outrange', args: {}, ok: true, result: 'スケルトンから離れた' });
