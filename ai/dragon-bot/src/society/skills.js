@@ -711,10 +711,13 @@ function noteContents(soc, win) {
 export async function depositToStorage(ctx) {
   const { bot } = ctx;
   const soc = S(ctx);
-  const plan = surplus(bot, soc);
+  // 倉庫にもう十分ある物（丸石 256 個など）は入れない（丸石 700 個で倉庫が埋まりかけた）
+  const stored = soc.town.storageContents()?.items ?? {};
+  const plan = surplus(bot, soc).filter(({ name }) => (stored[name] ?? 0) < (['cobblestone', 'cobbled_deepslate', 'dirt'].includes(name) ? 256 : 640));
   if (plan.length === 0) throw new SkillError('倉庫に納める余りが無い');
   const win = await openStorage(ctx);
   const given = [];
+  let full = false;
   try {
     for (const { name, count: n } of plan) {
       const id = bot.registry.itemsByName[name]?.id;
@@ -722,8 +725,19 @@ export async function depositToStorage(ctx) {
       try { await win.deposit(id, null, n); given.push(`${name}×${n}`); } catch (e) { ctx.log.warn(`${name} を入れられなかった: ${e.message}`); }
     }
     noteContents(soc, win);
+    full = win.containerItems().length >= win.inventoryStart - 3;
   } finally {
     win.close();
+  }
+  // 倉庫がいっぱいになりかけたら、となりにチェストを足して大きなチェストにする
+  if (full) {
+    const st = soc.town.storage();
+    if (!findItem(bot, 'chest')) { await ensurePlanks(ctx, 8).catch(() => {}); await craftItem(ctx, 'chest', 1).catch(() => {}); }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const p = new Vec3(st.x + dx, st.y, st.z + dz);
+      if (!findItem(bot, 'chest') || !isAir(bot.blockAt(p))) continue;
+      if (await placeAt(ctx, p, 'chest').catch(() => false)) { soc.town.event('storage', `${soc.persona.call}が倉庫を大きくした`); break; }
+    }
   }
   if (!given.length) throw new SkillError('何も入れられなかった');
   soc.town.profile.contributed = (soc.town.profile.contributed ?? 0) + given.length;
