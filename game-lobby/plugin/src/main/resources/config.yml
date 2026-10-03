@@ -1,0 +1,75 @@
+# Game Lobby の設定。行き先を足すときは destinations に1つ追加して /lobbyadmin reload → /lobbyadmin rebuild
+# host/port はプレイヤーのPCから届く「公開アドレス」を書く（転送はプレイヤーが自分でつなぎ直すため localhost は不可）
+# version: 行き先サーバーと同じ Minecraft の版。違う版のクライアントは転送せず案内を出す
+# require-brand: クライアントの種類（fabric など）。MOD が必要な行き先に使う
+# enabled: false の行き先、または host が空の行き先は「準備中」と表示して転送しない
+# このファイルを保存すると、動いているロビーが数秒で読み直してゲートを作り直す
+
+lobby-name: "<gold><bold>GAME LOBBY</bold></gold>"
+lobby-address: "stamina-proves.tun.ply.gg"
+
+destinations:
+  halloween:
+    name: "<gradient:#ff7a00:#b000ff><bold>Halloween Night</bold></gradient>"
+    description:
+      - "<gray>カボチャ王の夜をめぐる配布マップ"
+      - "<gray>バニラでそのまま遊べる"
+    icon: JACK_O_LANTERN
+    pad-block: ORANGE_CONCRETE
+    frame-block: CRYING_OBSIDIAN
+    particle: SOUL_FIRE_FLAME
+    host: "rails-backups.tun.ply.gg"
+    port: 5858
+    version: "26.2"
+    require-brand: ""
+    info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
+    enabled: true
+
+  tiktok-defense:
+    name: "<gradient:#ff0050:#00f2ea><bold>TikTok Defense</bold></gradient>"
+    description:
+      - "<gray>銃でウェーブを守り抜くディフェンス"
+      - "<gray>TikTok のギフトで敵が増える"
+    icon: CROSSBOW
+    pad-block: RED_CONCRETE
+    frame-block: POLISHED_BLACKSTONE_BRICKS
+    particle: CRIT
+    host: "stamina-snugness.tun.ply.gg"
+    port: 14611
+    version: "26.1.2"
+    require-brand: "fabric"
+    info: "<gray>Fabric 26.1.2 と専用 MOD パック（Point Blank）が必要です"
+    enabled: true
+
+  clash-royale:
+    name: "<gradient:#3b82f6:#facc15><bold>Clash Royale MC</bold></gradient>"
+    description:
+      - "<gray>マイクラ版クラッシュ・ロワイヤル"
+      - "<gray>TikTok 妨害対応"
+    icon: GOLDEN_HELMET
+    pad-block: BLUE_CONCRETE
+    frame-block: GOLD_BLOCK
+    particle: ELECTRIC_SPARK
+    host: "stamina-smokiness.tun.ply.gg"
+    port: 44748
+    version: "26.2"
+    require-brand: ""
+    info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
+    enabled: true   # host（公開アドレス）が入るまでは準備中と表示される
+
+  anime-umetate:
+    name: "<gradient:#22d3ee:#f472b6><bold>アニメ技 埋め立て</bold></gradient>"
+    description:
+      - "<gray>かめはめ波・術式・忍術で妨害される"
+      - "<gray>埋め立てチャレンジ"
+    icon: BLAZE_ROD
+    pad-block: CYAN_CONCRETE
+    frame-block: PURPUR_BLOCK
+    particle: END_ROD
+    # ロビーのトンネルを共用。末尾の "." を見て router/router.js がアニメ技（25590）へ振り分ける
+    host: "stamina-proves.tun.ply.gg."
+    port: 14610
+    version: "26.2"
+    require-brand: ""
+    info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
+    enabled: true   # host（公開アドレス）が入るまでは準備中と表示される
