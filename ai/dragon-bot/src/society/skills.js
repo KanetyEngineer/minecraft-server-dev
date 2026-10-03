@@ -307,7 +307,13 @@ export async function ensureDoor(ctx, house) {
   }
   const doorItem = bot.inventory.items().find((i) => i.name.endsWith('_door'));
   const pos = doorCell(house);
-  if (doorItem && isAir(bot.blockAt(pos)) && isAir(bot.blockAt(pos.offset(0, 1, 0)))) {
+  if (doorItem) {
+    // 扉の足元が固くないと置けない（草・水・穴だった家があった）。玄関の 2 マスにある土や草などはどける
+    if (!isSolid(bot.blockAt(pos.offset(0, -1, 0)))) await placeAt(ctx, pos.offset(0, -1, 0)).catch(() => false);
+    for (const p of [pos, pos.offset(0, 1, 0)]) if (!isAir(bot.blockAt(p)) && !bot.blockAt(p)?.name.endsWith('_door')) await clearAt(ctx, p);
+  }
+  const free = (b) => isAir(b) || b?.name === 'water' || SOFT.test(b?.name ?? '');
+  if (doorItem && free(bot.blockAt(pos)) && free(bot.blockAt(pos.offset(0, 1, 0)))) {
     // 家の中から外を向いて置く
     await goTo(ctx, house.x, house.y, house.z, 0.8).catch(() => {});
     try {
