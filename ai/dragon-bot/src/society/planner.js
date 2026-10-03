@@ -12,6 +12,7 @@ import { relationLabel } from './town.js';
 import { personaByName } from './personas.js';
 import { foodPoints, FOODS, countMatching, isLog, isPlanks } from '../util/items.js';
 import { log } from '../log.js';
+import { isLiteModel } from '../config.js';
 
 const has = (bot, re) => bot.inventory.items().some((i) => re.test(i.name));
 
@@ -252,10 +253,12 @@ export class SocietyPlanner {
       system: [{ type: 'text', text: `${personaPrompt(soc.persona, soc.traits)}\n夜は家に帰る・お腹がすいたら食べる、など生活の基本は守ってください。死ぬと持ち物を失います。`, cache_control: { type: 'ephemeral' } }],
       tools: this.tools,
       tool_choice: { type: 'auto', disable_parallel_tool_use: true },
-      output_config: { effort: this.cfg.llm.effort },
-      thinking: { type: 'adaptive' },
       messages: [{ role: 'user', content: text }],
     };
+    // Haiku は一番安いが effort・adaptive thinking・fallbacks を受け付けない（送ると 400 になる）
+    if (isLiteModel(this.cfg.llm.model)) return req;
+    req.output_config = { effort: this.cfg.llm.effort };
+    req.thinking = { type: 'adaptive' };
     if (this.cfg.llm.fallbacks) {
       req.betas = ['server-side-fallback-2026-07-01'];
       req.fallbacks = 'default';

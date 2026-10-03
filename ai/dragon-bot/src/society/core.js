@@ -5,6 +5,7 @@ import { relationLabel, isHouseShell, isInsideHouse } from './town.js';
 import * as D from './dialogue.js';
 import { foodPoints, FOODS, isPlanks, isLog } from '../util/items.js';
 import { log } from '../log.js';
+import { isLiteModel } from '../config.js';
 
 // 集会で割り振る仕事。skills はその仕事に当たるスキル（割り振られた人はしばらくこれを優先する）
 export const TASKS = {
@@ -155,7 +156,8 @@ export class Society {
       const res = await this.client.messages.create({
         model: this.cfg.llm.model,
         max_tokens: 1000,
-        output_config: { effort: 'low' },
+        // Haiku は effort を受け付けない（送ると 400 になる）
+        ...(isLiteModel(this.cfg.llm.model) ? {} : { output_config: { effort: 'low' } }),
         system: [{ type: 'text', text: `${personaPrompt(this.persona, this.traits)}\n${CHAT_RULES}`, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: `最近のチャット:\n${recent || '（なし）'}\n人間関係: ${rels || 'まだ誰とも話していない'}\nいまやっていること: ${D.doing(this.currentSkill())}\n\n${intent}\n発言だけを書いてください。` }, ...conversation],
       });
