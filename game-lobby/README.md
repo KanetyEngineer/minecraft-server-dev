@@ -1,0 +1,23 @@
+# Game Lobby
+
+ハロウィン・銃MOD・クラロワ・アニメ技の各ゲーム鯖へ移動できるロビー鯖。
+
+- `server/` … Paper 26.2 + ViaVersion 5.12.0 + ViaBackwards 5.12.0 + GameLobby プラグイン。ポート 25576、online-mode=true、最大 60 人
+- `plugin/` … GameLobby プラグインのソース。`sh plugin/build.sh` でビルドして `server/plugins/` に入る（サーバーを一度起動して libraries/ と versions/ ができている必要あり）
+- `CHANGE-REQUESTS.md` … 行き先の各サーバー側に必要な変更
+
+## 起動
+
+`server/start-lobby.bat` をダブルクリック。
+
+## しくみ
+
+- 移動は Minecraft 標準の転送（`Player#transfer`）。プロキシを使わないので、行き先が バニラ・Fabric・別の版でも、online-mode のままで動く。
+  行き先側は `accepts-transfers=true` と、プレイヤーから届く公開アドレスが必要。
+- 円形の広場にゲートが行き先の数だけ並ぶ。ゲートの床に乗るとその鯖へ移動。手持ちのコンパス（右クリック）でもメニューから選べる。`/go <id>`、`/menu` もある。
+- ViaVersion で 26.2 以外のクライアント（26.1.2 の銃MOD クライアントなど）もロビーに入れる。行き先ごとに必要な版・クライアント（fabric など）を確かめ、合わない人は転送せずに理由と直接アドレスを出す。
+- ロビー内はアドベンチャー、ダメージ・空腹・ブロック破壊・アイテム移動なし、落ちたらスポーンに戻る。
+
+## 行き先の追加・変更
+
+`server/plugins/GameLobby/config.yml` の `destinations` を編集して保存すると、数秒で自動的に読み直して広場とゲートを作り直す（手動なら `/lobbyadmin rebuild`）。`/lobbyadmin list` で状態確認。

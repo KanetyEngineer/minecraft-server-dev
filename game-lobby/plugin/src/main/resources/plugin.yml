@@ -1,0 +1,19 @@
+name: GameLobby
+version: 1.0.0
+main: dev.kanety.lobby.GameLobby
+api-version: "26.2"
+depend: [ViaVersion]
+description: Lobby that transfers players to the other game servers
+commands:
+  menu:
+    description: 行き先メニューを開く
+  go:
+    description: 行き先に移動する
+    usage: /go <行き先>
+  lobbyadmin:
+    description: ロビーの管理
+    usage: /lobbyadmin <reload|rebuild|list>
+    permission: gamelobby.admin
+permissions:
+  gamelobby.admin:
+    default: op
