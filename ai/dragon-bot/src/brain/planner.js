@@ -93,8 +93,12 @@ export class Planner {
       tool_choice: { type: 'auto', disable_parallel_tool_use: true },
       messages: [{ role: 'user', content: text }],
     };
-    // Haiku は一番安いが effort・adaptive thinking・fallbacks を受け付けない（送ると 400 になる）
-    if (isLiteModel(this.cfg.llm.model)) return req;
+    // Haiku は一番安いが effort・adaptive thinking・fallbacks を受け付けない（送ると 400 になる）。
+    // また auto だと分析の文章だけ書いてスキルを選ばないことがある（RTA 2026-10-03）ので、必ずスキルを 1 つ選ばせる
+    if (isLiteModel(this.cfg.llm.model)) {
+      req.tool_choice = { type: 'any', disable_parallel_tool_use: true };
+      return req;
+    }
     req.output_config = { effort: this.cfg.llm.effort };
     // 判断の思考過程も受け取り、ログに出す（人が読める要約が返る）
     req.thinking = { type: 'adaptive' };

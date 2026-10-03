@@ -978,6 +978,12 @@ export class Agent {
         this.bot.quit('持ち物の同期をやり直す');
       }
     }
+    // 経路探索が壊れて動けない状態が続いたら、入り直して作り直す（自動で再接続する）
+    if ((this.state.stuckExplores ?? 0) >= 4) {
+      this.state.stuckExplores = 0;
+      log.warn('経路探索が動かなくなったので、いったん入り直す');
+      this.bot.quit('経路探索をやり直す');
+    }
     // 食料集めが目標（蓄え 10）に届かなかったら、しばらく繰り返さない（進捗表が 5 以上なら先へ進む）
     if (name === 'gatherFood' && foodPoints(this.bot) < 10) this.memory.setFlag('foodRetryAt', Date.now() + 10 * 60_000);
     this.history.push(entry);

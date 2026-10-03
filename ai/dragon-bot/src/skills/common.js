@@ -184,12 +184,18 @@ export async function exploreStep(ctx, distance = 32) {
   const d = distance * (0.75 + Math.random() * 0.5);
   const tx = p.x + Math.cos(ctx.state.heading) * d;
   const tz = p.z + Math.sin(ctx.state.heading) * d;
+  const start = p.clone();
   try {
     await bot.pathfinder.goto(new goals.GoalNearXZ(tx, tz, 4));
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     ctx.state.heading += Math.PI / 2 + Math.random() * Math.PI;
   }
+  // 経路探索が壊れると「着いた」と返しながら一歩も動かなくなる（RTA 2026-10-03 で 5 分止まり、入り直すと直った）。
+  // 遠くを目指したのに動けなかった回数を数え、agent.js が続いたら入り直す
+  const moved = bot.entity.position.distanceTo(start);
+  ctx.state.stuckExplores = moved < 2 && d > 8 ? (ctx.state.stuckExplores ?? 0) + 1 : 0;
+  return moved;
 }
 
 // ---------- 採掘 ----------

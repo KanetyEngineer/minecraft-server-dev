@@ -49,6 +49,7 @@ test('Haiku 4.5 では effort・thinking・fallbacks を送らない（送ると
   assert.equal(req.output_config, undefined);
   assert.equal(req.fallbacks, undefined);
   assert.equal(req.betas, undefined);
+  assert.equal(req.tool_choice.type, 'any'); // 文章だけ書いてスキルを選ばないことがあった
   assert.equal(req.tool_choice.disable_parallel_tool_use, true);
 });
 

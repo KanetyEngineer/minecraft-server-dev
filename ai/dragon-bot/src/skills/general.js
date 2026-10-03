@@ -42,8 +42,11 @@ export async function smeltItem(ctx, { item, count: n = 1 } = {}) {
 }
 
 export async function explore(ctx, { steps = 3 } = {}) {
-  for (let i = 0; i < steps; i++) await exploreStep(ctx, 40);
-  return '探索した';
+  let moved = 0;
+  for (let i = 0; i < steps; i++) moved += await exploreStep(ctx, 40);
+  // 動けなかったのに「成功」と記録すると、ループ検知にも引っかからず同じ探索をくり返していた
+  if (moved < 4) throw new SkillError(`探索しようとしたが動けなかった（${Math.round(moved)} マス）`);
+  return `探索した（${Math.round(moved)} マス移動）`;
 }
 
 export async function attack(ctx, { mob } = {}) {
