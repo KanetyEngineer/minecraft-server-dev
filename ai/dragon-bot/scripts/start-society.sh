@@ -10,9 +10,9 @@ stop_all() {
   # 見張りのループ（bash）と住人（node src/society.js）の両方を止める
   [ -f society/pids ] && while read -r pid; do kill "$pid" 2>/dev/null; done < society/pids
   rm -f society/pids
-  # pids に載っていない見張りのループ（前の起動を同時に 2 回走らせたときの残りなど）も止める。自分自身は止めない
-  local me; me=$(cat /proc/$$/winpid 2>/dev/null || echo 0)
-  powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bash.exe'\" | Where-Object { \$_.CommandLine -like '*start-society*' -and \$_.ProcessId -ne $me -and \$_.ParentProcessId -ne $me } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -Confirm:\$false -ErrorAction SilentlyContinue }" >/dev/null 2>&1
+  # pids に載っていない見張りのループ（前の起動を同時に 2 回走らせたときの残りなど）も止める。
+  # ループは scripts/society-loop.sh として動くので、その名前で探す（start-society の名前で探すと、これを呼んだシェルまで止めてしまう）
+  powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bash.exe'\" | Where-Object CommandLine -like '*society-loop.sh*' | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -Confirm:\$false -ErrorAction SilentlyContinue }" >/dev/null 2>&1
   powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object CommandLine -like '*src/society.js*' | ForEach-Object { Stop-Process -Id \$_.ProcessId -Confirm:\$false }" >/dev/null 2>&1
 }
 stop_all
@@ -22,16 +22,7 @@ mkdir -p society/town society/data society/logs
 rev=$(git rev-parse --short HEAD 2>/dev/null)
 for ((n = 1; n <= n_total; n++)); do
   name=${NAMES[$((n - 1))]}
-  (
-    while true; do
-      echo "=== start $(date '+%F %T') ($rev) ===" >> "society/run-$name.log"
-      PERSONA=$n MC_PORT=${MC_PORT_SOCIETY:-25573} DATA_DIR=society/data/$name LOG_DIR=society/logs/$name SOCIETY_DIR=society/town \
-        STATUS_PORT=$((3200 + n)) DISCORD_LEVEL=important \
-        node --max-old-space-size=1024 --env-file=.env src/society.js >> "society/run-$name.log" 2>&1
-      [ -f society/pids ] || exit 0
-      sleep 10
-    done
-  ) > /dev/null 2>&1 &
+  nohup bash scripts/society-loop.sh "$n" "$name" "$rev" > /dev/null 2>&1 &
   echo $! >> society/pids
   echo "start $name（状態ページ http://localhost:$((3200 + n))/）"
   sleep 3

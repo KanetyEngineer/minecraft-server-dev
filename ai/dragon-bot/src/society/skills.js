@@ -567,6 +567,8 @@ export async function tendFarm(ctx) {
   // 鍬
   if (!bot.inventory.items().some((i) => i.name.endsWith('_hoe'))) {
     const tier = count(bot, 'cobblestone') >= 2 ? 'stone_hoe' : 'wooden_hoe';
+    // 鍬には板材と棒が要る。木が無ければ先に切る（「原木が足りない」で畑づくりが何度も止まっていた）
+    if (countMatching(bot, isLog) * 4 + countMatching(bot, isPlanks) < 5) await gatherWood(ctx, { logs: 3 }).catch(() => {});
     await ensurePlanks(ctx, 4).catch(() => {});
     await craftItem(ctx, tier, 1).catch((e) => { throw new SkillError(`鍬を作れない: ${e.message}`); });
   }
