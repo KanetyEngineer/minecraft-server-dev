@@ -19,6 +19,8 @@ const cfg = loadConfig();
 cfg.llm.model = process.env.CLAUDE_MODEL_DRAGON || 'claude-sonnet-5-5';
 cfg.llm.effort = process.env.CLAUDE_EFFORT_DRAGON || 'low';
 cfg.llm.mode = process.env.LLM_MODE || 'assist';
+// API を節約する（ユーザー指示 2026-10-03）。困っていないときの見直しは 10 分に 1 回まで
+if (!process.env.LLM_CHECK_EVERY_MS) cfg.llm.checkEveryMs = 10 * 60_000;
 // 待ち時間切れ（CPU が混んで「2 ティック待ったが来ない」など）の取りこぼしたエラーで、ボットごと落ちないようにする。
 // 記録だけして動き続ける（100 体の試験で、CPU 100% のときに 2 体がこれで落ちた）
 process.on('unhandledRejection', (e) => { try { log.warn(`処理されなかったエラー（続行）: ${e?.message ?? e}`); } catch {} });
