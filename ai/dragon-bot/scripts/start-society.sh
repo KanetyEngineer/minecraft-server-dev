@@ -10,6 +10,9 @@ stop_all() {
   # 見張りのループ（bash）と住人（node src/society.js）の両方を止める
   [ -f society/pids ] && while read -r pid; do kill "$pid" 2>/dev/null; done < society/pids
   rm -f society/pids
+  # pids に載っていない見張りのループ（前の起動を同時に 2 回走らせたときの残りなど）も止める。自分自身は止めない
+  local me; me=$(cat /proc/$$/winpid 2>/dev/null || echo 0)
+  powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bash.exe'\" | Where-Object { \$_.CommandLine -like '*start-society*' -and \$_.ProcessId -ne $me -and \$_.ParentProcessId -ne $me } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -Confirm:\$false -ErrorAction SilentlyContinue }" >/dev/null 2>&1
   powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object CommandLine -like '*src/society.js*' | ForEach-Object { Stop-Process -Id \$_.ProcessId -Confirm:\$false }" >/dev/null 2>&1
 }
 stop_all
