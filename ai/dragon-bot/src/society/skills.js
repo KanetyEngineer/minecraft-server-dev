@@ -930,3 +930,50 @@ export async function chatSay(ctx, { message } = {}) {
 }
 
 export { here };
+
+// 家の中と家のまわり（四隅の外）に松明を置く。明るさ 0 の暗い所にしか敵は湧かないので、家と家のまわりで敵が湧かなくなる。
+// 石炭・木炭が無ければ原木 1 本を焼いて木炭にする（燃料は板材）
+export async function lightHome(ctx) {
+  const { bot } = ctx;
+  const house = S(ctx).town.profile.house;
+  if (!house || house.stage !== 'done') throw new SkillError('まだ家が無い');
+  if (count(bot, 'torch') < 5) {
+    if (!count(bot, 'coal') && !count(bot, 'charcoal') && countMatching(bot, isLog) >= 2) {
+      const log = bot.inventory.items().find((i) => isLog(i.name));
+      await smelt(ctx, log.name, 2).catch((e) => ctx.log.warn(`木炭を作れなかった: ${e.message}`));
+    }
+    const fuel = count(bot, 'coal') + count(bot, 'charcoal');
+    if (fuel > 0) await craftItem(ctx, 'torch', count(bot, 'torch') + Math.min(2, fuel) * 4).catch((e) => ctx.log.warn(`松明を作れなかった: ${e.message}`));
+  }
+  if (!findItem(bot, 'torch')) throw new SkillError('松明が無い（石炭か木炭と棒で作る）');
+  let placed = 0;
+  // 家の中: 扉の向かいの壁の内側
+  const [ddx, ddz] = house.door;
+  const lit = (p) => [0, 1].some((dy) => bot.blockAt(p.offset(0, dy, 0))?.name.includes('torch'));
+  if (![...Array(3).keys()].some((i) => lit(new Vec3(house.x - 1 + i, house.y, house.z)) || lit(new Vec3(house.x, house.y, house.z - 1 + i)))) {
+    await enterHouse(ctx, house);
+    const wall = bot.blockAt(new Vec3(house.x - ddx * 2, house.y + 1, house.z - ddz * 2));
+    if (wall?.boundingBox === 'block') {
+      try { await bot.equip(findItem(bot, 'torch'), 'hand'); await bot._placeBlockWithOptions(wall, new Vec3(ddx, 0, ddz), { swingArm: 'right', forceLook: true }); placed++; } catch {}
+    }
+  }
+  // 家のまわり: 四隅から 1 マス外の地面の上
+  for (const [cx, cz] of [[3, 3], [-3, 3], [3, -3], [-3, -3]]) {
+    abortable(ctx);
+    if (!findItem(bot, 'torch')) break;
+    const g = groundY(bot, house.x + cx, house.z + cz, house.y - 1);
+    if (!g || g.water) continue;
+    const pos = new Vec3(house.x + cx, g.y + 1, house.z + cz);
+    if (lit(pos) || !isAir(bot.blockAt(pos))) continue;
+    await goTo(ctx, pos.x, pos.y, pos.z, 2).catch(() => {});
+    try {
+      await bot.equip(findItem(bot, 'torch'), 'hand');
+      await bot._placeBlockWithOptions(bot.blockAt(pos.offset(0, -1, 0)), new Vec3(0, 1, 0), { swingArm: 'right', forceLook: true });
+      placed++;
+    } catch {}
+  }
+  house.lit = true;
+  S(ctx).town.publish(bot);
+  if (placed) S(ctx).town.event('light', `${S(ctx).persona.call}が家のまわりに松明を ${placed} 本置いた`);
+  return `松明を ${placed} 本置いた`;
+}

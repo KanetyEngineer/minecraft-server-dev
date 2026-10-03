@@ -2,6 +2,7 @@
 // Claude にはここの説明と引数の形がそのまま「道具」として渡る。
 import { SKILL_MAP } from '../skills/index.js';
 import * as soc from './skills.js';
+import * as animals from './animals.js';
 
 const int = (description, minimum = 1, maximum = 64) => ({ type: 'integer', description, minimum, maximum });
 const str = (description) => ({ type: 'string', description });
@@ -26,6 +27,9 @@ export const SOCIETY_SKILLS = [
   def('callMeeting', soc.callMeeting, '広場で集会を開いてみんなを呼び、集まった人に仕事を割り振る（まとめ役向け）。', { topic: str('話し合うこと') }),
   def('attendMeeting', soc.attendMeeting, '誰かが開いている集会に出る（広場へ行き、終わるまでいる）。'),
   def('postNotice', soc.postNotice, '広場の掲示板に貼り紙をする（募集・おしらせ・自己紹介など）。', { text: str('貼り紙の文（60 文字くらいまで）') }),
+  def('breedAnimals', animals.breedAnimals, '近くの同じ種類の動物 2 匹に好物をあげて繁殖させる（牛・羊は小麦、豚はニンジン・ジャガイモ、ニワトリは種。5 分は再び繁殖しない）。食料と羊毛を絶やさないため。', { animal: str('cow / sheep / pig / chicken（省略可）') }),
+  def('shearSheep', animals.shearSheep, '羊を倒さずにハサミ（鉄 2 個）で毛を刈ってベッドを作る（毛はまた生える）。ハサミも鉄も無ければ羊を倒して羊毛を取る。', { wool: int('集める羊毛の数', 3, 16) }),
+  def('lightHome', soc.lightHome, '家の中と家のまわりに松明を置く（暗い所にしか敵は湧かない）。石炭・木炭が無ければ原木を焼いて木炭を作る。'),
   def('goToPlaza', soc.goToPlaza, '広場へ行って掲示板を読む。'),
   def('say', soc.chatSay, 'チャットで発言する（みんなに呼びかける・意見を言うなど）。', { message: str('発言（40 文字くらいまで）') }, ['message']),
 ];

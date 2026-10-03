@@ -7,6 +7,7 @@ import { SOCIETY_SKILL_MAP, societyToolDefinitions } from './skillset.js';
 import { sanitizeArgs } from '../skills/index.js';
 import { personaPrompt, TASKS } from './core.js';
 import { surplus, buildingCount } from './skills.js';
+import { BREED_FOOD } from './animals.js';
 import { relationLabel } from './town.js';
 import { personaByName } from './personas.js';
 import { foodPoints, FOODS, countMatching, isLog, isPlanks } from '../util/items.js';
@@ -79,13 +80,22 @@ export function options(bot, soc, history = []) {
     else if (!bedPlaced && !night) {
       if (storedBed) add('takeFromStorage', 60, '倉庫のベッドをもらう', { item: 'bed', count: 1 });
       else if (storedWool >= 3 && countMatching(bot, (n) => n.endsWith('_wool')) < 3) add('takeFromStorage', 55, '倉庫の羊毛でベッドを作る', { item: 'wool', count: 3 });
-      else if (minutes('lastBedTryAt') > 6) add('makeBed', 48 + t.conscientiousness * 15, '夜に寝るベッドがほしい', { count: 1 });
+      else if (minutes('lastBedTryAt') > 6) add('shearSheep', 48 + t.conscientiousness * 15, '夜に寝るベッドがほしい（羊の毛を刈る）', { wool: 3 });
     }
+    // 明かり: 暗い所にしか敵は湧かないので、家の中とまわりに松明を置く
+    if (!house.lit && !night && minutes('lastLightAt') > 10 && (has(bot, /^(torch|coal|charcoal)$/) || countMatching(bot, isLog) >= 2)) add('lightHome', 32 + t.conscientiousness * 12, '家のまわりを松明で明るくする');
     // 畑
     // 畑は水から 4 マス以内でないと作れない。水入りバケツ・バケツ・鉄 3 個のどれも無く、畑に水も無ければ、先に鉄を取りに行く
     const canWater = has(bot, /^(water_bucket|bucket)$/) || bot.inventory.items().some((i) => i.name === 'iron_ingot' && i.count >= 3) || town.profile.farm?.water !== false;
     if (minutes('lastFarmAt') > 6 && canWater) add('tendFarm', 22 + (1 - t.openness) * 18 + t.conscientiousness * 8, '畑の世話をする');
     else if (minutes('lastFarmAt') > 6 && !night && pick) add('getIronGear', 20 + (1 - t.openness) * 12, '畑に水を引くバケツ用の鉄がほしい', { armor: false });
+  }
+  // 繁殖: 好物を 2 個以上持っていて、近くに同じ動物が 2 匹以上いれば増やす（食料と羊毛を絶やさない）
+  if (!night && minutes('lastBreedAt') > 6) {
+    const counts = {};
+    for (const e of Object.values(bot.entities ?? {})) if (e.position && bot.entity && e.position.distanceTo(bot.entity.position) < 32) counts[e.name] = (counts[e.name] ?? 0) + 1;
+    const pairs = Object.entries(BREED_FOOD).filter(([k, foods]) => (counts[k] ?? 0) >= 2 && foods.some((n) => bot.inventory.items().some((i) => i.name === n && i.count >= 2)));
+    if (pairs.length) add('breedAnimals', 18 + (1 - t.openness) * 10 + (food < 6 ? 15 : 0) + t.conscientiousness * 6, `近くの${pairs[0][0]}を増やす`, { animal: pairs[0][0] });
   }
   // 共同倉庫に余りを納める
   const extra = surplus(bot, soc);
@@ -148,7 +158,7 @@ export function options(bot, soc, history = []) {
 
 // スキルが終わったときに、欲求の「最後にやった時刻」を進める
 const MARKS = { socialize: 'lastTalkAt', explore: 'lastExploreAt', tendFarm: 'lastFarmAt', postNotice: 'lastNoticeAt',
-  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt', goHome: 'lastHomeAt' };
+  goToPlaza: 'lastPlazaAt', getIronGear: 'lastIronAt', makeBed: 'lastBedTryAt', callMeeting: 'lastMeetingAt', goHome: 'lastHomeAt', breedAnimals: 'lastBreedAt', shearSheep: 'lastBedTryAt', lightHome: 'lastLightAt' };
 
 export class SocietyPlanner {
   constructor(cfg, soc, { client } = {}) {

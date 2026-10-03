@@ -114,3 +114,12 @@ test('家の殻（壁・屋根・床）は守り、玄関と家の中は通れ�
   assert.equal(isInsideHouse(houses, { x: 0.5, y: 64, z: 0.5 }), true);
   assert.equal(isInsideHouse(houses, { x: 3, y: 64, z: 0 }), false);
 });
+
+test('小麦を持っていて近くに牛が 2 頭いれば繁殖を考える', () => {
+  const soc = makeSociety('Kenji_ISTJ', tmp());
+  const b = botWith({ stone_pickaxe: 1, wheat: 4 });
+  b.entity.position = { x: 0, y: 64, z: 0, distanceTo: () => 3 };
+  b.entities = { 1: { name: 'cow', position: { distanceTo: () => 5 } }, 2: { name: 'cow', position: { distanceTo: () => 6 } } };
+  const o = options(b, soc).find((x) => x.skill === 'breedAnimals');
+  assert.equal(o?.args.animal, 'cow');
+});
