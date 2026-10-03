@@ -1,0 +1,14 @@
+schema_version = "1.0.1"
+
+id = "blender_to_litematic"
+version = "1.0.1"
+name = "Blender to Litematic"
+tagline = "Convert meshes into Minecraft blocks and export Litematica schematics"
+maintainer = "kanety"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Import-Export"]
+
+[permissions]
+files = "Read textures and write .litematic schematic files"
