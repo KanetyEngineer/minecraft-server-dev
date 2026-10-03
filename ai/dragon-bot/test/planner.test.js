@@ -34,6 +34,24 @@ test('Claude が選んだスキルと引数を受け取る', async () => {
   assert.match(req.messages[0].content, /おすすめの次の一手/);
 });
 
+test('Haiku 4.5 では effort・thinking・fallbacks を送らない（送ると 400 になる）', async () => {
+  const seen = [];
+  const lite = { ...cfg, llm: { ...cfg.llm, model: 'claude-haiku-4-5', effort: 'low', fallbacks: true } };
+  const p = new Planner(lite, { client: mockClient({
+    stop_reason: 'tool_use',
+    content: [{ type: 'text', text: '木を集める' }, { type: 'tool_use', id: 't1', name: 'gatherWood', input: { logs: 8 } }],
+  }, seen) });
+  const d = await p.decide(input());
+  assert.equal(d.skill, 'gatherWood');
+  const req = seen[0];
+  assert.equal(req.model, 'claude-haiku-4-5');
+  assert.equal(req.thinking, undefined);
+  assert.equal(req.output_config, undefined);
+  assert.equal(req.fallbacks, undefined);
+  assert.equal(req.betas, undefined);
+  assert.equal(req.tool_choice.disable_parallel_tool_use, true);
+});
+
 test('拒否・スキル無しのときはルールベースに切り替える', async () => {
   for (const res of [
     { stop_reason: 'refusal', content: [] },

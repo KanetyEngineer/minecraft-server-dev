@@ -5,6 +5,7 @@ import { PLANNER_SYSTEM } from './prompts.js';
 import { toolDefinitions, SKILL_MAP, sanitizeArgs } from '../skills/index.js';
 import { nextStep } from './progress.js';
 import { log } from '../log.js';
+import { isLiteModel } from '../config.js';
 
 export class Planner {
   constructor(cfg, { client } = {}) {
@@ -90,11 +91,13 @@ export class Planner {
       system: [{ type: 'text', text: PLANNER_SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: this.tools,
       tool_choice: { type: 'auto', disable_parallel_tool_use: true },
-      output_config: { effort: this.cfg.llm.effort },
-      // 判断の思考過程も受け取り、ログに出す（人が読める要約が返る）
-      thinking: { type: 'adaptive' },
       messages: [{ role: 'user', content: text }],
     };
+    // Haiku は一番安いが effort・adaptive thinking・fallbacks を受け付けない（送ると 400 になる）
+    if (isLiteModel(this.cfg.llm.model)) return req;
+    req.output_config = { effort: this.cfg.llm.effort };
+    // 判断の思考過程も受け取り、ログに出す（人が読める要約が返る）
+    req.thinking = { type: 'adaptive' };
     if (this.cfg.llm.fallbacks) {
       req.betas = ['server-side-fallback-2026-07-01'];
       req.fallbacks = 'default';

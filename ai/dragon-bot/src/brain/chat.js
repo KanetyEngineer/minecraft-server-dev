@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { CHAT_SYSTEM } from './prompts.js';
 import { log } from '../log.js';
+import { isLiteModel } from '../config.js';
 
 // 今の作業を、会話で言うときの言い方に
 const DOING = {
@@ -77,7 +78,7 @@ export class ChatResponder {
         const res = await this.client.messages.create({
           model: this.cfg.llm.model,
           max_tokens: 1000,
-          output_config: { effort: 'low' },
+          ...(isLiteModel(this.cfg.llm.model) ? {} : { output_config: { effort: 'low' } }),
           system: `${CHAT_SYSTEM}\n今の状況: ${context}`,
           messages: this.conversation(),
         });

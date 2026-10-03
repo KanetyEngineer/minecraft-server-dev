@@ -59,3 +59,8 @@ export function loadConfig() {
     teamDir: process.env.TEAM_DIR || 'team',
   };
 }
+
+// effort・adaptive thinking・fallbacks を使えない安いモデル（Haiku 4.5 など）か
+export function isLiteModel(model) {
+  return /haiku/i.test(model ?? '');
+}

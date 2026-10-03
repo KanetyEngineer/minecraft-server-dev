@@ -13,10 +13,10 @@ import { Team, ROLES, strategyFor } from './team.js';
 import { setTeamContext } from './brain/progress.js';
 
 const cfg = loadConfig();
-// MBTI 社会実験と同じ使い方にする: 同じ .env の ANTHROPIC_API_KEY で、速くて安い Sonnet を low で使い、
+// MBTI 社会実験と同じ .env の ANTHROPIC_API_KEY を使う。料金を抑えるため一番安い Haiku 4.5 を既定にし（ユーザー指示 2026-10-03）、
 // 順調なときは進捗表どおりに動いて、困ったときだけ相談する（毎回 Opus に聞くと 1 回ごとに長く立ち止まっていた）。
 // 変えたいときは .env に CLAUDE_MODEL_DRAGON / CLAUDE_EFFORT_DRAGON / LLM_MODE を書く
-cfg.llm.model = process.env.CLAUDE_MODEL_DRAGON || 'claude-sonnet-5-5';
+cfg.llm.model = process.env.CLAUDE_MODEL_DRAGON || 'claude-haiku-4-5';
 cfg.llm.effort = process.env.CLAUDE_EFFORT_DRAGON || 'low';
 cfg.llm.mode = process.env.LLM_MODE || 'assist';
 // API を節約する（ユーザー指示 2026-10-03）。困っていないときの見直しは 10 分に 1 回まで
