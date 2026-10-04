@@ -25,8 +25,9 @@ export const INSTRUCTION_RE = /^\s*(?:\/?ai|@?dragonbot|!ai)[\s:：、,]+(.+)$/i
 const COMBAT_SKILLS = new Set(['fightDragon', 'destroyEndCrystals', 'huntBlazes', 'huntEndermen', 'attack']);
 
 export class Agent {
-  constructor({ bot, cfg, memory, planner, chat, team = null }) {
-    Object.assign(this, { bot, cfg, memory, planner, chat, team });
+  // skills: 使えるスキルの表（社会モードでは別の表を渡す）。extraCtx: スキルに渡す ctx に足すもの
+  constructor({ bot, cfg, memory, planner, chat, team = null, skills = SKILL_MAP, extraCtx = {} }) {
+    Object.assign(this, { bot, cfg, memory, planner, chat, team, skills, extraCtx });
     this.history = [];
     this.chatLog = [];
     this.instructions = []; // プレイヤーからの指示（チャット「ai 〜」やささやき）
@@ -115,7 +116,7 @@ export class Agent {
   async handleAiCommand(username, text, whisper) {
     const { bot } = this;
     const reply = (t) => (whisper ? bot.whisper(username, String(t).slice(0, 240)) : this.say(t));
-    const c = classify(text, Object.keys(SKILL_MAP));
+    const c = classify(text, Object.keys(this.skills));
     log.brain(`💬 ${username} からの指示: 「${text}」 → ${c.kind}${c.skill ? ` ${c.skill}` : ''}`);
     if (c.kind === 'help') return reply(`使い方: ${HELP}`);
     if (c.kind === 'status') return reply(statusLine(bot, this.memory, this.current?.name) + (this.paused ? '（停止中）' : ''));
@@ -879,7 +880,7 @@ export class Agent {
   }
 
   makeCtx(controller) {
-    return { bot: this.bot, cfg: this.cfg, memory: this.memory, log, signal: controller.signal, state: this.state, say: (t) => this.say(t), team: this.team };
+    return { bot: this.bot, cfg: this.cfg, memory: this.memory, log, signal: controller.signal, state: this.state, say: (t) => this.say(t), team: this.team, ...this.extraCtx };
   }
 
   // ---------- メインループ ----------
@@ -975,7 +976,7 @@ export class Agent {
   }
 
   async runSkill(name, args) {
-    const skill = SKILL_MAP[name];
+    const skill = this.skills[name];
     if (!skill) {
       this.history.push({ skill: name, args, ok: false, result: '存在しないスキル' });
       return;
