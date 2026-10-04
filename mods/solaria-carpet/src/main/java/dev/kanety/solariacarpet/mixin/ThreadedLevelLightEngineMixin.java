@@ -34,6 +34,9 @@ public abstract class ThreadedLevelLightEngineMixin {
     @Inject(method = "runUpdate", at = @At("HEAD"), cancellable = true)
     private void solariacarpet$budget(CallbackInfo ci) {
         if (!SolariaCarpetSettings.lightSuppression) return;
+        // Above the cap the backlog is worked off at full speed, so a chunk load never waits for an endless queue.
+        int cap = SolariaCarpetSettings.lightSuppressionMaxQueue;
+        if (cap > 0 && lightTasks.size() >= cap) return;
         long now = System.nanoTime();
         if (now - solariacarpet$windowStart >= LightSuppression.WINDOW_NANOS) {
             solariacarpet$windowStart = now;

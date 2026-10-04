@@ -33,4 +33,8 @@ public final class SolariaCarpetSettings {
     @Rule(categories = {SOLARIA, RuleCategory.EXPERIMENTAL}, options = {"1000", "2000", "5000", "10000"}, strict = false,
             validators = Validators.NonNegativeNumber.class)
     public static int lightSuppressionTasksPerTick = 2000;
+
+    @Rule(categories = {SOLARIA, RuleCategory.EXPERIMENTAL}, options = {"100000", "300000", "500000"}, strict = false,
+            validators = Validators.NonNegativeNumber.class)
+    public static int lightSuppressionMaxQueue = 300000;
 }

@@ -15,8 +15,11 @@
   "carpet.rule.lightSuppression.name": "光抑制",
   "carpet.rule.lightSuppression.desc": "昔の光抑制装置が使えるようにします。1 tick に処理する光の更新に上限を設けます",
   "carpet.rule.lightSuppression.extra.0": "上限を超える光の更新を出し続ける装置があると処理待ちが溜まり、ほかの光の更新が後回しになります",
-  "carpet.rule.lightSuppression.extra.1": "サーバー停止時に残っていた光の更新は、昔と同じく消えます。処理待ちが溜まっている間は新しいチャンクの読み込みが少し遅くなります（読み込みを待つ間は処理量を10倍にします）",
+  "carpet.rule.lightSuppression.extra.1": "サーバー停止時に残っていた光の更新は、昔と同じく消えます。処理待ちが溜まっている間に新しいチャンクを読み込むと、片付くまでサーバーが止まります（上限は lightSuppressionMaxQueue）",
   "carpet.rule.lightSuppressionTasksPerTick.name": "光抑制中の処理量",
   "carpet.rule.lightSuppressionTasksPerTick.desc": "lightSuppression が true のとき、1 tick（50ミリ秒）に処理する光の更新の数（1000 単位で切り上げ）",
-  "carpet.rule.lightSuppressionTasksPerTick.extra.0": "小さいほど光抑制装置を作りやすく、大きいほど普段の明るさの反映が速くなります"
+  "carpet.rule.lightSuppressionTasksPerTick.extra.0": "小さいほど光抑制装置を作りやすく、大きいほど普段の明るさの反映が速くなります",
+  "carpet.rule.lightSuppressionMaxQueue.name": "光抑制の処理待ちの上限",
+  "carpet.rule.lightSuppressionMaxQueue.desc": "lightSuppression 中に溜まる光の更新の上限（0 で無制限）",
+  "carpet.rule.lightSuppressionMaxQueue.extra.0": "上限を超えた分は全力で処理します。新しいチャンクの読み込みは処理待ちが片付くまで待つので、上限が大きいほどサーバーが長く止まります（目安: 30万で約8秒）"
 }

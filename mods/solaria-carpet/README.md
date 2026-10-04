@@ -14,6 +14,7 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの Carpet 拡張。サーバ�
 | `potionDupeLegacyPhysics` | true | 投擲物の処理順・ハチミツブロックの滑り・当たり判定の幅を 1.21.1 にする |
 | `lightSuppression` | false | 昔の光抑制装置が使えるようにする（1 tick に処理する光の更新に上限を設ける） |
 | `lightSuppressionTasksPerTick` | 2000 | 光抑制中に 1 tick で処理する光の更新の数（1000 単位で切り上げ） |
+| `lightSuppressionMaxQueue` | 300000 | 光抑制中に溜まる処理待ちの上限（超えた分は全力で処理、0 で無制限） |
 
 ```
 /carpet potionDupe true
@@ -24,7 +25,7 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの Carpet 拡張。サーバ�
 
 ### 光抑制について
 1.21.11 の光エンジンは 1 回で最大 1000 件をまとめて処理し、溜まりそうになるとすぐ処理するため、昔の光抑制装置（光の更新を大量に出し続けて処理待ちを溜める装置）が効かなくなっている。
-`lightSuppression` を true にすると、1 tick に処理する量が `lightSuppressionTasksPerTick` までに制限されるので、昔と同じように処理待ちが溜まる。サーバーを止めたときに残っていた光の更新は昔と同じく消える。処理待ちが溜まっている間は新しいチャンクの読み込みが少し遅くなる（読み込みを待つ間は処理量を10倍にして、サーバーが止まらないようにしている）。
+`lightSuppression` を true にすると、1 tick に処理する量が `lightSuppressionTasksPerTick` までに制限されるので、昔と同じように処理待ちが溜まる。サーバーを止めたときに残っていた光の更新は昔と同じく消える。処理待ちが溜まっている間に新しいチャンクを読み込むと、処理待ちが片付くまでサーバーが止まる（30万件で約8秒）。止まりすぎないよう、処理待ちは `lightSuppressionMaxQueue` 件までに抑える。
 古い光エンジンをそのまま再現したものではないので、装置によっては挙動が違うことがある。
 
 Potion Dupe Restore とは同時に入れられない（同じ処理を書き換えるため）。
