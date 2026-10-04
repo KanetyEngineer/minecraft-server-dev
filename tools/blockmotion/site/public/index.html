@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlockMotion｜マイクラ3Dアニメ自動生成</title>
+<meta name="description" content="スキンを選んでモーションを並べるだけ。Blender でマイクラ風 3D アニメの動画と .blend を自動生成する Windows 用の無料アプリ。">
+<meta property="og:title" content="BlockMotion｜マイクラ3Dアニメ自動生成">
+<meta property="og:description" content="スキンを選んでモーションを並べるだけで、Blender がマイクラ風 3D アニメを作ります。53 モーション・カット割り・字幕・自分のワールドを背景に。">
+<meta property="og:image" content="https://blockmotion.sharytech.com/img/hero.jpg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.png">
+<link rel="alternate" hreflang="ja" href="https://blockmotion.sharytech.com/">
+<link rel="alternate" hreflang="en" href="https://blockmotion.sharytech.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://blockmotion.sharytech.com/">
+<script>try{if(!localStorage.getItem('bm-lang')&&!/^ja/i.test(navigator.language||''))location.replace('/en/'+location.hash)}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14171c; --panel:#1d2128; --panel2:#252a33; --line:#323845;
+  --text:#e8ecf2; --muted:#9aa4b2; --accent:#7ccf4a; --accent-ink:#0f1a08; --accent2:#f2b84b;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans JP",system-ui,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+img,video{max-width:100%;height:auto;display:block}
+a{color:var(--accent)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.pix{font-family:"DotGothic16",monospace;letter-spacing:.02em}
+header.top{position:sticky;top:0;z-index:10;background:rgba(20,23,28,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;color:var(--text);text-decoration:none}
+.logo i{width:22px;height:22px;background:linear-gradient(135deg,#7ccf4a 0 50%,#5a9c33 50%);box-shadow:inset -4px -4px 0 rgba(0,0,0,.25);display:inline-block}
+nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+nav a{color:var(--muted);text-decoration:none}
+nav a:hover{color:var(--text)}
+.lang{border:1px solid var(--line);border-radius:4px;padding:0 8px}
+@media (max-width:640px){nav a:not(.dl):not(.lang){display:none}}
+
+.hero{position:relative;overflow:hidden}
+.hero .bgimg{position:absolute;inset:0;background:url(/img/hero.jpg) center/cover;filter:saturate(1.05)}
+.hero .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,16,20,.92) 0%,rgba(14,16,20,.7) 45%,rgba(14,16,20,.15) 100%)}
+.hero .wrap{position:relative;padding:96px 16px 104px}
+.hero h1{font-size:clamp(28px,7.8vw,60px);line-height:1.15;margin:0 0 18px}
+.hero h1 span{color:var(--accent)}
+.hero p.lead{font-size:clamp(15px,2vw,18px);max-width:540px;color:#d6dce5;margin:0 0 30px}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:14px 26px;border-radius:6px;font-weight:700;text-decoration:none;font-size:16px;border:0;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 #4f8a2c}
+.btn.primary:hover{transform:translateY(1px);box-shadow:0 3px 0 #4f8a2c}
+.btn.ghost{background:rgba(255,255,255,.08);color:var(--text);border:1px solid rgba(255,255,255,.18)}
+.btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.meta{font-size:13px;color:var(--muted);margin-top:14px}
+
+section{padding:72px 0;border-top:1px solid var(--line)}
+section h2{font-size:clamp(24px,3.4vw,32px);margin:0 0 8px}
+section .sub{color:var(--muted);margin:0 0 32px}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px}
+.step::before{counter-increment:s;content:counter(s);font-family:"DotGothic16";display:inline-grid;place-items:center;width:34px;height:34px;background:var(--accent);color:var(--accent-ink);border-radius:4px;font-size:20px;margin-bottom:10px}
+.step h3{margin:0 0 6px;font-size:17px}
+.step p{margin:0;color:var(--muted);font-size:14px}
+@media (max-width:760px){.steps{grid-template-columns:1fr}}
+
+.feature{display:grid;grid-template-columns:1.1fr 1fr;gap:36px;align-items:center;margin-bottom:56px}
+.feature:last-child{margin-bottom:0}
+.feature.rev .media{order:2}
+.feature .media img,.feature .media video{border-radius:10px;border:1px solid var(--line);width:100%}
+.feature h3{font-size:22px;margin:0 0 10px}
+.feature h3 small{display:block;font-size:13px;color:var(--accent);font-weight:400;font-family:"DotGothic16";margin-bottom:4px}
+.feature p{color:#c9d0da;margin:0 0 12px}
+.feature ul{margin:0;padding-left:1.2em;color:#c9d0da}
+.feature li{margin:2px 0}
+@media (max-width:860px){.feature{grid-template-columns:1fr;gap:18px}.feature.rev .media{order:0}}
+
+.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.shots img{border-radius:6px;border:1px solid var(--line)}
+.shots figure{margin:0}
+.shots figcaption{font-size:12px;color:var(--muted);margin-top:4px}
+@media (max-width:640px){.shots{grid-template-columns:repeat(2,1fr)}}
+
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag{font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 9px;color:#d5dbe4}
+.cat{margin:18px 0 4px;font-size:14px;color:var(--accent2);font-weight:700}
+
+.download{background:linear-gradient(180deg,#1a2a14,#14171c)}
+.dlbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center}
+.dlbox h3{margin:0 0 6px;font-size:22px}
+.dlbox ul{margin:8px 0 0;padding-left:1.2em;color:#c9d0da;font-size:14px}
+@media (max-width:760px){.dlbox{grid-template-columns:1fr}}
+
+.faq details{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:700}
+.faq details p,.faq details ol{color:#c9d0da;margin:10px 0 0;font-size:15px}
+code{background:var(--panel2);padding:1px 6px;border-radius:4px;font-size:.92em}
+
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px}
+footer p{margin:4px 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo pix" href="#"><i></i>BlockMotion</a>
+    <nav>
+      <a href="#how">使い方</a>
+      <a href="#features">できること</a>
+      <a href="#motions">モーション</a>
+      <a href="#faq">よくある質問</a>
+      <a class="lang" href="/en/" hreflang="en" lang="en" onclick="try{localStorage.setItem('bm-lang','en')}catch(e){}">English</a>
+      <a class="dl" href="#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="bgimg" role="img" aria-label="BlockMotion で作った夕焼けの草原のシーン"></div>
+  <div class="shade"></div>
+  <div class="wrap">
+    <h1 class="pix">マイクラの3Dアニメを<br><span>ボタンひとつで。</span></h1>
+    <p class="lead">スキンを選んで、モーションを並べて、「生成」を押すだけ。PC の Blender が裏で動いて、動画（MP4）と手直しできる Blender ファイルを作ります。</p>
+    <div class="btns">
+      <a class="btn primary" href="#download">⬇ 無料でダウンロード</a>
+      <a class="btn ghost" href="#features">できることを見る</a>
+    </div>
+    <p class="meta">Windows 10 / 11・Blender 4.2 以降（無料）が必要です</p>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="pix">使い方は 3 ステップ</h2>
+    <p class="sub">Blender の操作を知らなくても大丈夫です。</p>
+    <div class="steps">
+      <div class="step"><h3>スキンを選ぶ</h3><p>いつものスキン画像（64×64 の PNG）を選ぶだけ。腕の太さ（Steve 型 / Alex 型）は自動で見分けます。最大 8 人まで出演できます。</p></div>
+      <div class="step"><h3>動きとカメラを並べる</h3><p>53 種類のモーションから選んで再生リストに追加。つなぎ目は自動でなめらかに。カット割りでカメラも切り替えられます。</p></div>
+      <div class="step"><h3>「生成」を押す</h3><p>プレビューで 1 コマ確認してから生成。YouTube 用の横長も、TikTok 用の縦長も書き出せます。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2 class="pix">ちょっとした映画が撮れる</h2>
+    <p class="sub">会話シーンも、旅立ちのシーンも、自分のワールドで。</p>
+
+    <div class="feature">
+      <div class="media"><img src="/img/app.jpg" alt="BlockMotion のアプリ画面" loading="lazy" width="1280" height="812"></div>
+      <div>
+        <h3><small>APP</small>タブを順に埋めるだけ</h3>
+        <p>キャラクター、カメラ、背景、演出、書き出しの 5 つのタブを上から順に決めていきます。設定はプロジェクトファイルに保存して、あとから続きを作れます。</p>
+        <ul>
+          <li>Blender の場所は自動で見つけます</li>
+          <li>進み具合とプレビューをアプリ内に表示</li>
+          <li>できた .blend はリグとキーフレーム付き</li>
+          <li>画面は日本語と英語を切り替えられます（「言語 / Language」メニュー）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature rev">
+      <div class="media"><img src="/img/world.jpg" alt="マイクラのワールドの村を背景にしたシーン" loading="lazy" width="1280" height="720"></div>
+      <div>
+        <h3><small>WORLD</small>自分のワールドが撮影セットに</h3>
+        <p>ワールドフォルダを選んで、F3 で表示される X / Y / Z を入れるだけ。その周りのブロックをそのまま読み込んで背景にします。</p>
+        <ul>
+          <li>「プレイヤーの位置を読み込む」で最後にいた場所を自動入力</li>
+          <li>読み込む範囲（半径・上下）を指定</li>
+          <li>テクスチャは PC の Minecraft 本体から。リソースパックも使えます</li>
+          <li>Java 版 1.13 以降のワールドに対応</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="media"><img src="/img/hero2.jpg" alt="肩越しのカメラと字幕が入ったシーン" loading="lazy" width="1280" height="720"></div>
+      <div>
+        <h3><small>DIRECTING</small>カット割り・字幕・天気</h3>
+        <p>16 種類のカメラを、映す相手と秒数を決めて並べられます。会話シーン向けの「肩越し」や、キャラの目線の「主観」もあります。</p>
+        <ul>
+          <li>カメラ：ななめ前 / アップ / 遠景 / 肩越し / 主観 / ズームイン / クレーン / ぐるっと回る など</li>
+          <li>タイトル、字幕、映画風の黒帯、背景ぼかし</li>
+          <li>時間帯（昼・夕焼け・夜）と天気（雨・雪）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature rev">
+      <div class="media"><video src="/media/sample.mp4" poster="/media/sample_poster.jpg" controls muted loop playsinline preload="none" width="1280" height="720"></video></div>
+      <div>
+        <h3><small>OUTPUT</small>動画と .blend を書き出し</h3>
+        <p>MP4（H.264）でそのまま投稿できます。Blender ファイルも一緒に保存されるので、細かい動きやライトを自分で直すこともできます。</p>
+        <ul>
+          <li>横長 1920×1080 / 縦長 1080×1920 / 正方形 / 4K</li>
+          <li>画質は 標準（EEVEE）/ 高画質（Cycles）/ 下書き</li>
+          <li>グリーンバックと透過 PNG 連番で動画編集アプリにも</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin:56px 0 12px;font-size:20px">背景も 10 種類</h3>
+    <div class="shots">
+      <figure><img src="/img/bg_desert.jpg" alt="砂漠" loading="lazy"><figcaption>砂漠</figcaption></figure>
+      <figure><img src="/img/bg_snow.jpg" alt="雪原" loading="lazy"><figcaption>雪原</figcaption></figure>
+      <figure><img src="/img/bg_nether.jpg" alt="ネザー" loading="lazy"><figcaption>ネザー</figcaption></figure>
+      <figure><img src="/img/bg_end.jpg" alt="エンド" loading="lazy"><figcaption>エンド</figcaption></figure>
+      <figure><img src="/img/bg_night.jpg" alt="夜の草原" loading="lazy"><figcaption>夜の草原</figcaption></figure>
+      <figure><img src="/img/bg_cave.jpg" alt="洞窟" loading="lazy"><figcaption>洞窟</figcaption></figure>
+    </div>
+    <p class="meta">ほかに 草原・マイクラのワールド・スタジオ（単色）・グリーンバック・透過</p>
+  </div>
+</section>
+
+<section id="motions">
+  <div class="wrap">
+    <h2 class="pix">モーション 53 種類</h2>
+    <p class="sub">組み合わせ自由。向きを変えるモーションのあとはその向きのまま次へ進みます。</p>
+    <img src="/img/motions.jpg" alt="53 種類のモーションの一覧画像" loading="lazy" style="border-radius:10px;border:1px solid var(--line);margin-bottom:12px" width="1400" height="933">
+    <div class="cat">移動</div><div class="tags"><span class="tag">歩く</span><span class="tag">走る</span><span class="tag">後ろ歩き</span><span class="tag">スニーク歩き</span><span class="tag">スキップ</span><span class="tag">ゾンビ歩き</span><span class="tag">ほふく前進</span><span class="tag">泳ぐ</span><span class="tag">空を飛ぶ</span><span class="tag">よじ登る</span></div>
+    <div class="cat">向き</div><div class="tags"><span class="tag">左を向く</span><span class="tag">右を向く</span><span class="tag">振り返る</span><span class="tag">くるっと回る</span></div>
+    <div class="cat">基本</div><div class="tags"><span class="tag">待機</span><span class="tag">見回す</span><span class="tag">しゃがむ</span><span class="tag">座る</span><span class="tag">寝転ぶ</span><span class="tag">Tポーズ</span><span class="tag">伸び</span><span class="tag">ジャンピングジャック</span></div>
+    <div class="cat">気持ち</div><div class="tags"><span class="tag">手を振る</span><span class="tag">お辞儀</span><span class="tag">うなずく</span><span class="tag">首を横に振る</span><span class="tag">拍手</span><span class="tag">バンザイ</span><span class="tag">ガッツポーズ</span><span class="tag">大笑い</span><span class="tag">泣く</span><span class="tag">落ち込む</span><span class="tag">地団駄</span><span class="tag">怖がる</span><span class="tag">頭を抱える</span><span class="tag">肩をすくめる</span><span class="tag">指さす</span><span class="tag">敬礼</span></div>
+    <div class="cat">作業</div><div class="tags"><span class="tag">採掘</span><span class="tag">食べる</span><span class="tag">投げる</span></div>
+    <div class="cat">戦闘</div><div class="tags"><span class="tag">剣を振る</span><span class="tag">パンチ</span><span class="tag">キック</span><span class="tag">盾で防ぐ</span><span class="tag">弓を引く</span><span class="tag">倒れる</span><span class="tag">やられる</span></div>
+    <div class="cat">アクション・ダンス</div><div class="tags"><span class="tag">ジャンプ</span><span class="tag">バク宙</span><span class="tag">ダンス</span><span class="tag">フロス</span><span class="tag">ダブ</span></div>
+  </div>
+</section>
+
+<section id="download" class="download">
+  <div class="wrap">
+    <h2 class="pix">ダウンロード</h2>
+    <p class="sub">無料です。インストール不要で、展開してすぐ使えます。</p>
+    <div class="dlbox">
+      <div>
+        <h3>BlockMotion <span id="ver">2.1.0</span>（Windows）</h3>
+        <ul>
+          <li>Windows 10 / 11（64bit）</li>
+          <li><a href="https://www.blender.org/download/" target="_blank" rel="noopener">Blender</a> 4.2 以降（5.0 で確認、Steam 版・Store 版も OK）</li>
+          <li>ワールドを背景にするときは Java 版 Minecraft が入っている PC</li>
+        </ul>
+      </div>
+      <div class="btns" style="flex-direction:column;align-items:stretch">
+        <a class="btn primary" href="/download/BlockMotion-windows.zip" download>⬇ BlockMotion-windows.zip</a>
+        <span class="meta" style="margin:0;text-align:center">約 19 MB</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="wrap">
+    <h2 class="pix">よくある質問</h2>
+    <p class="sub">困ったときはここを見てください。</p>
+    <details open>
+      <summary>exe が開けない・「Windows によって PC が保護されました」と出る</summary>
+      <p>署名のないアプリなので、Windows の SmartScreen やスマート アプリ コントロールが止めることがあります。</p>
+      <ol>
+        <li>ダウンロードした zip を右クリック →「プロパティ」→ 下の「許可する」にチェック →「OK」</li>
+        <li>そのあと zip を展開して <code>BlockMotion\BlockMotion.exe</code> を起動</li>
+        <li>青い画面が出たら「詳細情報」→「実行」</li>
+      </ol>
+      <p>それでも開けないときは、Python 3.10 以降を入れて、<a href="https://github.com/KanetyEngineer/minecraft-server-dev/tree/main/tools/blockmotion" target="_blank" rel="noopener">ソース一式</a>の <code>run_source.bat</code> から起動できます。</p>
+    </details>
+    <details>
+      <summary>Blender が見つからないと言われる</summary>
+      <p>アプリ上の「自動検出」を押すか、「参照…」で <code>blender.exe</code> を選んでください。ふつうは <code>C:\Program Files\Blender Foundation\Blender 5.0\blender.exe</code> にあります。</p>
+    </details>
+    <details>
+      <summary>生成にどれくらい時間がかかる？</summary>
+      <p>PC の性能と画質によります。まず「プレビュー」で 1 コマ描いて確認し、動きだけ見たいときは画質を「下書き」にすると速く終わります。高画質（Cycles）は GPU があると速くなります。</p>
+    </details>
+    <details>
+      <summary>ワールドが読み込めない</summary>
+      <p>ワールドフォルダは <code>%APPDATA%\.minecraft\saves\ワールド名</code>（サーバーならサーバーフォルダの <code>world</code>）を選んでください。座標は F3 の「XYZ」の値です。テクスチャ欄に Minecraft 本体の jar（<code>.minecraft\versions\バージョン\バージョン.jar</code>）が入っているかも確認してください。</p>
+    </details>
+    <details>
+      <summary>作った動画を YouTube や TikTok に投稿していい？</summary>
+      <p>はい。ただし背景やアイテムのテクスチャは Minecraft のものなので、<a href="https://www.minecraft.net/ja-jp/usage-guidelines" target="_blank" rel="noopener">Minecraft の利用ガイドライン</a>の範囲で使ってください。</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="pix" style="color:var(--text);font-size:15px">BlockMotion</p>
+    <p>運営: SharyTech</p>
+    <p>Minecraft は Mojang Studios の商標です。BlockMotion は Mojang Studios および Microsoft とは関係のない非公式ツールです。Blender は Blender Foundation の商標です。</p>
+  </div>
+</footer>
+</body>
+</html>

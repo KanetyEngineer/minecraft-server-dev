@@ -1,0 +1,62 @@
+name: BlockMotion (Windows build)
+
+on:
+  push:
+    paths:
+      - "tools/blockmotion/**"
+      - ".github/workflows/blockmotion.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/blockmotion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install pyinstaller==6.11.1 pillow
+      - name: Syntax check
+        run: python -m py_compile app/blockmotion.py app/bm_i18n.py blender/generate.py blender/bm_motions.py blender/bm_world.py
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --windowed --name BlockMotion
+          --icon assets/icon.ico
+          --paths blender --add-data "blender;blender" --add-data "assets;assets"
+          app/blockmotion.py
+      - name: Smoke test (exe starts and finds its files)
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/BlockMotion/BlockMotion.exe -ArgumentList "--version" -PassThru -Wait
+          if (!(Test-Path dist/BlockMotion/_internal/blender/generate.py)) { throw "generate.py missing" }
+          if (!(Test-Path dist/BlockMotion/_internal/blender/bm_world.py)) { throw "bm_world.py missing" }
+          if (!(Test-Path dist/BlockMotion/_internal/assets/textures/stone.png)) { throw "assets missing" }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md dist/BlockMotion/README.md
+          Compress-Archive -Path dist/BlockMotion -DestinationPath BlockMotion-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlockMotion-windows
+          path: tools/blockmotion/BlockMotion-windows.zip
+      - name: Publish pre-release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = (Select-String -Path app/blockmotion.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          $tag = "blockmotion-v$ver"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --prerelease --target $env:GITHUB_SHA --title "BlockMotion $ver" --notes "マイクラ3Dアニメ自動生成アプリ（Windows）。zip を展開して BlockMotion.exe を起動。Blender 4.2 以降が必要。"
+          }
+          gh release upload $tag BlockMotion-windows.zip --clobber
