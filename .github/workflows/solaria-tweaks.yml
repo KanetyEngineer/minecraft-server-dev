@@ -44,4 +44,9 @@ jobs:
           rm -f solaria-tweaks-*.jar
           cp -r /tmp/dist/* .
           echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD.txt
-          git add -A && git commit -qm "solaria-tweaks build ${GITHUB_SHA::7}" && git push origin solaria-dist
+          git add -A && git commit -qm "solaria-tweaks build ${GITHUB_SHA::7}"
+          # both workflows publish here; retry on a race with the other one
+          for i in 1 2 3 4 5; do
+            git push origin solaria-dist && break
+            sleep $((i * 3)); git fetch origin solaria-dist && git rebase origin/solaria-dist
+          done
