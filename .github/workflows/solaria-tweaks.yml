@@ -18,7 +18,7 @@ jobs:
         with: { gradle-version: current }
       - name: Build
         working-directory: mods/solaria-tweaks
-        run: gradle --no-daemon build 2>&1 | tee /tmp/build.log
+        run: set -o pipefail; gradle --no-daemon build 2>&1 | tee /tmp/build.log
       - name: Mixin target warnings
         if: always()
         run: grep -iE "mixin|cannot find|unable to locate|no refMap" /tmp/build.log || echo "none"
