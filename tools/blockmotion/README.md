@@ -110,5 +110,6 @@ blender -b --factory-startup -P blender/generate.py -- config.json
 ## 補足
 
 - 背景とアイテムのテクスチャは Minecraft のものです（Mojang Studios）。作った動画の公開は Minecraft の利用ガイドラインの範囲で行ってください。
+- 画面の言語は「言語 / Language」メニューで日本語と英語を切り替えられます（最初は Windows の言語に合わせます）。
 - 設定は `%APPDATA%\BlockMotion\settings.json` に保存されます。
 - ワールドを読み込むときのテクスチャは、PC にある Minecraft 本体から読むだけで、配布物には含めていません。
