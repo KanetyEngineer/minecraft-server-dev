@@ -54,7 +54,7 @@ public class SharedWaypointsScreen extends Screen {
             scroll = 0;
             rebuildWidgets();
         }).bounds(width / 2 + 2, 22, tw, 18)
-                .tooltip(Tooltip.create(Component.literal("Xaero's Minimap に登録してある自分の地点（いまいるワールド・ディメンションの全セット）から選んで共有します")))
+                .tooltip(Tooltip.create(Component.literal("Xaero's Minimap に登録した自分の地点（今いるワールドとディメンションの全セット）から選んで共有します")))
                 .build());
 
         String me = minecraft != null && minecraft.player != null ? minecraft.player.getStringUUID() : "";
@@ -129,7 +129,7 @@ public class SharedWaypointsScreen extends Screen {
                 return;
             }
             if (local.isEmpty()) {
-                g.drawCenteredString(font, "このワールド・ディメンションに自分の地点はありません", width / 2, TOP + 4, 0xFFAAAAAA);
+                g.drawCenteredString(font, "このワールドとディメンションには自分の地点がありません", width / 2, TOP + 4, 0xFFAAAAAA);
                 return;
             }
             for (int i = 0; i < n && scroll + i < local.size(); i++) {
@@ -142,11 +142,11 @@ public class SharedWaypointsScreen extends Screen {
         } else {
             List<ClientWaypoints.Entry> entries = ClientWaypoints.entries();
             if (!ClientWaypoints.received) {
-                g.drawCenteredString(font, "サーバーに Solaria Tweaks が入っていないか、まだ受信していません", width / 2, TOP + 4, 0xFFFF9F9F);
+                g.drawCenteredString(font, "サーバーに Solaria Tweaks が入っていないか、まだデータを受け取っていません", width / 2, TOP + 4, 0xFFFF9F9F);
                 return;
             }
             if (entries.isEmpty()) {
-                g.drawCenteredString(font, "共有地点はまだありません。「自分の地点を共有」か地図の右クリックから追加できます", width / 2, TOP + 4, 0xFFAAAAAA);
+                g.drawCenteredString(font, "共有地点はまだありません。「自分の地点を共有」か、地図の右クリックメニューから追加できます", width / 2, TOP + 4, 0xFFAAAAAA);
                 return;
             }
             for (int i = 0; i < n && scroll + i < entries.size(); i++) {

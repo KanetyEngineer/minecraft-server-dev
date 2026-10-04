@@ -26,8 +26,8 @@ import java.util.concurrent.CompletableFuture;
 
 /** /lb — choose what your own sidebar leaderboard shows. */
 public final class LeaderboardCommand {
-    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("順位表はまだ準備中です"));
-    private static final SimpleCommandExceptionType UNKNOWN = new SimpleCommandExceptionType(Component.literal("その項目はありません（/lb list で一覧）"));
+    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("順位表の準備中です。少し待ってからもう一度試してください"));
+    private static final SimpleCommandExceptionType UNKNOWN = new SimpleCommandExceptionType(Component.literal("その項目は見つかりません（/lb で一覧を確認できます）"));
     private static final SimpleCommandExceptionType NO_PLAYER = new SimpleCommandExceptionType(Component.literal("そのプレイヤーは見つかりません"));
 
     private static final SuggestionProvider<CommandSourceStack> CRITERIA = LeaderboardCommand::suggestCriteria;
@@ -41,6 +41,7 @@ public final class LeaderboardCommand {
                 .then(Commands.literal("show")
                         .then(Commands.argument("criterion", StringArgumentType.greedyString()).suggests(CRITERIA).executes(LeaderboardCommand::show)))
                 .then(Commands.literal("hide").executes(LeaderboardCommand::hide))
+                .then(Commands.literal("server").executes(LeaderboardCommand::server))
                 .then(Commands.literal("top")
                         .then(Commands.argument("criterion", StringArgumentType.greedyString()).suggests(CRITERIA).executes(LeaderboardCommand::top)))
                 .then(Commands.literal("default").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
@@ -80,6 +81,7 @@ public final class LeaderboardCommand {
         int colon = rest.indexOf(':');
         if (colon < 0) {
             List<String> out = new ArrayList<>(Criterion.PRESETS.keySet());
+            out.add("server");
             for (String t : Criterion.TYPES.keySet()) out.add(t + ":");
             return SharedSuggestionProvider.suggest(out, b);
         }
@@ -101,13 +103,14 @@ public final class LeaderboardCommand {
         CommandSourceStack s = c.getSource();
         ServerPlayer p = s.getPlayer();
         Criterion cur = p == null ? null : board.chosen(p.getUUID());
-        s.sendSuccess(() -> Component.literal("順位表（右側のサイドバー）  いま: " + (cur == null ? "非表示" : cur.label())).withStyle(ChatFormatting.GOLD), false);
-        s.sendSuccess(() -> Component.literal("/lb show <項目> で表示、/lb hide で非表示、/lb top <項目> でチャットに全順位。表示は自分にだけ変わります。"), false);
+        s.sendSuccess(() -> Component.literal("順位表（画面右のサイドバー）  表示中: " + (cur == null ? "非表示" : cur.label())).withStyle(ChatFormatting.GOLD), false);
+        s.sendSuccess(() -> Component.literal("/lb show <項目> で表示、/lb hide で非表示、/lb top <項目> でチャットに全順位、/lb server でサーバー全体の記録を表示します。切り替えは自分の画面にだけ反映されます。"), false);
         StringBuilder sb = new StringBuilder("項目: ");
         for (Criterion pr : Criterion.PRESETS.values()) sb.append(pr.key()).append("(").append(pr.label()).append(") ");
+        sb.append("server(").append(Criterion.SERVER.label()).append(")");
         String presets = sb.toString();
         s.sendSuccess(() -> Component.literal(presets).withStyle(ChatFormatting.GRAY), false);
-        s.sendSuccess(() -> Component.literal("ほかに mined:diamond_ore、killed:zombie、used:all、custom:<統計> のように個別の統計も選べます。ボットは数えません。")
+        s.sendSuccess(() -> Component.literal("mined:diamond_ore、killed:zombie、used:all、custom:<統計> のように、個別の統計も選べます。ボットの記録は数えません。")
                 .withStyle(ChatFormatting.GRAY), false);
         return 1;
     }
@@ -115,18 +118,42 @@ public final class LeaderboardCommand {
     private static int show(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Criterion criterion = parse(StringArgumentType.getString(c, "criterion"));
         running().choose(c.getSource().getPlayerOrException(), criterion);
-        c.getSource().sendSuccess(() -> Component.literal("順位表を「" + criterion.label() + "」にしました"), false);
+        c.getSource().sendSuccess(() -> Component.literal("順位表を「" + criterion.label() + "」に切り替えました"), false);
         return 1;
     }
 
     private static int hide(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         running().choose(c.getSource().getPlayerOrException(), null);
-        c.getSource().sendSuccess(() -> Component.literal("順位表を非表示にしました（/lb show <項目> で戻せます）"), false);
+        c.getSource().sendSuccess(() -> Component.literal("順位表を非表示にしました（/lb show <項目> で再表示できます）"), false);
+        return 1;
+    }
+
+    private static int server(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        Leaderboard board = running();
+        CommandSourceStack s = c.getSource();
+        s.sendSuccess(() -> Component.literal("★ サーバー全体の記録（プレイヤー " + board.playerCount() + "人、ボットを除く）")
+                .withStyle(ChatFormatting.GOLD), false);
+        for (String key : Criterion.SERVER_ITEMS) {
+            Criterion item = Criterion.PRESETS.get(key);
+            long total = board.total(item);
+            List<Leaderboard.Rank> ranks = board.ranking(item);
+            String top = "";
+            if (!ranks.isEmpty() && total > 0) {
+                Leaderboard.Rank r = ranks.get(0);
+                top = String.format(java.util.Locale.ROOT, "  1位 %s（%d%%）", r.name(), Math.round(r.value() * 100.0 / total));
+            }
+            String line = top;
+            s.sendSuccess(() -> Component.literal(item.label() + ": ").withStyle(ChatFormatting.WHITE)
+                    .append(Component.literal(item.formatValue(total)).withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(line).withStyle(ChatFormatting.GRAY)), false);
+        }
+        s.sendSuccess(() -> Component.literal("/lb show server でサイドバーにも表示できます。").withStyle(ChatFormatting.GRAY), false);
         return 1;
     }
 
     private static int top(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Criterion criterion = parse(StringArgumentType.getString(c, "criterion"));
+        if (criterion.isServer()) return server(c);
         List<Leaderboard.Rank> ranks = running().ranking(criterion);
         CommandSourceStack s = c.getSource();
         s.sendSuccess(() -> Component.literal("★ " + criterion.label() + "（" + ranks.size() + "人）").withStyle(ChatFormatting.GOLD), false);
@@ -135,19 +162,21 @@ public final class LeaderboardCommand {
             int n = i + 1;
             s.sendSuccess(() -> Component.literal(n + ". " + r.name() + "  " + criterion.formatValue(r.value())), false);
         }
+        long total = running().total(criterion);
+        s.sendSuccess(() -> Component.literal("サーバー合計  " + criterion.formatValue(total)).withStyle(ChatFormatting.AQUA), false);
         return ranks.size();
     }
 
     private static int setDefault(CommandContext<CommandSourceStack> c, Criterion criterion) throws CommandSyntaxException {
         running().setDefault(criterion);
-        c.getSource().sendSuccess(() -> Component.literal("まだ選んでいない人の順位表を「" + (criterion == null ? "非表示" : criterion.label()) + "」にしました"), true);
+        c.getSource().sendSuccess(() -> Component.literal("項目を選んでいない人の順位表を「" + (criterion == null ? "非表示" : criterion.label()) + "」に設定しました"), true);
         return 1;
     }
 
     private static int botList(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         List<String> bots = running().botNames();
         c.getSource().sendSuccess(() -> Component.literal("順位表から外しているボット: " + (bots.isEmpty() ? "なし" : String.join(", ", bots))
-                + "\nCarpet の /player で出したボットは自動で外れます。"), false);
+                + "\nCarpet の /player で出したボットは自動的に除外されます。"), false);
         return bots.size();
     }
 
@@ -156,7 +185,7 @@ public final class LeaderboardCommand {
         UUID uuid = running().uuidOf(name);
         if (uuid == null) throw NO_PLAYER.create();
         running().setBot(uuid, add);
-        c.getSource().sendSuccess(() -> Component.literal(name + (add ? " をボットとして順位表から外しました" : " を順位表に戻しました")), true);
+        c.getSource().sendSuccess(() -> Component.literal(name + (add ? " をボットとして順位表から除外しました" : " を順位表に戻しました")), true);
         return 1;
     }
 }

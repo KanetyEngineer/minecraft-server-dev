@@ -32,7 +32,7 @@ public final class ShareMapWaypointOption extends RightClickOption {
             mc.setScreen(new ConfirmScreen(ok -> {
                 if (ok) ClientWaypoints.remove(id);
                 mc.setScreen(back);
-            }, Component.literal("共有地点「" + name + "」を削除しますか？"), Component.literal("全員の地図から消えます（追加した人か OP のみ）。")));
+            }, Component.literal("共有地点「" + name + "」を削除しますか？"), Component.literal("全員の地図から消えます（削除できるのは追加した本人か OP だけです）。")));
         });
     }
 

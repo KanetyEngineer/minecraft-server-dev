@@ -60,7 +60,7 @@ public class ShareWaypointScreen extends Screen {
             ClientWaypoints.share(dim, x, fy, z, color, "", name);
             onClose();
         }).bounds(cx - 100, top + 90, 96, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("やめる"), b -> onClose()).bounds(cx + 4, top + 90, 96, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("キャンセル"), b -> onClose()).bounds(cx + 4, top + 90, 96, 20).build());
     }
 
     @Override

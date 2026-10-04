@@ -53,6 +53,9 @@ public final class ClientConfig {
         save();
     }
 
+    /** Called after every save, so the MaLiLib config screen can pick up changes made elsewhere. */
+    public static Runnable onChange = () -> {};
+
     private static ClientConfig instance = new ClientConfig();
 
     public static ClientConfig get() {
@@ -79,5 +82,6 @@ public final class ClientConfig {
             Files.writeString(FILE, GSON.toJson(instance), StandardCharsets.UTF_8);
         } catch (Exception ignored) {
         }
+        onChange.run();
     }
 }

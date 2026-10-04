@@ -3,17 +3,17 @@
   "id": "solariatweaks",
   "version": "${version}",
   "name": "Solaria Tweaks",
-  "description": "Solaria SMP helpers in one mod: shared waypoints for Xaero's maps, per-player stat leaderboards, shared build plans for Syncmatica schematics, an observer misplacement guard, Potion Dupe Restore and a light suppression switch.",
+  "description": "Solaria SMP helpers in one mod: shared waypoints for Xaero's maps, per-player stat leaderboards, shared build plans for Syncmatica schematics and an observer misplacement guard.",
   "authors": ["kanety"],
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
     "main": ["dev.kanety.solaria.SolariaTweaks"],
-    "client": ["dev.kanety.solaria.client.SolariaTweaksClient"]
+    "client": ["dev.kanety.solaria.client.SolariaTweaksClient"],
+    "modmenu": ["dev.kanety.solaria.client.ModMenuEntry"]
   },
   "mixins": [
     "solariatweaks.mixins.json",
-    "solariatweaks.potion.mixins.json",
     { "config": "solariatweaks.client.mixins.json", "environment": "client" }
   ],
   "depends": {
@@ -22,13 +22,16 @@
     "java": ">=21",
     "fabric-api": "*"
   },
+  "recommends": {
+    "malilib": ">=0.27.19-"
+  },
   "suggests": {
     "syncmatica": "*",
     "xaeroworldmap": "*",
     "xaerominimap": "*"
   },
   "breaks": {
-    "potiondupe": "*",
-    "solariatools": "*"
+    "solariatools": "*",
+    "malilib": "<0.27.19-"
   }
 }

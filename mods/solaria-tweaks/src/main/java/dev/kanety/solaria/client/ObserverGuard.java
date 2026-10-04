@@ -1,16 +1,14 @@
 package dev.kanety.solaria.client;
 
-import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -22,53 +20,70 @@ import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * Stops placing a block where an observer is looking (a block there fires the observer). Mode "diff" only stops
- * blocks that differ from the Litematica schematic, mode "all" stops every block. Placing again within 3 seconds
- * goes through.
+ * blocks that differ from the Litematica schematic, mode "all" stops every block. Called from
+ * MultiPlayerGameModeMixin, so placements made by other mods (Litematica's Easy Place, Tweakeroo) are checked too.
+ * The placement goes through only when the use key was released after the warning and pressed again within
+ * 3 seconds, so holding the key (or Easy Place repeating) never slips past.
  */
 public final class ObserverGuard {
+    private static final long RETRY_MS = 3000;
     private static BlockPos lastPos;
     private static long lastTime;
+    private static boolean released;
 
     private ObserverGuard() {}
 
-    public static void register() {
-        UseBlockCallback.EVENT.register(ObserverGuard::onUse);
+    /** Client tick: remembers that the use key was let go after a warning. */
+    public static void tick(Minecraft mc) {
+        if (lastPos != null && !mc.options.keyUse.isDown()) released = true;
     }
 
-    private static InteractionResult onUse(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+    /** True when this placement must be cancelled. */
+    public static boolean shouldBlock(LocalPlayer player, InteractionHand hand, BlockHitResult hit) {
         ClientConfig.GuardMode mode = ClientConfig.get().guardMode();
-        if (!level.isClientSide() || mode == ClientConfig.GuardMode.OFF || player.isSpectator()) return InteractionResult.PASS;
+        if (mode == ClientConfig.GuardMode.OFF || player.isSpectator()) return false;
         ItemStack stack = player.getItemInHand(hand);
-        if (!(stack.getItem() instanceof BlockItem blockItem)) return InteractionResult.PASS;
-        BlockPlaceContext ctx = new BlockPlaceContext(player, hand, stack, hit);
-        if (!ctx.canPlace()) return InteractionResult.PASS;
-        BlockPos target = ctx.getClickedPos();
-        if (!watchedByObserver(level, target)) return InteractionResult.PASS;
+        if (!(stack.getItem() instanceof BlockItem blockItem)) return false;
+        Level level = player.level();
+        BlockPos target;
+        try {
+            BlockPlaceContext ctx = new BlockPlaceContext(player, hand, stack, hit);
+            if (!ctx.canPlace()) return false;
+            target = ctx.getClickedPos();
+        } catch (RuntimeException e) {
+            return false;
+        }
+        if (!watchedByObserver(level, target)) return false;
         BlockState expected = LitematicaBridge.expectedState(target);
         if (mode == ClientConfig.GuardMode.DIFF && (expected == null || expected.getBlock() == blockItem.getBlock())) {
-            return InteractionResult.PASS;
+            return false;
         }
 
         long now = System.currentTimeMillis();
-        if (target.equals(lastPos) && now - lastTime < 3000) {
-            lastPos = null;
-            return InteractionResult.PASS;
+        if (target.equals(lastPos) && now - lastTime < RETRY_MS) {
+            if (released) {
+                lastPos = null;
+                return false;
+            }
+            return true; // still holding the key: keep blocking without repeating the warning
         }
         lastPos = target.immutable();
         lastTime = now;
+        released = false;
         Component message;
+        String retry = "（右クリックを離して3秒以内に押し直すと設置します）";
         if (expected == null) {
-            message = Component.literal("⚠ オブザーバーの前です（3秒以内にもう一度で設置）");
+            message = Component.literal("⚠ オブザーバーの検知面の前です" + retry);
         } else if (expected.getBlock() == blockItem.getBlock()) {
-            message = Component.literal("⚠ オブザーバーの前です。設計図どおりの「").append(expected.getBlock().getName())
-                    .append("」です（3秒以内にもう一度で設置）");
+            message = Component.literal("⚠ オブザーバーの検知面の前です。設計図どおり「").append(expected.getBlock().getName())
+                    .append("」です" + retry);
         } else {
-            message = Component.literal("⚠ オブザーバーの前です。設計図は「").append(expected.getBlock().getName())
-                    .append("」です（3秒以内にもう一度で設置）");
+            message = Component.literal("⚠ オブザーバーの検知面の前です。設計図では「").append(expected.getBlock().getName())
+                    .append("」です" + retry);
         }
         player.displayClientMessage(message.copy().withStyle(ChatFormatting.RED), true);
         Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_BASS.value(), 0.6f));
-        return InteractionResult.FAIL;
+        return true;
     }
 
     /** True when an observer next to pos has its face (detection side) pointed at pos. */

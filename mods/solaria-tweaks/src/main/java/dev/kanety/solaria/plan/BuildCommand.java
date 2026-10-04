@@ -28,14 +28,14 @@ import java.util.Map;
 
 /** /bp — shared build plans for Syncmatica placements. Every GUI button maps to one of these commands. */
 public final class BuildCommand {
-    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("建築計画はまだ準備中です"));
-    private static final SimpleCommandExceptionType NO_PROJECT = new SimpleCommandExceptionType(Component.literal("その名前の建築計画はありません"));
-    private static final SimpleCommandExceptionType NO_PLACEMENT = new SimpleCommandExceptionType(Component.literal("その Syncmatica 設計図が見つかりません（/bp placements で一覧）"));
-    private static final SimpleCommandExceptionType EXISTS = new SimpleCommandExceptionType(Component.literal("同じ名前の建築計画がもうあります"));
-    private static final SimpleCommandExceptionType NOT_ALLOWED = new SimpleCommandExceptionType(Component.literal("作成者か OP だけができます"));
-    private static final SimpleCommandExceptionType NO_ITEM = new SimpleCommandExceptionType(Component.literal("この設計図の材料にそのアイテムはありません"));
-    private static final SimpleCommandExceptionType NO_AREA = new SimpleCommandExceptionType(Component.literal("その区画はありません"));
-    private static final SimpleCommandExceptionType NOT_CONTAINER = new SimpleCommandExceptionType(Component.literal("そこは容器（チェスト・樽・シュルカーボックス等）ではありません"));
+    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("建築計画の準備中です。少し待ってからもう一度試してください"));
+    private static final SimpleCommandExceptionType NO_PROJECT = new SimpleCommandExceptionType(Component.literal("その名前の建築計画は見つかりません"));
+    private static final SimpleCommandExceptionType NO_PLACEMENT = new SimpleCommandExceptionType(Component.literal("その Syncmatica の設計図は見つかりません（/bp placements で一覧を確認できます）"));
+    private static final SimpleCommandExceptionType EXISTS = new SimpleCommandExceptionType(Component.literal("同じ名前の建築計画がすでにあります"));
+    private static final SimpleCommandExceptionType NOT_ALLOWED = new SimpleCommandExceptionType(Component.literal("この操作は作成者か OP だけができます"));
+    private static final SimpleCommandExceptionType NO_ITEM = new SimpleCommandExceptionType(Component.literal("そのアイテムはこの設計図の材料に含まれていません"));
+    private static final SimpleCommandExceptionType NO_AREA = new SimpleCommandExceptionType(Component.literal("その区画は見つかりません"));
+    private static final SimpleCommandExceptionType NOT_CONTAINER = new SimpleCommandExceptionType(Component.literal("そこは容器（チェスト・樽・シュルカーボックスなど）ではありません"));
 
     private BuildCommand() {}
 
@@ -192,7 +192,7 @@ public final class BuildCommand {
             case "missing" -> "（Syncmatica の設計図が削除されています）";
             case "no-file" -> "（設計図ファイルがサーバーにありません）";
             case "no-syncmatica" -> "（サーバーに Syncmatica がありません）";
-            default -> "（設計図を読めませんでした）";
+            default -> "（設計図を読み込めませんでした）";
         };
     }
 
@@ -201,7 +201,7 @@ public final class BuildCommand {
     private static int list(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         BuildManager m = manager();
         if (m.projects().isEmpty()) {
-            send(c.getSource(), Component.literal("建築計画はまだありません。/bp placements で設計図を見て /bp create <名前> <番号> で作れます。"));
+            send(c.getSource(), Component.literal("建築計画はまだありません。/bp placements で設計図を確認し、/bp create <名前> <番号> で作成できます。"));
             return 0;
         }
         send(c.getSource(), Component.literal("建築計画 " + m.projects().size() + " 件").withStyle(ChatFormatting.GOLD));
@@ -238,7 +238,7 @@ public final class BuildCommand {
         SyncmaticaBridge.PlacementInfo placement = m.findPlacement(StringArgumentType.getString(c, "placement"))
                 .orElseThrow(NO_PLACEMENT::create);
         m.create(name, placement, c.getSource().getPlayer());
-        send(c.getSource(), Component.literal("建築計画「" + name + "」を作りました（" + placement.name() + "）。"
+        send(c.getSource(), Component.literal("建築計画「" + name + "」を作成しました（" + placement.name() + "）。"
                 + "材料と区画は数秒後に表示されます。").withStyle(ChatFormatting.GREEN));
         return 1;
     }
@@ -267,7 +267,7 @@ public final class BuildCommand {
     private static int materials(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         BuildProject p = project(c);
         CommandSourceStack s = c.getSource();
-        send(s, Component.literal("「" + p.data.name + "」の材料（残りが多い順・上位 15）").withStyle(ChatFormatting.GOLD));
+        send(s, Component.literal("「" + p.data.name + "」の材料（残りが多い順に上位15件）").withStyle(ChatFormatting.GOLD));
         List<Map.Entry<Item, Integer>> rows = new ArrayList<>(p.required.entrySet());
         rows.sort(Comparator.comparingInt((Map.Entry<Item, Integer> e) -> remaining(p, e.getKey(), e.getValue())).reversed());
         int shown = 0;
@@ -394,8 +394,8 @@ public final class BuildCommand {
         p.data.areaAssign.clear();
         p.rebuildAreas();
         manager().save();
-        send(c.getSource(), Component.literal("区画を " + ("grid".equals(mode) ? size + "×" + size + " マスごと" : "サブリージョンごと")
-                + "に分けました（" + p.areaIds.size() + " 個、担当はリセット）"));
+        send(c.getSource(), Component.literal("区画を" + ("grid".equals(mode) ? size + "×" + size + "マスごと" : "サブリージョンごと")
+                + "に分けました（" + p.areaIds.size() + "区画。担当はリセットされました）"));
         return 1;
     }
 
@@ -410,7 +410,7 @@ public final class BuildCommand {
             p.data.storages.remove(Long.valueOf(packed));
         }
         manager().save();
-        send(c.getSource(), Component.literal((add ? "倉庫に追加: " : "倉庫から外しました: ") + pos.getX() + " " + pos.getY() + " " + pos.getZ()
+        send(c.getSource(), Component.literal((add ? "倉庫に追加しました: " : "倉庫から外しました: ") + pos.getX() + " " + pos.getY() + " " + pos.getZ()
                 + "（倉庫 " + p.data.storages.size() + " 個）"));
         return 1;
     }
@@ -420,7 +420,7 @@ public final class BuildCommand {
         requireOwner(c.getSource(), p);
         p.data.storages.clear();
         manager().save();
-        send(c.getSource(), Component.literal("倉庫の登録をすべて外しました"));
+        send(c.getSource(), Component.literal("倉庫の登録をすべて解除しました"));
         return 1;
     }
 }

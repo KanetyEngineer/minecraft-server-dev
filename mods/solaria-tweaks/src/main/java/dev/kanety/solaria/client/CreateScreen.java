@@ -72,7 +72,7 @@ public class CreateScreen extends Screen {
         List<ClientBuildState.Placement> rows = rows();
         if (rows.isEmpty()) {
             g.drawCenteredString(font, ClientBuildState.syncmatica
-                    ? "計画になっていない共有設計図はありません（Litematica の Syncmatica メニューから共有できます）"
+                    ? "まだ計画にしていない共有設計図はありません（設計図は Litematica の Syncmatica メニューから共有できます）"
                     : "サーバーに Syncmatica が入っていません", width / 2, 44, 0xFFAAAAAA);
             return;
         }

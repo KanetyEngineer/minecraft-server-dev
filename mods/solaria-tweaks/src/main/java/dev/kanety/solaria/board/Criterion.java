@@ -32,17 +32,31 @@ public record Criterion(String key, String label, String type, String value, For
         TYPES.put("custom", "minecraft:custom");
 
         preset("mined", "採掘数", "minecraft:mined", null, Format.NUMBER);
-        preset("used", "使用回数（設置など）", "minecraft:used", null, Format.NUMBER);
+        preset("used", "使用回数（ブロック設置を含む）", "minecraft:used", null, Format.NUMBER);
         preset("crafted", "クラフト数", "minecraft:crafted", null, Format.NUMBER);
         preset("kills", "モブ討伐数", "minecraft:custom", "minecraft:mob_kills", Format.NUMBER);
         preset("deaths", "死亡数", "minecraft:custom", "minecraft:deaths", Format.NUMBER);
         preset("playtime", "プレイ時間", "minecraft:custom", "minecraft:play_time", Format.TICKS);
         preset("walk", "歩いた距離", "minecraft:custom", "minecraft:walk_one_cm", Format.CENTIMETERS);
         preset("fly", "エリトラ飛行距離", "minecraft:custom", "minecraft:aviate_one_cm", Format.CENTIMETERS);
-        preset("fish", "釣った数", "minecraft:custom", "minecraft:fish_caught", Format.NUMBER);
-        preset("trades", "村人との取引", "minecraft:custom", "minecraft:traded_with_villager", Format.NUMBER);
-        preset("jumps", "ジャンプ", "minecraft:custom", "minecraft:jump", Format.NUMBER);
+        preset("fish", "釣り上げた数", "minecraft:custom", "minecraft:fish_caught", Format.NUMBER);
+        preset("trades", "村人との取引回数", "minecraft:custom", "minecraft:traded_with_villager", Format.NUMBER);
+        preset("jumps", "ジャンプ回数", "minecraft:custom", "minecraft:jump", Format.NUMBER);
         preset("damage", "与えたダメージ", "minecraft:custom", "minecraft:damage_dealt", Format.NUMBER);
+        preset("travel", "移動距離（すべて）", "minecraft:custom", "*_one_cm", Format.CENTIMETERS);
+        preset("bred", "繁殖させた数", "minecraft:custom", "minecraft:animals_bred", Format.NUMBER);
+        preset("enchant", "エンチャント回数", "minecraft:custom", "minecraft:enchant_item", Format.NUMBER);
+        preset("chests", "チェストを開けた回数", "minecraft:custom", "minecraft:open_chest", Format.NUMBER);
+        preset("pvp", "プレイヤーを倒した数", "minecraft:custom", "minecraft:player_kills", Format.NUMBER);
+    }
+
+    /** "/lb show server": the server-wide totals of these items, one line each. */
+    public static final Criterion SERVER = new Criterion("server", "サーバー全体の記録", "server", null, Format.NUMBER);
+    public static final java.util.List<String> SERVER_ITEMS = java.util.List.of(
+            "mined", "used", "crafted", "kills", "deaths", "playtime", "travel", "fly", "fish", "trades", "bred", "enchant");
+
+    public boolean isServer() {
+        return this == SERVER || "server".equals(key);
     }
 
     private static void preset(String key, String label, String type, String value, Format format) {
@@ -58,6 +72,7 @@ public record Criterion(String key, String label, String type, String value, For
         String s = raw.strip().toLowerCase(Locale.ROOT);
         Criterion preset = PRESETS.get(s);
         if (preset != null) return preset;
+        if (s.equals("server")) return SERVER;
         int colon = s.indexOf(':');
         if (colon <= 0) return null;
         String typeName = s.substring(0, colon);
@@ -86,7 +101,7 @@ public record Criterion(String key, String label, String type, String value, For
             case "mined" -> "採掘";
             case "used" -> "使用";
             case "crafted" -> "クラフト";
-            case "broken" -> "壊した道具";
+            case "broken" -> "使い切った道具";
             case "picked_up" -> "拾った";
             case "dropped" -> "捨てた";
             case "killed" -> "倒した";
@@ -105,9 +120,10 @@ public record Criterion(String key, String label, String type, String value, For
 
     public String formatValue(long v) {
         return switch (format) {
-            case TICKS -> String.format(Locale.ROOT, "%.1f時間", v / 72000.0);
-            case CENTIMETERS -> v >= 100000 ? String.format(Locale.ROOT, "%.1fkm", v / 100000.0) : (v / 100) + "m";
-            case NUMBER -> Long.toString(v);
+            case TICKS -> v >= 72000L * 24 * 10 ? String.format(Locale.ROOT, "%,.0f時間", v / 72000.0)
+                    : String.format(Locale.ROOT, "%.1f時間", v / 72000.0);
+            case CENTIMETERS -> v >= 100000 ? String.format(Locale.ROOT, "%,.1fkm", v / 100000.0) : (v / 100) + "m";
+            case NUMBER -> String.format(Locale.ROOT, "%,d", v);
         };
     }
 }

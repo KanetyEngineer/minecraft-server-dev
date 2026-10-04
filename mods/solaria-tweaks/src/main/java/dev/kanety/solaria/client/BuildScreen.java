@@ -95,7 +95,7 @@ public class BuildScreen extends Screen {
             ClientConfig.get().setGuardMode(mode.next());
             rebuildWidgets();
         }).bounds(right - 170, 3, 170, 16)
-                .tooltip(Tooltip.create(Component.literal("オブザーバーが見ている場所にブロックを置こうとすると止めて警告します。\n設計図と違うものだけ: Litematica の設計図と違うブロックのとき\nすべてのブロック: 何を置くときでも\n3秒以内にもう一度置くと設置されます。")))
+                .tooltip(Tooltip.create(Component.literal("オブザーバーが見ている場所にブロックを置こうとすると、設置を止めて警告します（EasyPlace も対象）。\n設計図と違うものだけ: Litematica の設計図と違うブロックを置くとき\nすべてのブロック: どのブロックを置くときも\n警告のあと、右クリックを一度離して3秒以内に押し直すと設置できます。")))
                 .build());
 
         int cx = left + sideW + 8;
@@ -201,13 +201,13 @@ public class BuildScreen extends Screen {
                 b -> run("bp " + (member ? "leave " : "join ") + p.name())).bounds(cx, y, w, 18).build());
         addRenderableWidget(Button.builder(Component.literal("自動で割り当てる"), b -> run("bp autoassign " + p.name()))
                 .bounds(x2, y, w, 18)
-                .tooltip(Tooltip.create(Component.literal("参加者（いなければオンラインの全員）に、残りの材料と未完成の区画を均等に配ります。作成者と OP のみ。")))
+                .tooltip(Tooltip.create(Component.literal("残りの材料と未完成の区画を、参加者（いなければオンラインの全員）に均等に割り当てます。作成者と OP だけが使えます。")))
                 .build());
         y += 22;
         addRenderableWidget(Button.builder(Component.literal("見ている容器を倉庫に追加"), b -> lookedAt().ifPresent(pos ->
                 run("bp storage " + p.name() + " add " + pos.getX() + " " + pos.getY() + " " + pos.getZ())))
                 .bounds(cx, y, w, 18)
-                .tooltip(Tooltip.create(Component.literal("画面を閉じる前に見ていたチェスト・樽・シュルカーボックスを、この計画の倉庫にします。中身が在庫として数えられます。")))
+                .tooltip(Tooltip.create(Component.literal("この画面を開く前に見ていたチェスト・樽・シュルカーボックスを、この計画の倉庫として登録します。中身が在庫として数えられます。")))
                 .build());
         addRenderableWidget(Button.builder(Component.literal("見ている容器を倉庫から外す"), b -> lookedAt().ifPresent(pos ->
                 run("bp storage " + p.name() + " remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ())))
@@ -279,7 +279,7 @@ public class BuildScreen extends Screen {
         int cx = left + sideW + 8;
         ClientBuildState.Project p = project();
         if (!ClientBuildState.received) {
-            g.drawString(font, "サーバーに Solaria Tweaks が入っていないか、まだ受信していません。", cx, top + 4, 0xFFFF9F9F, true);
+            g.drawString(font, "サーバーに Solaria Tweaks が入っていないか、まだデータを受け取っていません。", cx, top + 4, 0xFFFF9F9F, true);
             return;
         }
         if (p == null) {
@@ -303,7 +303,7 @@ public class BuildScreen extends Screen {
             case "missing" -> "  設計図が削除されています";
             case "no-file" -> "  設計図ファイルがサーバーにありません";
             case "no-syncmatica" -> "  サーバーに Syncmatica がありません";
-            default -> "  設計図を読めませんでした";
+            default -> "  設計図を読み込めませんでした";
         };
     }
 
@@ -311,7 +311,7 @@ public class BuildScreen extends Screen {
         List<ClientBuildState.Material> rows = materialRows(p);
         java.util.Map<String, ChestTrackerBridge.Found> remembered = ChestTrackerBridge.find(p);
         if (rows.isEmpty()) {
-            g.drawString(font, onlyMine ? "あなたの担当の材料はありません" : "材料はありません", cx, listTop + 4, 0xFFAAAAAA, true);
+            g.drawString(font, onlyMine ? "あなたが担当している材料はありません" : "材料はありません", cx, listTop + 4, 0xFFAAAAAA, true);
             return;
         }
         int n = visibleRows();
@@ -325,7 +325,7 @@ public class BuildScreen extends Screen {
             if (i % 2 == 0) g.fill(cx, y - 1, right, y + ROW - 1, 0x22FFFFFF);
             g.renderItem(stack(m.item()), cx + 1, y + 1);
             g.drawString(font, font.plainSubstrByWidth(itemName(m.item()), nameW), cx + 20, y + 5, 0xFFFFFFFF, true);
-            String rem = m.remaining() == 0 ? "そろった" : "あと " + stacks(m.remaining());
+            String rem = m.remaining() == 0 ? "完了" : "あと " + stacks(m.remaining());
             ChestTrackerBridge.Found f = remembered.get(m.item());
             if (f != null && m.remaining() > 0) rem = "箱に" + f.count() + " " + rem;
             g.drawString(font, rem, barX - 4 - font.width(rem), y + 5, m.remaining() == 0 ? 0xFF7FFF7F : 0xFFFFFFFF, true);
@@ -340,7 +340,7 @@ public class BuildScreen extends Screen {
     private void renderAreas(GuiGraphics g, ClientBuildState.Project p, int cx) {
         List<ClientBuildState.Area> rows = areaRows(p);
         if (rows.isEmpty()) {
-            g.drawString(font, onlyMine ? "あなたの担当の区画はありません" : "区画はありません", cx, listTop + 4, 0xFFAAAAAA, true);
+            g.drawString(font, onlyMine ? "あなたが担当している区画はありません" : "区画はありません", cx, listTop + 4, 0xFFAAAAAA, true);
             return;
         }
         int n = visibleRows();
@@ -363,7 +363,7 @@ public class BuildScreen extends Screen {
 
     private void renderSettings(GuiGraphics g, ClientBuildState.Project p, int cx) {
         int y = listTop + 22 + 26;
-        g.drawString(font, "区画の分け方（変えると区画の担当はリセット）", cx, y, 0xFFDDDDDD, true);
+        g.drawString(font, "区画の分け方（変更すると区画の担当はリセットされます）", cx, y, 0xFFDDDDDD, true);
         y = listTop + 22 + 26 + 38 + 30 + 26;
         StringBuilder members = new StringBuilder();
         for (ClientBuildState.Person m : p.members()) members.append(members.isEmpty() ? "" : ", ").append(m.name());

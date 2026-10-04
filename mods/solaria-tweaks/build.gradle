@@ -23,6 +23,8 @@ dependencies {
     modCompileOnly("maven.modrinth:syncmatica:${syncmatica_version}") { transitive = false }
     modCompileOnly("maven.modrinth:xaeros-world-map:${xaero_worldmap_version}") { transitive = false }
     modCompileOnly("maven.modrinth:xaeros-minimap:${xaero_minimap_version}") { transitive = false }
+    modCompileOnly("maven.modrinth:malilib:${malilib_version}") { transitive = false }
+    modCompileOnly("maven.modrinth:modmenu:${modmenu_version}") { transitive = false }
 }
 
 processResources {

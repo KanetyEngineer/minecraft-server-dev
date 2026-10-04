@@ -69,7 +69,7 @@ public final class ClientWaypoints {
 
     public static String shortDim(String dim) {
         return switch (dim) {
-            case "minecraft:overworld" -> "地上";
+            case "minecraft:overworld" -> "オーバーワールド";
             case "minecraft:the_nether" -> "ネザー";
             case "minecraft:the_end" -> "エンド";
             default -> dim;

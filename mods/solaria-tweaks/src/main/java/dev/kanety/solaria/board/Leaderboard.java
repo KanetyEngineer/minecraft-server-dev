@@ -53,6 +53,8 @@ public final class Leaderboard {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final int MAX_LINES = 15;
     private static final String OFF = "off";
+    /** Score holder names for the total lines; "#" never appears in player names. */
+    private static final String TOTAL_HOLDER = "#total";
     private static Leaderboard instance;
 
     /** Saved to world/solariatweaks/leaderboard.json. */
@@ -76,6 +78,14 @@ public final class Leaderboard {
         long get(Criterion c) {
             if (c.all()) return totals.getOrDefault(c.type(), 0L);
             Map<String, Integer> m = raw.get(c.type());
+            if (c.value().startsWith("*")) {
+                // "*_one_cm": sum of every value with that suffix (all ways of moving)
+                if (m == null) return 0;
+                String suffix = c.value().substring(1);
+                long sum = 0;
+                for (Map.Entry<String, Integer> e : m.entrySet()) if (e.getKey().endsWith(suffix)) sum += e.getValue();
+                return sum;
+            }
             return m == null ? 0 : m.getOrDefault(c.value(), 0);
         }
     }
@@ -97,6 +107,7 @@ public final class Leaderboard {
     private final Set<String> dirtyTypes = new HashSet<>();
     private final Scoreboard dummyBoard = new Scoreboard();
     private int counter;
+    private boolean serverDirty = true;
 
     private Leaderboard(MinecraftServer server) {
         this.server = server;
@@ -295,17 +306,39 @@ public final class Leaderboard {
         return out;
     }
 
+    /** Server-wide total of a criterion (every player except bots, offline players included). */
+    public long total(Criterion c) {
+        long sum = 0;
+        for (Map.Entry<UUID, PlayerStats> e : stats.entrySet()) {
+            if (!isBot(e.getKey())) sum += e.getValue().get(c);
+        }
+        return sum;
+    }
+
+    /** Players (not bots) the leaderboard knows statistics for. */
+    public int playerCount() {
+        int n = 0;
+        for (UUID id : stats.keySet()) if (!isBot(id)) n++;
+        return n;
+    }
+
     // ---------------------------------------------------------------- sidebar
 
     private void markAllDirty() {
         for (View v : views.values()) v.full = true;
+        serverDirty = true;
     }
 
     public void tick() {
         if (++counter % 6000 == 0) save();
+        if (!dirtyTypes.isEmpty()) serverDirty = true;
+        // The server-wide view changes almost every tick (play time), so it is refreshed once a second.
+        boolean serverTick = serverDirty && counter % 20 == 0;
+        if (serverTick) serverDirty = false;
         for (Map.Entry<UUID, View> e : views.entrySet()) {
             View view = e.getValue();
-            boolean dirty = view.full || view.criterion != null && dirtyTypes.contains(view.criterion.type());
+            boolean dirty = view.full || view.criterion != null
+                    && (view.criterion.isServer() ? serverTick : dirtyTypes.contains(view.criterion.type()));
             if (!dirty) continue;
             ServerPlayer player = server.getPlayerList().getPlayer(e.getKey());
             if (player != null) update(player, view);
@@ -337,14 +370,33 @@ public final class Leaderboard {
         }
         if (c == null) return;
 
-        List<Rank> ranks = ranking(c);
         String me = player.getName().getString();
         Map<String, Integer> now = new LinkedHashMap<>();
         Map<String, String> labels = new HashMap<>();
-        for (int i = 0; i < ranks.size() && i < MAX_LINES; i++) {
-            Rank r = ranks.get(i);
-            now.put(r.name(), (int) Math.min(Integer.MAX_VALUE, r.value()));
-            labels.put(r.name(), (i + 1) + ". " + r.name() + "|" + c.formatValue(r.value()));
+        if (c.isServer()) {
+            // One line per item, kept in list order by descending scores; the value is shown as text.
+            int n = Criterion.SERVER_ITEMS.size() + 1;
+            now.put(TOTAL_HOLDER + "players", n);
+            labels.put(TOTAL_HOLDER + "players", "参加したプレイヤー|" + playerCount() + "人");
+            for (int i = 0; i < Criterion.SERVER_ITEMS.size(); i++) {
+                Criterion item = Criterion.PRESETS.get(Criterion.SERVER_ITEMS.get(i));
+                String holder = TOTAL_HOLDER + item.key();
+                now.put(holder, n - 1 - i);
+                labels.put(holder, item.label() + "|" + item.formatValue(total(item)));
+            }
+        } else {
+            List<Rank> ranks = ranking(c);
+            long sum = 0;
+            for (Rank r : ranks) sum += r.value();
+            if (!ranks.isEmpty()) {
+                now.put(TOTAL_HOLDER, (int) Math.min(Integer.MAX_VALUE, sum));
+                labels.put(TOTAL_HOLDER, "サーバー合計|" + c.formatValue(sum));
+            }
+            for (int i = 0; i < ranks.size() && i < MAX_LINES - 1; i++) {
+                Rank r = ranks.get(i);
+                now.put(r.name(), (int) Math.min(Integer.MAX_VALUE, r.value()));
+                labels.put(r.name(), (i + 1) + ". " + r.name() + "|" + c.formatValue(r.value()));
+            }
         }
         for (String old : new ArrayList<>(view.sent.keySet())) {
             if (!now.containsKey(old)) {
@@ -358,9 +410,10 @@ public final class Leaderboard {
             String label = labels.get(name);
             if (e.getValue().equals(view.sent.get(name)) && label.equals(view.sentLabel.get(name))) continue;
             int bar = label.indexOf('|');
+            boolean total = name.startsWith(TOTAL_HOLDER);
             Component display = Component.literal(label.substring(0, bar))
-                    .withStyle(name.equals(me) ? ChatFormatting.YELLOW : ChatFormatting.WHITE);
-            Optional<NumberFormat> format = c.format() == Criterion.Format.NUMBER ? Optional.empty()
+                    .withStyle(total ? ChatFormatting.AQUA : name.equals(me) ? ChatFormatting.YELLOW : ChatFormatting.WHITE);
+            Optional<NumberFormat> format = c.format() == Criterion.Format.NUMBER && !total ? Optional.empty()
                     : Optional.of(new FixedFormat(Component.literal(label.substring(bar + 1)).withStyle(ChatFormatting.RED)));
             player.connection.send(new ClientboundSetScorePacket(name, view.objective, e.getValue(), Optional.of(display), format));
             view.sent.put(name, e.getValue());

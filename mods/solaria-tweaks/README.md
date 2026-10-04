@@ -1,7 +1,8 @@
 # Solaria Tweaks
 
 Solaria SMP（Minecraft 1.21.11 / Fabric）向けの補助 MOD。クライアントとサーバーの両方に同じ jar を入れる。
-前の「Solaria Tools」と、別配布だった Potion Dupe Restore をまとめたもの（両方入っていると起動時に止まるので外す）。
+前の「Solaria Tools」の後継です（Solaria Tools が入っていると起動時に止まるので外してください）。
+ポーション複製と光抑制は 1.1.0 から Carpet のルールとして別 MOD「Solaria Carpet」に移りました。
 
 ## できること
 
@@ -27,17 +28,20 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの補助 MOD。クライアン
 
 - **ボットは数えない**: Carpet の `/player` で出したボット（GCA などのボットも含む）は自動で外れ、一度見つけたボットは記録されてオフラインでも外れる。それ以外は OP が `/lb bot add <名前>` で外せる
 - オフラインの人も `world/stats` の記録から順位に入る
+- 各順位表のいちばん上に「サーバー合計」（全員の合計、ボットを除く）を表示する
 
 | コマンド | 内容 |
 |---|---|
 | `/lb` | 項目の一覧と今の表示 |
 | `/lb show <項目>` | 自分の順位表を切り替え（例 `mined`、`playtime`、`mined:diamond_ore`、`killed:zombie`、`used:all`） |
 | `/lb hide` | 自分の順位表を非表示（サーバーの元のサイドバーがあれば戻る） |
+| `/lb server` | サーバー全体の記録（採掘数・プレイ時間・移動距離などの全員の合計と、それぞれの1位）をチャットに表示 |
+| `/lb show server` | サーバー全体の記録をサイドバーに表示（1秒ごとに更新） |
 | `/lb top <項目>` | チャットに全順位 |
 | `/lb default <項目>\|off` | まだ選んでいない人の表示（OP、最初は `mined` 採掘数） |
 | `/lb bot add/remove/list` | ボットとして外す人の管理（OP） |
 
-項目: `mined` 採掘数 / `used` 使用回数 / `crafted` クラフト数 / `kills` モブ討伐 / `deaths` 死亡 / `playtime` プレイ時間 / `walk` 歩いた距離 / `fly` エリトラ / `fish` 釣り / `trades` 取引 / `jumps` / `damage`。ほかに `mined:` `used:` `crafted:` `broken:` `picked_up:` `dropped:` `killed:` `killed_by:` `custom:` の後に ID か `all`。
+項目: `mined` 採掘数 / `used` 使用回数 / `crafted` クラフト数 / `kills` モブ討伐 / `deaths` 死亡 / `playtime` プレイ時間 / `walk` 歩いた距離 / `fly` エリトラ / `fish` 釣り / `trades` 取引 / `jumps` / `damage` / `travel` 移動距離（歩き・走り・泳ぎ・乗り物などすべて）/ `bred` 繁殖 / `enchant` エンチャント / `chests` チェストを開けた回数 / `pvp` プレイヤーを倒した数。ほかに `mined:` `used:` `crafted:` `broken:` `picked_up:` `dropped:` `killed:` `killed_by:` `custom:` の後に ID か `all`。
 
 ### 3. Syncmatica 設計図の建築計画
 Syncmatica で共有された設計図（placement）ごとに「建築計画」を作り、みんなで分担する。
@@ -69,29 +73,29 @@ Syncmatica で共有された設計図（placement）ごとに「建築計画」
 データはワールドフォルダの `solariatweaks/builds.json`（前の `solariatools/builds.json` があれば読み込む）。
 
 ### 4. オブザーバー前の誤設置警告（クライアント）
-オブザーバーが見ている場所にブロックを置こうとすると、設置を止めて警告する（アクションバー＋音）。3 秒以内にもう一度置くと設置される。モードは 3 つ:
+オブザーバーの検知面の前にブロックを置こうとすると、設置を止めて警告します（アクションバーと音）。Litematica の EasyPlace や Tweakeroo で置く場合も止まります。警告のあと、右クリックを一度離して 3 秒以内に押し直すと設置できます（押しっぱなしでは通りません）。モードは 3 つです。
 
-- **設計図と違うものだけ**（既定）: Litematica の設計図と違うブロックのときだけ
-- **すべてのブロック**: 何を置くときでも（Litematica なしでも動く）
+- **設計図と違うものだけ**（既定）: Litematica の設計図と違うブロックを置くときだけ。EasyPlace は設計図どおりのブロックを置くので、このモードでは止まりません
+- **すべてのブロック**: どのブロックを置くときも（Litematica がなくても動きます）
 - **OFF**
 
-切り替え: 建築計画画面（B）右上のボタン、`/observerguard off|diff|all`、操作設定の「オブザーバー警告の切り替え」キー（初期は未割り当て）。設定は `config/solariatweaks-client.json`。
+切り替え: 建築計画画面（B）右上のボタン、`/observerguard off|diff|all`、ホットキー（下記）。設定は `config/solariatweaks-client.json`。
 
-### 5. ポーション複製（Potion Dupe Restore）
-1.21.1 のポーション複製（ネザーゲートを通った投げポーションが元の次元でも割れる）を 1.21.11 で戻す。サーバー側で動く。
+### 5. 設定画面とホットキー（MaLiLib）
+MaLiLib が入っていると、Litematica などと同じ形式の設定画面とホットキーが使えます（Mod Menu の設定ボタンからも開けます）。
 
-- `/potiondupe on|off`、`/potiondupe scope potions|all`、細かい設定は `/potiondupe <項目> true|false`（OP）。設定は `config/potiondupe.json`
+| ホットキー | 初期値 |
+|---|---|
+| 設定画面を開く | `Ctrl + B` |
+| 建築計画を開く | `B` |
+| 共有地点を開く | なし |
+| オブザーバー警告の切り替え | なし |
 
-### 6. 光抑制（/lightsuppress）
-サーバーの光の更新を止めて、光抑制装置と同じ状態を作る（止めている間の光の更新は溜まり、OFF にすると処理される）。
-
-- `/lightsuppress on [秒]`、`/lightsuppress off`、`/lightsuppress status`（OP）
-- ON の間は新しいチャンクの読み込みも止まる。秒を付けるとその時間で自動 OFF、サーバー停止時も自動 OFF
-- Carpet TIS Addition の `lightUpdates suppressed` と同じ考え方で、Carpet なしでも使える
+設定画面ではオブザーバー警告のモード、建築計画 HUD の表示と行数を変えられます。ホットキーは `config/solariatweaks-malilib.json` に保存されます。MaLiLib がない場合は、バニラの操作設定に「建築計画を開く」「オブザーバー警告の切り替え」が出ます。
 
 ## 依存
 - 必須: Fabric API
-- 任意: Xaero's Minimap と World Map（共有地点）、Syncmatica（建築計画）、Litematica（誤設置警告）、Chest Tracker（記憶の表示）
+- 任意: Xaero's Minimap と World Map（共有地点）、Syncmatica（建築計画）、Litematica（誤設置警告）、Chest Tracker（記憶の表示）、MaLiLib 0.27.19 以上（設定画面とホットキー）、Mod Menu
 
 ## ビルド
 GitHub Actions（`.github/workflows/solaria-tweaks.yml`）でビルドし、jar を `solaria-dist` ブランチに置く。

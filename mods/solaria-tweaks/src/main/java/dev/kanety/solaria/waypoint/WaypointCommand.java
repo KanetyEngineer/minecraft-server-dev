@@ -19,10 +19,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /** /swp — waypoints shared with everyone. The Xaero buttons of Solaria Tweaks run these commands. */
 public final class WaypointCommand {
-    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("共有地点はまだ準備中です"));
-    private static final SimpleCommandExceptionType NOT_FOUND = new SimpleCommandExceptionType(Component.literal("その番号の共有地点はありません（/swp list で一覧）"));
-    private static final SimpleCommandExceptionType NOT_ALLOWED = new SimpleCommandExceptionType(Component.literal("追加した人か OP だけができます"));
-    private static final SimpleCommandExceptionType DUPLICATE = new SimpleCommandExceptionType(Component.literal("同じ名前・同じ場所の共有地点がもうあります"));
+    private static final SimpleCommandExceptionType NOT_RUNNING = new SimpleCommandExceptionType(Component.literal("共有地点の準備中です。少し待ってからもう一度試してください"));
+    private static final SimpleCommandExceptionType NOT_FOUND = new SimpleCommandExceptionType(Component.literal("その番号の共有地点は見つかりません（/swp list で一覧を確認できます）"));
+    private static final SimpleCommandExceptionType NOT_ALLOWED = new SimpleCommandExceptionType(Component.literal("この操作は追加した本人か OP だけができます"));
+    private static final SimpleCommandExceptionType DUPLICATE = new SimpleCommandExceptionType(Component.literal("同じ名前で同じ場所の共有地点がすでにあります"));
 
     private WaypointCommand() {}
 
@@ -119,7 +119,7 @@ public final class WaypointCommand {
         e.name = StringArgumentType.getString(c, "name").strip();
         e.initials = SharedWaypoints.initialsOf(e.name);
         store().changed();
-        c.getSource().sendSuccess(() -> Component.literal("共有地点 #" + e.id + " を「" + e.name + "」にしました"), false);
+        c.getSource().sendSuccess(() -> Component.literal("共有地点 #" + e.id + " を「" + e.name + "」に変更しました"), false);
         return 1;
     }
 

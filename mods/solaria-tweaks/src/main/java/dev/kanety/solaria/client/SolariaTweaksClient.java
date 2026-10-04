@@ -3,7 +3,9 @@ package dev.kanety.solaria.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.kanety.solaria.SolariaTweaks;
+import dev.kanety.solaria.client.malilib.MalilibCompat;
 import dev.kanety.solaria.client.waypoint.ClientWaypoints;
+import dev.kanety.solaria.client.waypoint.SharedWaypointsScreen;
 import dev.kanety.solaria.client.xaero.MinimapBridge;
 import dev.kanety.solaria.client.xaero.XaeroMapIntegration;
 import dev.kanety.solaria.net.BuildSyncPayload;
@@ -17,11 +19,31 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 public class SolariaTweaksClient implements ClientModInitializer {
+    public static boolean openBuildPlans(Minecraft client) {
+        if (client.screen != null || client.player == null) return false;
+        client.setScreen(new BuildScreen(null));
+        return true;
+    }
+
+    public static boolean openSharedWaypoints(Minecraft client) {
+        if (client.screen != null || client.player == null) return false;
+        client.setScreen(new SharedWaypointsScreen(null));
+        return true;
+    }
+
+    public static void cycleObserverGuard(Minecraft client) {
+        ClientConfig.GuardMode next = ClientConfig.get().guardMode().next();
+        ClientConfig.get().setGuardMode(next);
+        if (client.player != null) client.player.displayClientMessage(Component.literal("オブザーバー警告: " + next.label), true);
+    }
+
     public static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(SolariaTweaks.id("main"));
     public static KeyMapping openBuildScreen;
     public static KeyMapping cycleObserverGuard;
@@ -29,20 +51,21 @@ public class SolariaTweaksClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientConfig.load();
-        openBuildScreen = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-                "key.solariatweaks.build_plans", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, CATEGORY));
-        cycleObserverGuard = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-                "key.solariatweaks.observer_guard", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, CATEGORY));
+        if (FabricLoader.getInstance().isModLoaded("malilib")) {
+            MalilibCompat.init();
+        } else {
+            openBuildScreen = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    "key.solariatweaks.build_plans", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, CATEGORY));
+            cycleObserverGuard = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    "key.solariatweaks.observer_guard", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, CATEGORY));
+        }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (openBuildScreen.consumeClick()) {
-                if (client.screen == null) client.setScreen(new BuildScreen(null));
+            if (openBuildScreen != null) {
+                while (openBuildScreen.consumeClick()) openBuildPlans(client);
+                while (cycleObserverGuard.consumeClick()) cycleObserverGuard(client);
             }
-            while (cycleObserverGuard.consumeClick()) {
-                ClientConfig.GuardMode next = ClientConfig.get().guardMode().next();
-                ClientConfig.get().setGuardMode(next);
-                if (client.player != null) client.player.displayClientMessage(Component.literal("オブザーバー警告: " + next.label), true);
-            }
+            ObserverGuard.tick(client);
             MinimapBridge.tick();
         });
         ClientPlayNetworking.registerGlobalReceiver(BuildSyncPayload.TYPE, (payload, context) -> {
@@ -85,7 +108,6 @@ public class SolariaTweaksClient implements ClientModInitializer {
                                     c.getSource().sendFeedback(Component.literal("オブザーバー警告: " + m.label));
                                     return 1;
                                 }))));
-        ObserverGuard.register();
         HudElementRegistry.addLast(SolariaTweaks.id("build_hud"), BuildHud::render);
         ScreenEvents.AFTER_INIT.register(XaeroMapIntegration::onScreenInit);
     }
