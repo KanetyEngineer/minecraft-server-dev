@@ -11,6 +11,10 @@
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.png">
+<link rel="alternate" hreflang="ja" href="https://blockmotion.sharytech.com/">
+<link rel="alternate" hreflang="en" href="https://blockmotion.sharytech.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://blockmotion.sharytech.com/">
+<script>try{if(!localStorage.getItem('bm-lang')&&!/^ja/i.test(navigator.language||''))location.replace('/en/'+location.hash)}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
@@ -33,7 +37,8 @@ header.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
 nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
 nav a{color:var(--muted);text-decoration:none}
 nav a:hover{color:var(--text)}
-@media (max-width:640px){nav a:not(.dl){display:none}}
+.lang{border:1px solid var(--line);border-radius:4px;padding:0 8px}
+@media (max-width:640px){nav a:not(.dl):not(.lang){display:none}}
 
 .hero{position:relative;overflow:hidden}
 .hero .bgimg{position:absolute;inset:0;background:url(/img/hero.jpg) center/cover;filter:saturate(1.05)}
@@ -105,6 +110,7 @@ footer p{margin:4px 0}
       <a href="#features">できること</a>
       <a href="#motions">モーション</a>
       <a href="#faq">よくある質問</a>
+      <a class="lang" href="/en/" hreflang="en" lang="en" onclick="try{localStorage.setItem('bm-lang','en')}catch(e){}">English</a>
       <a class="dl" href="#download">ダウンロード</a>
     </nav>
   </div>

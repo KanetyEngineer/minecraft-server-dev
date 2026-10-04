@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlockMotion | Minecraft 3D animation generator</title>
+<meta name="description" content="Pick a skin and line up motions. A free Windows app that uses Blender to generate Minecraft-style 3D animation videos and .blend files.">
+<meta property="og:title" content="BlockMotion | Minecraft 3D animation generator">
+<meta property="og:description" content="Pick a skin, line up motions, and Blender makes a Minecraft-style 3D animation. 53 motions, shot lists, subtitles, and your own world as the set.">
+<meta property="og:image" content="https://blockmotion.sharytech.com/img/hero.jpg">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.png">
+<link rel="alternate" hreflang="ja" href="https://blockmotion.sharytech.com/">
+<link rel="alternate" hreflang="en" href="https://blockmotion.sharytech.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://blockmotion.sharytech.com/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet"><style>
+:root{
+  --bg:#14171c; --panel:#1d2128; --panel2:#252a33; --line:#323845;
+  --text:#e8ecf2; --muted:#9aa4b2; --accent:#7ccf4a; --accent-ink:#0f1a08; --accent2:#f2b84b;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,"Segoe UI","Noto Sans JP",sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+img,video{max-width:100%;height:auto;display:block}
+a{color:var(--accent)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.pix{font-family:"Pixelify Sans",monospace;letter-spacing:.01em}
+header.top{position:sticky;top:0;z-index:10;background:rgba(20,23,28,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;color:var(--text);text-decoration:none}
+.logo i{width:22px;height:22px;background:linear-gradient(135deg,#7ccf4a 0 50%,#5a9c33 50%);box-shadow:inset -4px -4px 0 rgba(0,0,0,.25);display:inline-block}
+nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+nav a{color:var(--muted);text-decoration:none}
+nav a:hover{color:var(--text)}
+.lang{border:1px solid var(--line);border-radius:4px;padding:0 8px}
+@media (max-width:640px){nav a:not(.dl):not(.lang){display:none}}
+
+.hero{position:relative;overflow:hidden}
+.hero .bgimg{position:absolute;inset:0;background:url(/img/hero.jpg) center/cover;filter:saturate(1.05)}
+.hero .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,16,20,.92) 0%,rgba(14,16,20,.7) 45%,rgba(14,16,20,.15) 100%)}
+.hero .wrap{position:relative;padding:96px 16px 104px}
+.hero h1{font-size:clamp(28px,7.8vw,60px);line-height:1.15;margin:0 0 18px}
+.hero h1 span{color:var(--accent)}
+.hero p.lead{font-size:clamp(15px,2vw,18px);max-width:540px;color:#d6dce5;margin:0 0 30px}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:14px 26px;border-radius:6px;font-weight:700;text-decoration:none;font-size:16px;border:0;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 0 #4f8a2c}
+.btn.primary:hover{transform:translateY(1px);box-shadow:0 3px 0 #4f8a2c}
+.btn.ghost{background:rgba(255,255,255,.08);color:var(--text);border:1px solid rgba(255,255,255,.18)}
+.btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.meta{font-size:13px;color:var(--muted);margin-top:14px}
+
+section{padding:72px 0;border-top:1px solid var(--line)}
+section h2{font-size:clamp(24px,3.4vw,32px);margin:0 0 8px}
+section .sub{color:var(--muted);margin:0 0 32px}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px}
+.step::before{counter-increment:s;content:counter(s);font-family:"Pixelify Sans";display:inline-grid;place-items:center;width:34px;height:34px;background:var(--accent);color:var(--accent-ink);border-radius:4px;font-size:20px;margin-bottom:10px}
+.step h3{margin:0 0 6px;font-size:17px}
+.step p{margin:0;color:var(--muted);font-size:14px}
+@media (max-width:760px){.steps{grid-template-columns:1fr}}
+
+.feature{display:grid;grid-template-columns:1.1fr 1fr;gap:36px;align-items:center;margin-bottom:56px}
+.feature:last-child{margin-bottom:0}
+.feature.rev .media{order:2}
+.feature .media img,.feature .media video{border-radius:10px;border:1px solid var(--line);width:100%}
+.feature h3{font-size:22px;margin:0 0 10px}
+.feature h3 small{display:block;font-size:13px;color:var(--accent);font-weight:400;font-family:"Pixelify Sans";margin-bottom:4px}
+.feature p{color:#c9d0da;margin:0 0 12px}
+.feature ul{margin:0;padding-left:1.2em;color:#c9d0da}
+.feature li{margin:2px 0}
+@media (max-width:860px){.feature{grid-template-columns:1fr;gap:18px}.feature.rev .media{order:0}}
+
+.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.shots img{border-radius:6px;border:1px solid var(--line)}
+.shots figure{margin:0}
+.shots figcaption{font-size:12px;color:var(--muted);margin-top:4px}
+@media (max-width:640px){.shots{grid-template-columns:repeat(2,1fr)}}
+
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag{font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 9px;color:#d5dbe4}
+.cat{margin:18px 0 4px;font-size:14px;color:var(--accent2);font-weight:700}
+
+.download{background:linear-gradient(180deg,#1a2a14,#14171c)}
+.dlbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center}
+.dlbox h3{margin:0 0 6px;font-size:22px}
+.dlbox ul{margin:8px 0 0;padding-left:1.2em;color:#c9d0da;font-size:14px}
+@media (max-width:760px){.dlbox{grid-template-columns:1fr}}
+
+.faq details{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:700}
+.faq details p,.faq details ol{color:#c9d0da;margin:10px 0 0;font-size:15px}
+code{background:var(--panel2);padding:1px 6px;border-radius:4px;font-size:.92em}
+
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px}
+footer p{margin:4px 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo pix" href="#"><i></i>BlockMotion</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#motions">Motions</a>
+      <a href="#faq">FAQ</a>
+      <a class="lang" href="/" hreflang="ja" lang="ja" onclick="try{localStorage.setItem('bm-lang','ja')}catch(e){}">日本語</a>
+      <a class="dl" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="bgimg" role="img" aria-label="A scene made with BlockMotion"></div>
+  <div class="shade"></div>
+  <div class="wrap">
+    <h1 class="pix">Minecraft 3D animations,<br><span>in one click.</span></h1>
+    <p class="lead">Pick a skin, line up some motions and press “Generate”. Blender runs in the background on your PC and makes a video (MP4) plus a Blender file you can keep editing.</p>
+    <div class="btns">
+      <a class="btn primary" href="#download">⬇ Download for free</a>
+      <a class="btn ghost" href="#features">See what it can do</a>
+    </div>
+    <p class="meta">Requires Windows 10 / 11 and Blender 4.2 or later (free)</p>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2 class="pix">Three steps</h2>
+    <p class="sub">No Blender experience needed.</p>
+    <div class="steps">
+      <div class="step"><h3>Pick a skin</h3><p>Just choose your usual skin image (64×64 PNG). Arm width (Steve / Alex) is detected automatically. Up to 8 characters per scene.</p></div>
+      <div class="step"><h3>Line up motions and cameras</h3><p>Add any of the 53 motions to a playlist; transitions are blended smoothly for you. Switch cameras with a shot list.</p></div>
+      <div class="step"><h3>Press “Generate”</h3><p>Check a single preview frame first, then render. Export landscape for YouTube or portrait for TikTok.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2 class="pix">Shoot your own short film</h2>
+    <p class="sub">Conversations, journeys, battles — even in your own world.</p>
+
+    <div class="feature">
+      <div class="media"><img src="/img/app.jpg" alt="The BlockMotion app window" loading="lazy" width="1280" height="812"></div>
+      <div>
+        <h3><small>APP</small>Fill in the tabs from left to right</h3>
+        <p>Set up five tabs in order: characters, camera, background, directing and export. Save everything as a project file and pick up where you left off.</p>
+        <ul>
+          <li>Finds your Blender install automatically</li>
+          <li>Shows progress and the preview inside the app</li>
+          <li>The exported .blend comes with a rig and keyframes</li>
+          <li>The app’s screens are in Japanese — this page walks you through the steps</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature rev">
+      <div class="media"><img src="/img/world.jpg" alt="A scene set in a village from a Minecraft world" loading="lazy" width="1280" height="720"></div>
+      <div>
+        <h3><small>WORLD</small>Your world becomes the film set</h3>
+        <p>Choose a world folder and enter the X / Y / Z shown on the F3 screen. The blocks around that spot are loaded as the background.</p>
+        <ul>
+          <li>“Load player position” fills in where you last stood</li>
+          <li>Set how much to load (radius, up and down)</li>
+          <li>Textures come from the Minecraft install on your PC; resource packs work too</li>
+          <li>Supports Java Edition worlds from 1.13 onward</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="media"><img src="/img/hero2.jpg" alt="An over-the-shoulder shot with a subtitle" loading="lazy" width="1280" height="720"></div>
+      <div>
+        <h3><small>DIRECTING</small>Shots, subtitles and weather</h3>
+        <p>Arrange 16 camera types, each with a target and a duration. Includes over-the-shoulder shots for conversations and a first-person POV.</p>
+        <ul>
+          <li>Cameras: diagonal, close-up, wide, over the shoulder, POV, dolly in, crane, orbit and more</li>
+          <li>Title card, subtitles, cinematic letterbox, depth of field</li>
+          <li>Time of day (day, sunset, night) and weather (rain, snow)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="feature rev">
+      <div class="media"><video src="/media/sample.mp4" poster="/media/sample_poster.jpg" controls muted loop playsinline preload="none" width="1280" height="720"></video></div>
+      <div>
+        <h3><small>OUTPUT</small>Video plus a .blend file</h3>
+        <p>Get an MP4 (H.264) that is ready to post. The Blender file is saved alongside it, so you can fine-tune the animation or lighting yourself.</p>
+        <ul>
+          <li>Landscape 1920×1080 / portrait 1080×1920 / square / 4K</li>
+          <li>Quality: Standard (EEVEE) / High (Cycles) / Draft</li>
+          <li>Green screen and transparent PNG sequences for video editors</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin:56px 0 12px;font-size:20px">10 backgrounds</h3>
+    <div class="shots">
+      <figure><img src="/img/bg_desert.jpg" alt="Desert" loading="lazy"><figcaption>Desert</figcaption></figure>
+      <figure><img src="/img/bg_snow.jpg" alt="Snowy plains" loading="lazy"><figcaption>Snowy plains</figcaption></figure>
+      <figure><img src="/img/bg_nether.jpg" alt="The Nether" loading="lazy"><figcaption>The Nether</figcaption></figure>
+      <figure><img src="/img/bg_end.jpg" alt="The End" loading="lazy"><figcaption>The End</figcaption></figure>
+      <figure><img src="/img/bg_night.jpg" alt="Meadow at night" loading="lazy"><figcaption>Meadow at night</figcaption></figure>
+      <figure><img src="/img/bg_cave.jpg" alt="Cave" loading="lazy"><figcaption>Cave</figcaption></figure>
+    </div>
+    <p class="meta">Also: meadow, your Minecraft world, studio (solid color), green screen and transparent</p>
+  </div>
+</section>
+
+<section id="motions">
+  <div class="wrap">
+    <h2 class="pix">53 motions</h2>
+    <p class="sub">Combine them freely. After a turning motion, the character keeps facing the new direction.</p>
+    <img src="/img/motions.jpg" alt="All 53 motions" loading="lazy" style="border-radius:10px;border:1px solid var(--line);margin-bottom:12px" width="1400" height="933">
+    <div class="cat">Movement</div><div class="tags"><span class="tag">Walk</span><span class="tag">Run</span><span class="tag">Walk backward</span><span class="tag">Sneak</span><span class="tag">Skip</span><span class="tag">Zombie walk</span><span class="tag">Crawl</span><span class="tag">Swim</span><span class="tag">Fly</span><span class="tag">Climb</span></div>
+    <div class="cat">Turning</div><div class="tags"><span class="tag">Turn left</span><span class="tag">Turn right</span><span class="tag">Look back</span><span class="tag">Spin</span></div>
+    <div class="cat">Basics</div><div class="tags"><span class="tag">Idle</span><span class="tag">Look around</span><span class="tag">Crouch</span><span class="tag">Sit</span><span class="tag">Lie down</span><span class="tag">T-pose</span><span class="tag">Stretch</span><span class="tag">Jumping jacks</span></div>
+    <div class="cat">Emotions</div><div class="tags"><span class="tag">Wave</span><span class="tag">Bow</span><span class="tag">Nod</span><span class="tag">Shake head</span><span class="tag">Clap</span><span class="tag">Hands up</span><span class="tag">Fist pump</span><span class="tag">Laugh</span><span class="tag">Cry</span><span class="tag">Feel down</span><span class="tag">Stomp</span><span class="tag">Scared</span><span class="tag">Head in hands</span><span class="tag">Shrug</span><span class="tag">Point</span><span class="tag">Salute</span></div>
+    <div class="cat">Work</div><div class="tags"><span class="tag">Mine</span><span class="tag">Eat</span><span class="tag">Throw</span></div>
+    <div class="cat">Combat</div><div class="tags"><span class="tag">Swing sword</span><span class="tag">Punch</span><span class="tag">Kick</span><span class="tag">Block with shield</span><span class="tag">Draw bow</span><span class="tag">Fall down</span><span class="tag">Get hit</span></div>
+    <div class="cat">Action &amp; dance</div><div class="tags"><span class="tag">Jump</span><span class="tag">Backflip</span><span class="tag">Dance</span><span class="tag">Floss</span><span class="tag">Dab</span></div>
+  </div>
+</section>
+
+<section id="download" class="download">
+  <div class="wrap">
+    <h2 class="pix">Download</h2>
+    <p class="sub">Free. No installer — just unzip and run.</p>
+    <div class="dlbox">
+      <div>
+        <h3>BlockMotion <span id="ver">2.0.1</span> (Windows)</h3>
+        <ul>
+          <li>Windows 10 / 11 (64-bit)</li>
+          <li><a href="https://www.blender.org/download/" target="_blank" rel="noopener">Blender</a> 4.2 or later (tested with 5.0; Steam and Microsoft Store versions work too)</li>
+          <li>To use a world as the background: a PC with Minecraft Java Edition installed</li>
+          <li>The app’s interface is in Japanese</li>
+        </ul>
+      </div>
+      <div class="btns" style="flex-direction:column;align-items:stretch">
+        <a class="btn primary" href="/download/BlockMotion-windows.zip" download>⬇ BlockMotion-windows.zip</a>
+        <span class="meta" style="margin:0;text-align:center">About 19 MB</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="wrap">
+    <h2 class="pix">FAQ</h2>
+    <p class="sub">Check here if you get stuck.</p>
+    <details open>
+      <summary>The exe won’t open / “Windows protected your PC”</summary>
+      <p>The app isn’t code-signed, so Windows SmartScreen or Smart App Control may block it.</p>
+      <ol>
+        <li>Right-click the downloaded zip → “Properties” → tick “Unblock” at the bottom → “OK”</li>
+        <li>Then unzip it and run <code>BlockMotion\BlockMotion.exe</code></li>
+        <li>If a blue screen appears, click “More info” → “Run anyway”</li>
+      </ol>
+      <p>If it still won’t start, install Python 3.10 or later and launch <code>run_source.bat</code> from the <a href="https://github.com/KanetyEngineer/minecraft-server-dev/tree/main/tools/blockmotion" target="_blank" rel="noopener">source code</a>.</p>
+    </details>
+    <details>
+      <summary>It says Blender can’t be found</summary>
+      <p>Press the auto-detect button (自動検出) in the app, or use browse (参照…) to select <code>blender.exe</code>. It is usually at <code>C:\Program Files\Blender Foundation\Blender 5.0\blender.exe</code>.</p>
+    </details>
+    <details>
+      <summary>How long does rendering take?</summary>
+      <p>It depends on your PC and the quality setting. Render a single frame with Preview (プレビュー) first; set quality to Draft (下書き) when you only want to check the motion. High quality (Cycles) is much faster with a GPU.</p>
+    </details>
+    <details>
+      <summary>My world won’t load</summary>
+      <p>Select the world folder at <code>%APPDATA%\.minecraft\saves\&lt;world name&gt;</code> (for a server, the <code>world</code> folder in the server directory). The coordinates are the “XYZ” values on the F3 screen. Also check that the texture field points to the Minecraft jar (<code>.minecraft\versions\&lt;version&gt;\&lt;version&gt;.jar</code>).</p>
+    </details>
+    <details>
+      <summary>Can I post my videos on YouTube or TikTok?</summary>
+      <p>Yes. The background and item textures belong to Minecraft, so please follow the <a href="https://www.minecraft.net/en-us/usage-guidelines" target="_blank" rel="noopener">Minecraft Usage Guidelines</a>.</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="pix" style="color:var(--text);font-size:15px">BlockMotion</p>
+    <p>Run by SharyTech</p>
+    <p>Minecraft is a trademark of Mojang Studios. BlockMotion is an unofficial tool and is not affiliated with Mojang Studios or Microsoft. Blender is a trademark of the Blender Foundation.</p>
+  </div>
+</footer>
+</body>
+</html>
