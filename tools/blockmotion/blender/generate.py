@@ -4,12 +4,16 @@ Usage:
     blender -b --factory-startup -P generate.py -- config.json
 
 The config is written by the desktop app (see app/blockmotion.py) but can be
-hand-written too. Progress is printed on stdout as lines starting with "BM_".
+hand-written too (README has an example). Progress is printed on stdout as
+lines starting with "BM_".
 """
-import bpy, os, sys, json, math, random
-from mathutils import Vector, Matrix, Euler, Quaternion
+import bpy, os, sys, json, math, random, tempfile
+from mathutils import Vector, Matrix, Quaternion
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import bm_motions as MO  # noqa: E402
+
 S = 1 / 16  # 1 skin pixel = 1/16 m (a player is 2 blocks tall)
 
 
@@ -25,16 +29,21 @@ def stage(text):
 # config
 # --------------------------------------------------------------------------
 DEFAULTS = {
-    "skin": "",
-    "arms": "auto",            # auto | classic | slim
-    "motions": [{"id": "walk", "seconds": 4}],
-    "move": True,              # locomotion moves the character forward
-    "item": "none",
-    "camera": "diagonal",      # front | diagonal | side | back | closeup | low | high | orbit
+    "actors": None,            # list of actors (see normalise_actors); None = single actor from the keys below
+    "skin": "", "arms": "auto", "item": "none", "motions": [{"id": "walk", "seconds": 4}], "move": True,
+    "camera": "diagonal",      # default shot when "shots" is empty
+    "shots": [],               # [{"camera": ..., "seconds": ..., "target": "all" | actor index, "zoom": 1}]
     "follow": True,
     "zoom": 1.0,
-    "background": "grass",     # grass | night | cave | studio | greenscreen | transparent
+    "dof": False,              # blur the background (depth of field)
+    "background": "grass",     # grass | desert | snow | cave | nether | end | studio | greenscreen | transparent | world
+    "time": "day",             # day | sunset | night (outdoor backgrounds and worlds)
+    "weather": "clear",        # clear | rain | snow
     "bg_color": [0.85, 0.87, 0.9],
+    "world": {},               # {"path", "dimension", "x", "y", "z", "radius", "down", "up", "client_jar", "resource_packs"}
+    "title": "", "title_seconds": 2.5,
+    "subtitles": [],           # [{"start": s, "end": s, "text": "..."}]
+    "letterbox": False,
     "resolution": [1920, 1080],
     "fps": 30,
     "engine": "eevee",         # eevee | cycles | workbench
@@ -59,6 +68,8 @@ def load_config():
     if not cfg["output_dir"]:
         cfg["output_dir"] = os.path.join(os.path.expanduser("~"), "BlockMotion")
     os.makedirs(cfg["output_dir"], exist_ok=True)
+    if cfg["background"] == "night":  # 1.0 configs
+        cfg["background"], cfg["time"] = "grass", "night"
     return cfg
 
 
@@ -71,6 +82,24 @@ scene = bpy.context.scene
 coll = scene.collection
 
 
+def normalise_actors():
+    acts = CFG["actors"]
+    if not acts:
+        acts = [{"skin": CFG["skin"], "arms": CFG["arms"], "item": CFG["item"],
+                 "motions": CFG["motions"], "move": CFG["move"]}]
+    out = []
+    for i, a in enumerate(acts[:8]):
+        b = {"name": "Actor%d" % (i + 1), "skin": "", "arms": "auto", "item": "none",
+             "motions": [{"id": "idle", "seconds": 3}], "move": True,
+             "x": 0.0, "z": 0.0, "yaw": 0.0}
+        b.update(a)
+        out.append(b)
+    return out
+
+
+ACTORS = normalise_actors()
+
+
 # --------------------------------------------------------------------------
 # materials / images
 # --------------------------------------------------------------------------
@@ -80,6 +109,14 @@ _imgs = {}
 def image(path):
     if path not in _imgs:
         im = bpy.data.images.load(path)
+        w, h = im.size
+        if h > w and h % w == 0:  # animated strip (water, lava...): keep the first frame
+            px = list(im.pixels)
+            top = px[(h - w) * w * 4:]
+            first = bpy.data.images.new(os.path.basename(path), w, w, alpha=True)
+            first.pixels = top
+            bpy.data.images.remove(im)
+            im = first
         im.pack()
         _imgs[path] = im
     return _imgs[path]
@@ -105,6 +142,11 @@ def tex_path(name):
     return os.path.join(TEX, name + ".png")
 
 
+def image_has_alpha(im):
+    px = im.pixels[:]
+    return any(px[i] < 0.99 for i in range(3, len(px), 4))
+
+
 def alpha_clip(nt, alpha_socket, bsdf, m):
     # 1 - (alpha < 0.5): hard cut-out, understood by every engine and glTF
     lt = nt.nodes.new("ShaderNodeMath"); lt.operation = "LESS_THAN"
@@ -128,7 +170,7 @@ def alpha_clip(nt, alpha_socket, bsdf, m):
 _mats = {}
 
 
-def tex_mat(name, img_path, tint=None, clip=False, hide_backface=False, emission=0.0):
+def tex_mat(name, img_path, tint=None, clip=False, hide_backface=False, emission=0.0, alpha=None):
     key = name
     if key in _mats:
         return _mats[key]
@@ -146,7 +188,17 @@ def tex_mat(name, img_path, tint=None, clip=False, hide_backface=False, emission
     if emission:
         nt.links.new(color, bsdf.inputs["Emission Color"])
         bsdf.inputs["Emission Strength"].default_value = emission
-    if clip:
+    if alpha is not None:  # see-through (water, stained glass)
+        mul = nt.nodes.new("ShaderNodeMath"); mul.operation = "MULTIPLY"
+        mul.inputs[1].default_value = alpha
+        nt.links.new(t.outputs["Alpha"], mul.inputs[0])
+        nt.links.new(mul.outputs[0], bsdf.inputs["Alpha"])
+        try:
+            m.surface_render_method = "BLENDED"
+        except Exception:
+            pass
+        m.use_backface_culling = False
+    elif clip:
         alpha_clip(nt, t.outputs["Alpha"], bsdf, m)
     if hide_backface:
         # walls that face away from the camera become see-through (works in all engines)
@@ -167,7 +219,7 @@ def tex_mat(name, img_path, tint=None, clip=False, hide_backface=False, emission
     return m
 
 
-def color_mat(name, rgb, rough=1.0, emission=0.0):
+def color_mat(name, rgb, rough=1.0, emission=0.0, alpha=1.0):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     b = m.node_tree.nodes["Principled BSDF"]
@@ -177,27 +229,64 @@ def color_mat(name, rgb, rough=1.0, emission=0.0):
     if emission:
         b.inputs["Emission Color"].default_value = (*rgb, 1)
         b.inputs["Emission Strength"].default_value = emission
+    if alpha < 1:
+        b.inputs["Alpha"].default_value = alpha
+        try:
+            m.surface_render_method = "BLENDED"
+        except Exception:
+            pass
     m.diffuse_color = (*rgb, 1)
     return m
 
 
+def flat_mat(name, rgb, alpha=1.0):
+    """Unlit colour (overlays, letterbox, subtitles)."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    em = nt.nodes.new("ShaderNodeEmission")
+    em.inputs["Color"].default_value = (*rgb, 1)
+    em.inputs["Strength"].default_value = 1.0
+    if alpha < 1:
+        tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+        mix = nt.nodes.new("ShaderNodeMixShader")
+        mix.inputs[0].default_value = alpha
+        nt.links.new(tr.outputs[0], mix.inputs[1])
+        nt.links.new(em.outputs[0], mix.inputs[2])
+        nt.links.new(mix.outputs[0], out.inputs["Surface"])
+        try:
+            m.surface_render_method = "BLENDED"
+        except Exception:
+            pass
+    else:
+        nt.links.new(em.outputs[0], out.inputs["Surface"])
+    m.diffuse_color = (*rgb, alpha)
+    return m
+
+
+def camera_only(ob):
+    for attr in ("visible_shadow", "visible_diffuse", "visible_glossy", "visible_transmission",
+                 "visible_volume_scatter"):
+        if hasattr(ob, attr):
+            setattr(ob, attr, False)
+
+
 # --------------------------------------------------------------------------
-# skin -> character mesh
+# skin -> character mesh + rig
 # --------------------------------------------------------------------------
-def load_skin():
-    path = CFG["skin"]
+def load_skin(path, arms):
     if not path or not os.path.exists(path):
         path = os.path.join(CFG["assets"], "default_skin.png")
     img = image(path)
-    img.name = "skin_" + os.path.basename(path)
     w, h = img.size
     legacy = (h == w // 2)
-    arms = CFG["arms"]
     if arms == "auto":
         arms = "classic"
         if not legacy:
             # slim skins leave the 4th column of the right arm front empty
-            px = list(img.pixels)
+            px = img.pixels[:]
             sx = w / 64
 
             def alpha(x, y):  # x,y in 64-space, origin top-left
@@ -209,12 +298,7 @@ def load_skin():
     return img, arms, legacy
 
 
-SKIN_IMG, ARMS, LEGACY = load_skin()
-TW = 64
-TH = 32 if LEGACY else 64
-
-
-def skin_mat(name, overlay):
+def skin_mat(name, img, overlay):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -222,7 +306,7 @@ def skin_mat(name, overlay):
     bsdf.inputs["Roughness"].default_value = 1.0
     bsdf.inputs["Specular IOR Level"].default_value = 0.0
     tex = nt.nodes.new("ShaderNodeTexImage")
-    tex.image = SKIN_IMG
+    tex.image = img
     tex.interpolation = "Closest"
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     if overlay:
@@ -230,33 +314,15 @@ def skin_mat(name, overlay):
     return m
 
 
-AW = 3 if ARMS == "slim" else 4
-# name, bone, base uv, size (w,h,d), min corner (px), overlay uv, inflate
-# Character faces -Y, its right side is -X.
-PARTS = [
-    ("Head", "Head", (0, 0), (8, 8, 8), (-4, -4, 24), (32, 0), 0.5),
-    ("Body", "Body", (16, 16), (8, 12, 4), (-4, -2, 12), (16, 32), 0.25),
-    ("Arm.R", "Arm.R", (40, 16), (AW, 12, 4), (-4 - AW, -2, 12), (40, 32), 0.25),
-    ("Arm.L", "Arm.L", (32, 48), (AW, 12, 4), (4, -2, 12), (48, 48), 0.25),
-    ("Leg.R", "Leg.R", (0, 16), (4, 12, 4), (-4, -2, 0), (0, 32), 0.25),
-    ("Leg.L", "Leg.L", (16, 48), (4, 12, 4), (0, -2, 0), (0, 48), 0.25),
-]
-if LEGACY:  # 64x32 skins: left limbs reuse the right ones, only the hat layer exists
-    PARTS[3] = ("Arm.L", "Arm.L", (40, 16), (AW, 12, 4), (4, -2, 12), None, 0)
-    PARTS[5] = ("Leg.L", "Leg.L", (0, 16), (4, 12, 4), (0, -2, 0), None, 0)
-    PARTS = [p if p[0] == "Head" or p[5] is None else (*p[:5], None, 0) for p in PARTS]
-
-
-def uvp(px, py):
-    return (px / TW, 1 - py / TH)
-
-
-def add_box(acc, mn, size, uv, inflate, group, mat_index, mirror=False):
+def add_box(acc, mn, size, uv, inflate, group, mat_index, th, mirror=False):
     verts, faces, uvs, groups, mats = acc
     w, h, d = size
     u, v = uv
     x0, y0, z0 = mn[0] - inflate, mn[1] - inflate, mn[2] - inflate
     x1, y1, z1 = mn[0] + w + inflate, mn[1] + d + inflate, mn[2] + h + inflate
+
+    def uvp(px, py):
+        return (px / 64, 1 - py / th)
     F = {
         "front": ([(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)], (u + d, v + d, w, h)),
         "back": ([(x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)], (u + 2 * d + w, v + d, w, h)),
@@ -283,15 +349,32 @@ def add_box(acc, mn, size, uv, inflate, group, mat_index, mirror=False):
         mats.append(mat_index)
 
 
-def build_character():
+def build_character(name, skin_path, arms_pref):
+    img, arms, legacy = load_skin(skin_path, arms_pref)
+    aw = 3 if arms == "slim" else 4
+    th = 32 if legacy else 64
+    # name, bone, base uv, size (w,h,d), min corner (px), overlay uv, inflate
+    # Character faces -Y, its right side is -X.
+    parts = [
+        ("Head", "Head", (0, 0), (8, 8, 8), (-4, -4, 24), (32, 0), 0.5),
+        ("Body", "Body", (16, 16), (8, 12, 4), (-4, -2, 12), (16, 32), 0.25),
+        ("Arm.R", "Arm.R", (40, 16), (aw, 12, 4), (-4 - aw, -2, 12), (40, 32), 0.25),
+        ("Arm.L", "Arm.L", (32, 48), (aw, 12, 4), (4, -2, 12), (48, 48), 0.25),
+        ("Leg.R", "Leg.R", (0, 16), (4, 12, 4), (-4, -2, 0), (0, 32), 0.25),
+        ("Leg.L", "Leg.L", (16, 48), (4, 12, 4), (0, -2, 0), (0, 48), 0.25),
+    ]
+    if legacy:  # 64x32 skins: left limbs reuse the right ones, only the hat layer exists
+        parts[3] = ("Arm.L", "Arm.L", (40, 16), (aw, 12, 4), (4, -2, 12), None, 0)
+        parts[5] = ("Leg.L", "Leg.L", (0, 16), (4, 12, 4), (0, -2, 0), None, 0)
+        parts = [p if p[0] == "Head" or p[5] is None else (*p[:5], None, 0) for p in parts]
     acc = ([], [], [], [], [])
-    for name, bone, uv, size, mn, ouv, inf in PARTS:
-        add_box(acc, mn, size, uv, 0.0, bone, 0, mirror=LEGACY and name.endswith(".L"))
-    for name, bone, uv, size, mn, ouv, inf in PARTS:
+    for pname, bone, uv, size, mn, ouv, inf in parts:
+        add_box(acc, mn, size, uv, 0.0, bone, 0, th, mirror=legacy and pname.endswith(".L"))
+    for pname, bone, uv, size, mn, ouv, inf in parts:
         if ouv is not None:
-            add_box(acc, mn, size, ouv, inf, bone, 1)
+            add_box(acc, mn, size, ouv, inf, bone, 1, th)
     verts, faces, uvs, groups, mats = acc
-    mesh = bpy.data.meshes.new("Player")
+    mesh = bpy.data.meshes.new(name)
     mesh.from_pydata([tuple(v) for v in verts], [], faces)
     mesh.update()
     uvl = mesh.uv_layers.new(name="UVMap")
@@ -300,30 +383,30 @@ def build_character():
             uvl.data[li].uv = t
     for poly, mi in zip(mesh.polygons, mats):
         poly.material_index = mi
-    mesh.materials.append(skin_mat("Skin_Base", False))
-    mesh.materials.append(skin_mat("Skin_Overlay", True))
-    obj = bpy.data.objects.new("Player", mesh)
+    mesh.materials.append(skin_mat(name + "_Skin", img, False))
+    mesh.materials.append(skin_mat(name + "_Overlay", img, True))
+    obj = bpy.data.objects.new(name, mesh)
     coll.objects.link(obj)
-    for p in PARTS:
+    for p in parts:
         obj.vertex_groups.new(name=p[1])
     for poly, g in zip(mesh.polygons, groups):
         obj.vertex_groups[g].add(list(poly.vertices), 1.0, "REPLACE")
 
-    arm = bpy.data.armatures.new("PlayerRig")
-    rig = bpy.data.objects.new("PlayerRig", arm)
+    arm = bpy.data.armatures.new(name + "Rig")
+    rig = bpy.data.objects.new(name + "Rig", arm)
     coll.objects.link(rig)
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode="EDIT")
     eb = arm.edit_bones
 
-    def nb(name, head, tail, parent=None):
-        b = eb.new(name)
+    def nb(bname, head, tail, parent=None):
+        b = eb.new(bname)
         b.head = Vector(head) * S
         b.tail = Vector(tail) * S
         b.roll = 0
         if parent:
             b.parent = eb[parent]
-    ax = 4 + AW / 2
+    ax = 4 + aw / 2
     nb("Root", (0, 0, 0), (0, 4, 0))
     nb("Body", (0, 0, 12), (0, 0, 24), "Root")
     nb("Head", (0, 0, 24), (0, 0, 32), "Body")
@@ -339,14 +422,11 @@ def build_character():
     mod.object = rig
     for pb in rig.pose.bones:
         pb.rotation_mode = "QUATERNION"
-    return rig, obj
-
-
-RIG, PLAYER = build_character()
+    return rig, aw
 
 
 # --------------------------------------------------------------------------
-# held item (voxelised 16x16 sprite)
+# held items (voxelised 16x16 sprites)
 # --------------------------------------------------------------------------
 ITEMS = {
     # texture, grip pixel (x, y from top-left), tilt (deg)
@@ -357,51 +437,56 @@ ITEMS = {
     "iron_axe": ("iron_axe", (3.5, 11.5), 25),
     "iron_shovel": ("iron_shovel", (3.5, 11.5), 25),
     "torch": ("torch", (7.5, 13.5), 75),
+    "bow": ("bow", (7.5, 8.5), 45),
 }
+_item_mesh = {}
 
 
-def build_item(key):
+def build_item(key, rig, aw):
     texname, grip, tilt = ITEMS[key]
-    img = image(tex_path(texname))
-    w, h = img.size
-    px = list(img.pixels)
-    size = 0.6  # metres for the whole 16px sprite
-    p = size / w
-    verts, faces, uvs = [], [], []
-    for y in range(h):
-        for x in range(w):
-            iy = h - 1 - y
-            if px[(iy * w + x) * 4 + 3] < 0.5:
-                continue
-            # sprite plane = YZ: texture +x -> -Y (forward), texture up -> +Z
-            cy = -(x + 0.5 - grip[0]) * p
-            cz = -(y + 0.5 - grip[1]) * p
-            uv = ((x + 0.5) / w, (iy + 0.5) / h)
-            b = len(verts)
-            for dx in (-0.5, 0.5):
-                for dy in (-0.5, 0.5):
-                    for dz in (-0.5, 0.5):
-                        verts.append((dx * p, cy + dy * p, cz + dz * p))
-            for f in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
-                faces.append([b + i for i in f])
-                uvs.append(uv)
-    mesh = bpy.data.meshes.new("Item_" + key)
-    mesh.from_pydata(verts, [], faces)
-    mesh.update()
-    uvl = mesh.uv_layers.new(name="UVMap")
-    for poly, uv in zip(mesh.polygons, uvs):
-        for li in poly.loop_indices:
-            uvl.data[li].uv = uv
-    mesh.materials.append(tex_mat("M_item_" + texname, tex_path(texname), emission=1.0 if key == "torch" else 0.0))
-    ob = bpy.data.objects.new("Item", mesh)
+    if key not in _item_mesh:
+        img = image(tex_path(texname))
+        w, h = img.size
+        px = img.pixels[:]
+        size = 0.6  # metres for the whole 16px sprite
+        p = size / w
+        verts, faces, uvs = [], [], []
+        for y in range(h):
+            for x in range(w):
+                iy = h - 1 - y
+                if px[(iy * w + x) * 4 + 3] < 0.5:
+                    continue
+                # sprite plane = YZ: texture +x -> -Y (forward), texture up -> +Z
+                cy = -(x + 0.5 - grip[0]) * p
+                cz = -(y + 0.5 - grip[1]) * p
+                uv = ((x + 0.5) / w, (iy + 0.5) / h)
+                b = len(verts)
+                for dx in (-0.5, 0.5):
+                    for dy in (-0.5, 0.5):
+                        for dz in (-0.5, 0.5):
+                            verts.append((dx * p, cy + dy * p, cz + dz * p))
+                for f in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
+                    faces.append([b + i for i in f])
+                    uvs.append(uv)
+        mesh = bpy.data.meshes.new("Item_" + key)
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        uvl = mesh.uv_layers.new(name="UVMap")
+        for poly, uv in zip(mesh.polygons, uvs):
+            for li in poly.loop_indices:
+                uvl.data[li].uv = uv
+        mesh.materials.append(tex_mat("M_item_" + texname, tex_path(texname),
+                                      emission=1.0 if key == "torch" else 0.0))
+        _item_mesh[key] = mesh
+    ob = bpy.data.objects.new(rig.name + "_Item", _item_mesh[key])
     coll.objects.link(ob)
     # rest pose in armature space: grip in the right hand, blade pointing forward / up
-    hand = Vector((-(4 + AW / 2), -1.0, 13.5)) * S
+    hand = Vector((-(4 + aw / 2), -1.0, 13.5)) * S
     W = Matrix.Translation(hand) @ Matrix.Rotation(math.radians(tilt), 4, "X")
-    ob.parent = RIG
+    ob.parent = rig
     ob.parent_type = "BONE"
     ob.parent_bone = "Arm.R"
-    bone = RIG.data.bones["Arm.R"]
+    bone = rig.data.bones["Arm.R"]
     tail = bone.matrix_local @ Matrix.Translation((0, bone.length, 0))
     ob.matrix_parent_inverse = Matrix.Identity(4)
     ob.matrix_basis = tail.inverted() @ W
@@ -417,274 +502,336 @@ def build_item(key):
     return ob
 
 
-if CFG["item"] in ITEMS:
-    build_item(CFG["item"])
+# --------------------------------------------------------------------------
+# world import (before animation so actors can stand on the terrain)
+# --------------------------------------------------------------------------
+BG = CFG["background"]
+WORLD = None
+if BG == "world":
+    import bm_world  # noqa: E402
+    stage("reading world")
+    wcfg = dict(CFG["world"])
+    cache = os.path.join(tempfile.gettempdir(), "blockmotion_textures")
+    WORLD = bm_world.build_world(wcfg, CFG["assets"], cache, log)
+
+
+def ground_at(x, y, near):
+    """Ground height (Blender z) under Blender (x, y)."""
+    if WORLD is None:
+        return 0.0
+    ox, oy, oz = WORLD["origin"]
+    return WORLD["ground"](x + ox, -y + oz, near + oy) - oy
 
 
 # --------------------------------------------------------------------------
-# motions: each returns a pose in character space
-#   bones: {bone: (x, y, z) degrees}  X = pitch, Y = roll (sideways), Z = yaw
-#   "lift": vertical offset of the whole body (m), "speed": forward speed (m/s)
-# Sign conventions (character faces -Y):
-#   legs / arms: x < 0 swings forward      body / head: x > 0 leans / looks down
-#   Arm.R: y > 0 raises it sideways        Arm.L: y < 0 raises it sideways
-#   z > 0 turns to the character's left
+# bake animation for every actor
 # --------------------------------------------------------------------------
-def sm(x):
-    x = max(0.0, min(1.0, x))
-    return x * x * (3 - 2 * x)
-
-
-def m_idle(t):
-    return {"Arm.R": (0, 3 + 2 * math.sin(t * 1.3), 0), "Arm.L": (0, -3 - 2 * math.sin(t * 1.3), 0),
-            "Head": (4 * math.sin(t * 0.7), 0, 14 * math.sin(t * 0.45)),
-            "Body": (1.0 * math.sin(t * 1.3), 0, 0)}
-
-
-def walk_like(t, period, leg, arm, speed, bob=0.0, lean=0.0):
-    ph = 2 * math.pi * t / period
-    s = math.sin(ph)
-    return {"Leg.R": (-leg * s, 0, 0), "Leg.L": (leg * s, 0, 0),
-            "Arm.R": (arm * s, 2, 0), "Arm.L": (-arm * s, -2, 0),
-            "Body": (lean, 0, 0), "Head": (-lean * 0.8, 0, 0),
-            "lift": bob * abs(math.cos(ph)), "speed": speed}
-
-
-def m_walk(t):
-    return walk_like(t, 1.0, 34, 30, 1.7, bob=0.015)
-
-
-def m_run(t):
-    return walk_like(t, 0.62, 52, 58, 4.0, bob=0.05, lean=8)
-
-
-def m_sneak(t):
-    p = walk_like(t, 1.3, 20, 12, 0.8)
-    p["Body"] = (28, 0, 0)
-    p["Head"] = (-22, 0, 0)
-    p["Arm.R"] = (p["Arm.R"][0] - 14, 3, 0)
-    p["Arm.L"] = (p["Arm.L"][0] - 14, -3, 0)
-    p["lift"] = -0.12
-    return p
-
-
-def m_wave(t):
-    w = math.sin(2 * math.pi * t * 1.8)
-    p = m_idle(t)
-    p["Arm.R"] = (-15, 150 + 22 * w, 0)
-    p["Head"] = (-4, -6, 8)
-    return p
-
-
-def m_look(t):
-    k = (t % 4.0) / 4.0
-    yaw = 55 * math.sin(2 * math.pi * k)
-    p = m_idle(t)
-    p["Head"] = (6 * math.sin(4 * math.pi * k), 0, yaw)
-    p["Body"] = (0, 0, yaw * 0.15)
-    return p
-
-
-def swing(t, period):
-    k = (t % period) / period
-    if k < 0.45:  # wind-up
-        return sm(k / 0.45)
-    return 1 - sm((k - 0.45) / 0.3)  # strike, then hold low
-
-
-def m_mine(t):
-    a = swing(t, 0.42)
-    return {"Arm.R": (-(25 + 95 * a), 4, 4), "Arm.L": (-10, -3, 0),
-            "Head": (22, 0, 4), "Body": (4 + 4 * (1 - a), 0, 6 - 6 * a)}
-
-
-def m_attack(t):
-    a = swing(t, 0.6)
-    return {"Arm.R": (-(15 + 100 * a), 10 + 20 * a, -25 + 50 * a), "Arm.L": (-8, -6, 0),
-            "Head": (6, 0, -10 + 20 * a), "Body": (3, 0, -18 + 36 * a)}
-
-
-def m_jump(t):
-    period = 1.1
-    k = (t % period) / period
-    lift, crouch, arms = 0.0, 0.0, 0.0
-    if k < 0.2:
-        crouch = sm(k / 0.2)
-    elif k < 0.8:
-        u = (k - 0.2) / 0.6
-        lift = 1.25 * 4 * u * (1 - u)
-        crouch = 1 - sm(u / 0.25)
-        arms = math.sin(math.pi * u)
-    else:
-        crouch = math.sin(math.pi * (k - 0.8) / 0.2) * 0.6
-    return {"Body": (14 * crouch, 0, 0), "Head": (-10 * crouch, 0, 0),
-            "Arm.R": (20 * crouch - 30 * arms, 25 * arms, 0), "Arm.L": (20 * crouch - 30 * arms, -25 * arms, 0),
-            "Leg.R": (-25 * crouch - 15 * arms, 0, 0), "Leg.L": (-25 * crouch + 15 * arms, 0, 0),
-            "lift": lift - 0.08 * crouch}
-
-
-def m_cheer(t):
-    p = m_jump(t * 1.4)
-    p["lift"] *= 0.45
-    sh = 12 * math.sin(2 * math.pi * t * 3)
-    p["Arm.R"] = (-10, 160 + sh, 0)
-    p["Arm.L"] = (-10, -160 + sh, 0)
-    p["Head"] = (-15, 0, 0)
-    return p
-
-
-def m_dance(t):
-    ph = 2 * math.pi * t / 0.5
-    s = math.sin(ph)
-    return {"Arm.R": (-20, 90 + 65 * s, 0), "Arm.L": (-20, -(90 - 65 * s), 0),
-            "Body": (0, 8 * math.sin(ph / 2), 15 * math.sin(ph / 2)),
-            "Head": (10 * math.sin(2 * ph), -8 * math.sin(ph / 2), 0),
-            "Leg.R": (-18 * max(0, s), 0, 0), "Leg.L": (-18 * max(0, -s), 0, 0),
-            "lift": 0.05 * abs(s)}
-
-
-def m_sit(t):
-    p = m_idle(t)
-    p["Leg.R"] = (-90, 0, 8)
-    p["Leg.L"] = (-90, 0, -8)
-    p["Arm.R"] = (-28, 4, 0)
-    p["Arm.L"] = (-28, -4, 0)
-    p["lift"] = -0.62
-    return p
-
-
-def m_bow(t):
-    k = (t % 2.5) / 2.5
-    a = sm(k / 0.3) if k < 0.6 else 1 - sm((k - 0.6) / 0.3)
-    return {"Body": (45 * a, 0, 0), "Head": (10 * a, 0, 0),
-            "Arm.R": (-8 * a, 2, 0), "Arm.L": (-8 * a, -2, 0)}
-
-
-def m_spin(t):
-    p = m_idle(t)
-    p["Arm.R"] = (0, 70, 0)
-    p["Arm.L"] = (0, -70, 0)
-    return p
-
-
-MOTIONS = {
-    "idle": m_idle, "walk": m_walk, "run": m_run, "sneak": m_sneak, "wave": m_wave,
-    "look": m_look, "mine": m_mine, "attack": m_attack, "jump": m_jump, "cheer": m_cheer,
-    "dance": m_dance, "sit": m_sit, "bow": m_bow, "spin": m_spin,
-}
-BONES = ["Body", "Head", "Arm.R", "Arm.L", "Leg.R", "Leg.L"]
-BLEND_S = 0.35
-
-
-def lerp_pose(a, b, f):
-    out = {}
-    for k in BONES:
-        va, vb = a.get(k, (0, 0, 0)), b.get(k, (0, 0, 0))
-        out[k] = tuple(x + (y - x) * f for x, y in zip(va, vb))
-    for k in ("lift", "speed", "turn"):
-        out[k] = a.get(k, 0.0) + (b.get(k, 0.0) - a.get(k, 0.0)) * f
-    return out
-
-
-SEGMENTS = []
-_t = 0.0
-for m in CFG["motions"]:
-    if m["id"] not in MOTIONS:
-        continue
-    d = max(0.2, float(m.get("seconds", 3)))
-    SEGMENTS.append((m["id"], _t, d))
-    _t += d
-if not SEGMENTS:
-    SEGMENTS = [("idle", 0.0, 3.0)]
-    _t = 3.0
-TOTAL = _t
-
-
-def pose_at(t):
-    for i, (mid, start, d) in enumerate(SEGMENTS):
-        if t < start + d or i == len(SEGMENTS) - 1:
-            local = t - start
-            p = lerp_pose(MOTIONS[mid](local), {}, 0)
-            if mid == "spin":  # whole turns only, so the next motion faces forward again
-                p["turn"] = 360.0 * max(1, round(d / 1.2)) * min(1.0, local / d)
-            if i > 0 and local < BLEND_S:
-                pm, ps, pd = SEGMENTS[i - 1]
-                prev = MOTIONS[pm](pd + local)
-                if pm == "spin":  # a spin always ends facing forward
-                    prev["turn"] = 0.0
-                p = lerp_pose(lerp_pose(prev, {}, 0), p, sm(local / BLEND_S))
-            return p
-    return {}
-
-
 def bone_quat(rig, name, vec):
-    """Character-space rotation (degrees, see conventions above) -> bone-local quaternion."""
+    """Character-space rotation (degrees, see bm_motions) -> bone-local quaternion."""
     x, y, z = (math.radians(a) for a in vec)
     Q = Matrix.Rotation(z, 3, "Z") @ Matrix.Rotation(y, 3, "Y") @ Matrix.Rotation(x, 3, "X")
     rest = rig.data.bones[name].matrix_local.to_3x3()
     return (rest.inverted() @ Q @ rest).to_quaternion()
 
 
-# --------------------------------------------------------------------------
-# bake animation
-# --------------------------------------------------------------------------
+def segments(actor):
+    segs, t = [], 0.0
+    for m in actor["motions"]:
+        if m.get("id") not in MO.MOTIONS:
+            continue
+        d = max(0.2, float(m.get("seconds", 3)))
+        segs.append((m["id"], t, d))
+        t += d
+    return segs or [("idle", 0.0, 3.0)]
+
+
+for a in ACTORS:
+    a["segs"] = segments(a)
+TOTAL = max(sum(d for _, _, d in a["segs"]) for a in ACTORS)
+
+
+def actor_state(a, t):
+    """Pose and heading change (deg) at time t; the last motion holds past its end."""
+    segs = a["segs"]
+    heading = 0.0
+    for i, (mid, start, d) in enumerate(segs):
+        last = i == len(segs) - 1
+        if t < start + d or last:
+            local = min(t - start, d) if mid in MO.TURNS or mid in ("fall_down", "die") else t - start
+            p = MO.motion_pose(mid, local, d)
+            if mid in MO.TURNS:
+                heading += MO.TURNS[mid] * MO.sm(min(1.0, local / d))
+            if i > 0 and local < MO.BLEND_S:
+                pm, ps, pd = segs[i - 1]
+                prev = MO.motion_pose(pm, pd if pm in ("fall_down", "die") else pd + local, pd)
+                if pm == "spin":
+                    prev["turn"] = 0.0
+                p = MO.lerp_pose(prev, p, MO.sm(local / MO.BLEND_S))
+            return p, heading
+        if mid in MO.TURNS:
+            heading += MO.TURNS[mid]
+    return {}, heading
+
+
 FPS = int(CFG["fps"])
 scene.render.fps = FPS
 FRAMES = max(1, int(round(TOTAL * FPS)))
 scene.frame_start = 1
 scene.frame_end = FRAMES
-stage("animating %d frames" % FRAMES)
-
-distance = 0.0
-prev_q = {}
-PATH = []  # (frame, y position)
+stage("animating %d frames, %d actors" % (FRAMES, len(ACTORS)))
 dt = 1.0 / FPS
-for f in range(1, FRAMES + 1):
-    t = (f - 1) * dt
-    p = pose_at(t)
-    if CFG["move"]:
-        distance += p.get("speed", 0.0) * dt
-    yaw = math.radians(p.get("turn", 0.0) % 360.0)
-    RIG.location = (0, -distance, p.get("lift", 0.0))
-    RIG.rotation_euler = (0, 0, yaw)
-    RIG.keyframe_insert("location", frame=f)
-    RIG.keyframe_insert("rotation_euler", frame=f)
-    PATH.append((f, -distance))
-    for name in BONES:
-        pb = RIG.pose.bones[name]
-        q = bone_quat(RIG, name, p.get(name, (0, 0, 0)))
-        if name in prev_q and prev_q[name].dot(q) < 0:
-            q.negate()
-        prev_q[name] = q
-        pb.rotation_quaternion = q
-        pb.keyframe_insert("rotation_quaternion", frame=f)
 
-# per-frame keys: linear avoids overshoot between samples; the spin wrap must not interpolate
-try:
-    fcurves = RIG.animation_data.action.fcurves
-except AttributeError:  # Blender 5 slotted actions
-    fcurves = []
-    act = RIG.animation_data.action
-    for layer in act.layers:
-        for strip in layer.strips:
-            for cb in strip.channelbags:
-                fcurves.extend(cb.fcurves)
-for fc in fcurves:
+
+def all_fcurves(obj):
+    act = obj.animation_data.action
+    try:
+        return list(act.fcurves)
+    except AttributeError:  # Blender 5 slotted actions
+        out = []
+        for layer in act.layers:
+            for strip in layer.strips:
+                for cb in strip.channelbags:
+                    out.extend(cb.fcurves)
+        return out
+
+
+for ai, a in enumerate(ACTORS):
+    rig, aw = build_character(a["name"], a.get("skin"), a.get("arms", "auto"))
+    a["rig"] = rig
+    if a.get("item") in ITEMS:
+        build_item(a["item"], rig, aw)
+    pos = Vector((float(a["x"]), -float(a["z"])))
+    base_heading = -float(a["yaw"])  # Minecraft yaw: 0 = south (+Z), 90 = west
+    g = ground_at(pos.x, pos.y, 0.0)
+    prev_q = {}
+    track = []  # per frame: (x, y, ground z, lift, heading deg)
+    for f in range(1, FRAMES + 1):
+        t = (f - 1) * dt
+        p, dh = actor_state(a, t)
+        heading = base_heading + dh
+        hr = math.radians(heading)
+        fwd = Vector((math.sin(hr), -math.cos(hr)))
+        if a.get("move", True):
+            pos += fwd * (p.get("speed", 0.0) * dt)
+        gt = ground_at(pos.x, pos.y, g)
+        g += (gt - g) * min(1.0, dt * 14)
+        oy = p.get("oy", 0.0)
+        off = Matrix.Rotation(hr, 3, "Z") @ Vector((0.0, oy, 0.0))
+        lift = p.get("lift", 0.0)
+        rig.location = (pos.x + off.x, pos.y + off.y, g + lift)
+        rig.rotation_euler = (math.radians(p.get("pitch", 0.0)), math.radians(p.get("roll", 0.0)),
+                              hr + math.radians(p.get("turn", 0.0) % 360.0))
+        rig.keyframe_insert("location", frame=f)
+        rig.keyframe_insert("rotation_euler", frame=f)
+        # where the body actually is (lying / flipping moves it away from the feet)
+        R = rig.rotation_euler.to_matrix()
+        c_off = R @ Vector((0, 0, 1.0)) - Vector((0, 0, 1.0))
+        track.append((rig.location.x + c_off.x, rig.location.y + c_off.y, g + c_off.z, lift, heading))
+        for name in MO.BONES:
+            pb = rig.pose.bones[name]
+            q = bone_quat(rig, name, p.get(name, (0, 0, 0)))
+            if name in prev_q and prev_q[name].dot(q) < 0:
+                q.negate()
+            prev_q[name] = q
+            pb.rotation_quaternion = q
+            pb.keyframe_insert("rotation_quaternion", frame=f)
+    a["track"] = track
+    # per-frame keys: linear avoids overshoot; angle wraps must not interpolate
+    for fc in all_fcurves(rig):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+        if fc.data_path == "rotation_euler":
+            pts = list(fc.keyframe_points)
+            for k0, k1 in zip(pts, pts[1:]):
+                if abs(k1.co[1] - k0.co[1]) > math.pi:
+                    k0.interpolation = "CONSTANT"
+
+PTS = [(x, y) for a in ACTORS for (x, y, *_r) in a["track"][::max(1, FPS // 4)]]
+XMIN, XMAX = min(p[0] for p in PTS), max(p[0] for p in PTS)
+YMIN, YMAX = min(p[1] for p in PTS), max(p[1] for p in PTS)
+log("BM_INFO duration %.2fs frames %d area %.1fx%.1fm" % (TOTAL, FRAMES, XMAX - XMIN, YMAX - YMIN))
+
+
+def near_path(x, y, r):
+    r2 = r * r
+    if any((x - px) ** 2 + (y - py) ** 2 < r2 for px, py in PTS):
+        return True
+    rc = min(r, 5.0) ** 2
+    return any((x - px) ** 2 + (y - py) ** 2 < rc for px, py in CAMPTS)
+
+
+# --------------------------------------------------------------------------
+# camera: baked per frame from the shot list
+# --------------------------------------------------------------------------
+cam_data = bpy.data.cameras.new("Camera")
+cam_data.lens = 50
+cam_data.sensor_fit = "VERTICAL"
+cam_data.sensor_height = 24
+cam_data.clip_start = 0.05
+cam_data.clip_end = 600
+cam = bpy.data.objects.new("Camera", cam_data)
+coll.objects.link(cam)
+scene.camera = cam
+cam.rotation_mode = "QUATERNION"
+
+PORTRAIT = CFG["resolution"][1] > CFG["resolution"][0]
+SHOTS = []
+_t = 0.0
+for s in (CFG.get("shots") or []):
+    d = max(0.2, float(s.get("seconds", 3)))
+    SHOTS.append(dict(s, start=_t, end=_t + d))
+    _t += d
+if not SHOTS:
+    SHOTS = [{"camera": CFG["camera"], "target": "all" if len(ACTORS) > 1 else 0,
+              "zoom": CFG["zoom"], "follow": CFG["follow"], "start": 0.0, "end": TOTAL}]
+else:
+    SHOTS[-1]["end"] = max(SHOTS[-1]["end"], TOTAL)
+
+
+def target_frames(shot):
+    tg = shot.get("target", "all")
+    if tg == "all" or tg is None:
+        return list(range(len(ACTORS)))
+    return [max(0, min(len(ACTORS) - 1, int(tg)))]
+
+
+def actor_point(ai, f):
+    x, y, g, lift, heading = ACTORS[ai]["track"][max(0, min(FRAMES - 1, f - 1))]
+    return Vector((x, y, g + 0.5 * lift)), heading
+
+
+def group_point(idx, f):
+    pts = [actor_point(i, f)[0] for i in idx]
+    c = sum(pts, Vector()) / len(pts)
+    spread = max(((p - q).length for p in pts for q in pts), default=0.0)
+    return c, spread
+
+
+def offsets(kind, d, k):
+    """Camera offset in the target's frame (facing -Y) and look height, k = 0..1 through the shot."""
+    look = 1.05
+    if kind == "front":
+        return Vector((0, -d, 1.3)), look
+    if kind == "side":
+        return Vector((d, 0, 1.2)), look
+    if kind == "back":
+        return Vector((0, d, 1.6)), look
+    if kind == "closeup":
+        return Vector((d * 0.25, -d * 0.42, 1.65)), 1.5
+    if kind == "low":
+        return Vector((d * 0.45, -d * 0.7, 0.25)), 1.25
+    if kind == "high":
+        return Vector((d * 0.5, -d * 0.55, 4.5)), look
+    if kind == "wide":
+        return Vector((d * 1.15, -d * 1.25, 3.5)), look
+    if kind == "top":
+        return Vector((0, 0.01, d * 1.6)), 0.5
+    if kind == "orbit":
+        a = math.radians(-60) + 2 * math.pi * k
+        return Vector((math.sin(a) * d, -math.cos(a) * d, 1.5)), look
+    if kind == "dolly_in":
+        e = MO.sm(k)
+        return Vector((d * 0.3, -d * (1.2 - 0.85 * e), 1.4 + 0.2 * e)), 1.05 + 0.4 * e
+    if kind == "dolly_out":
+        e = MO.sm(k)
+        return Vector((d * 0.3, -d * (0.35 + 0.85 * e), 1.6 - 0.2 * e)), 1.45 - 0.4 * e
+    if kind == "crane":
+        e = MO.sm(k)
+        return Vector((d * 0.6, -d * 0.7, 0.4 + 6.0 * e)), look
+    if kind == "track":
+        return Vector((d, -3.0 + 6.0 * k, 1.3)), look
+    return Vector((d * 0.68, -d * 0.72, 1.6)), look  # diagonal
+
+
+stage("placing camera (%d shots)" % len(SHOTS))
+CAMPTS = []
+prev_rot = None
+cut_frames = []
+for si, shot in enumerate(SHOTS):
+    f0 = int(round(shot["start"] * FPS)) + 1
+    f1 = min(FRAMES, int(round(shot["end"] * FPS)))
+    if f0 > FRAMES:
+        break
+    cut_frames.append(f0)
+    kind = shot.get("camera", "diagonal")
+    idx = target_frames(shot)
+    zoom = float(shot.get("zoom", 1.0)) or 1.0
+    follow = shot.get("follow", True)
+    h0 = actor_point(idx[0], f0)[1]
+    R0 = Matrix.Rotation(math.radians(h0), 3, "Z")
+    spread = max(group_point(idx, f)[1] for f in range(f0, f1 + 1, max(1, FPS // 4)))
+    d = 7.0 / zoom * (1.35 if PORTRAIT else 1.0) * max(1.0, (spread + 1.5) / 2.5)
+    mid = (f0 + f1) // 2
+    fixed_c = group_point(idx, mid)[0]
+    if not follow:
+        span = max((group_point(idx, f)[0] - fixed_c).length for f in (f0, f1))
+        d *= 1 + span / 6
+    for f in range(f0, f1 + 1):
+        k = (f - f0) / max(1, f1 - f0)
+        c = group_point(idx, f)[0]
+        if kind == "pov":
+            p0, hd = actor_point(idx[0], f)
+            hr = math.radians(hd)
+            fwd = Vector((math.sin(hr), -math.cos(hr), 0))
+            pos = p0 + fwd * 0.3 + Vector((0, 0, 1.62))
+            look_at = pos + fwd * 5 + Vector((0, 0, -0.35))
+        elif kind == "over_shoulder":
+            p0, hd = actor_point(idx[0], f)
+            others = [actor_point(i, f)[0] for i in range(len(ACTORS)) if i != idx[0]]
+            if others:
+                other = sum(others, Vector()) / len(others)
+                look_at = other + Vector((0, 0, 1.3))
+            else:
+                hr = math.radians(hd)
+                other = p0 + Vector((math.sin(hr), -math.cos(hr), 0)) * 6
+                look_at = other + Vector((0, 0, 1.2))
+            back = (p0 - other).to_2d()
+            back = back.normalized() if back.length > 1e-3 else Vector((0, 1))
+            side = Vector((-back.y, back.x))
+            pos = p0 + Vector((back.x * 2.3 + side.x * 0.75, back.y * 2.3 + side.y * 0.75, 1.95))
+        else:
+            off, look_h = offsets(kind, d, k)
+            base = c if follow else fixed_c
+            off = R0 @ off
+            if CFG["background"] == "world":  # stay inside the loaded area so its cut edges stay off screen
+                lim = max(4.0, 0.6 * float(CFG["world"].get("radius", 32)))
+                hz = off.to_2d()
+                if hz.length > lim:
+                    hz *= lim / hz.length
+                    off = Vector((hz.x, hz.y, off.z))
+            pos = base + off
+            look_at = c + Vector((0, 0, look_h))
+        cam.location = pos
+        if f % max(1, FPS // 3) == 0 or f == f0:  # keep scenery out of the camera's way
+            for u in (0.0, 0.25, 0.5, 0.75):
+                pt = pos.lerp(look_at, u)
+                CAMPTS.append((pt.x, pt.y))
+        q = (look_at - pos).to_track_quat("-Z", "Y")
+        if prev_rot is not None and prev_rot.dot(q) < 0:
+            q.negate()
+        prev_rot = q
+        cam.rotation_quaternion = q
+        cam.keyframe_insert("location", frame=f)
+        cam.keyframe_insert("rotation_quaternion", frame=f)
+        if CFG["dof"]:
+            cam_data.dof.focus_distance = (look_at - pos).length
+            cam_data.dof.keyframe_insert("focus_distance", frame=f)
+for fc in all_fcurves(cam):
     for kp in fc.keyframe_points:
         kp.interpolation = "LINEAR"
-    if fc.data_path == "rotation_euler":
-        for a, b in zip(fc.keyframe_points, list(fc.keyframe_points)[1:]):
-            if abs(b.co[1] - a.co[1]) > math.pi:
-                a.interpolation = "CONSTANT"
+    for kp in fc.keyframe_points:  # hard cuts between shots
+        if int(round(kp.co[0])) + 1 in cut_frames[1:]:
+            kp.interpolation = "CONSTANT"
+if CFG["dof"]:
+    cam_data.dof.use_dof = True
+    cam_data.dof.aperture_fstop = 1.8
 
-TRAVEL = distance
-log("BM_INFO duration %.2fs frames %d travel %.2fm" % (TOTAL, FRAMES, TRAVEL))
 
 
 # --------------------------------------------------------------------------
-# world / background
+# world / sky / lights
 # --------------------------------------------------------------------------
-def world_gradient(horizon, zenith, strength=1.0, camera_color=None, light_color=None):
+def world_gradient(horizon, zenith, strength=1.0):
     w = bpy.data.worlds.new("World")
     scene.world = w
     w.use_nodes = True
@@ -753,6 +900,25 @@ def point(name, loc, energy, color, radius=0.1):
     return o
 
 
+TIME = CFG["time"]
+WEATHER = CFG["weather"]
+
+
+def sky_for_time(day=((0.78, 0.87, 1.0), (0.36, 0.56, 0.96))):
+    if TIME == "sunset":
+        world_gradient((1.0, 0.55, 0.32), (0.22, 0.27, 0.55))
+        sun(2.6, (82, 0, 60), (1.0, 0.62, 0.38), 2.0)
+    elif TIME == "night":
+        world_gradient((0.05, 0.07, 0.16), (0.005, 0.008, 0.03))
+        sun(0.35, (55, 0, -40), (0.6, 0.7, 1.0), 1.0)
+    else:
+        h, z = day
+        if WEATHER != "clear":
+            h, z = (0.62, 0.66, 0.72), (0.45, 0.5, 0.58)
+        world_gradient(h, z)
+        sun(1.6 if WEATHER != "clear" else 3.2, (50, 0, 35), (1, 1, 1), 8.0 if WEATHER != "clear" else 3.0)
+
+
 def tiled_plane(name, mat, x0, x1, y0, y1, z=0.0, axis="Z", normal_sign=1):
     """Axis-aligned rectangle with 1 texture repeat per metre."""
     if axis == "Z":
@@ -794,20 +960,19 @@ def block(name, loc, mats, size=1.0):
         me.from_pydata(vs, [], fs)
         me.update()
         uvl = me.uv_layers.new(name="UVMap")
-        quad = [(0, 0), (1, 0), (1, 1), (0, 1)]
         for poly, mi in zip(me.polygons, fm):
             poly.material_index = mi
-            for li, q in zip(poly.loop_indices, quad):
-                uvl.data[li].uv = q
         for m in mats:
             me.materials.append(m)
-        # fix the side UVs so textures stand upright
         for poly in me.polygons:
-            if abs(poly.normal.z) < 0.5:
-                vz = [me.vertices[me.loops[li].vertex_index].co for li in poly.loop_indices]
+            vz = [me.vertices[me.loops[li].vertex_index].co for li in poly.loop_indices]
+            if abs(poly.normal.z) < 0.5:  # sides: textures stand upright
                 horiz = Vector((-poly.normal.y, poly.normal.x, 0))
                 for li, co in zip(poly.loop_indices, vz):
                     uvl.data[li].uv = (horiz.dot(co) / size + 0.5, co.z / size + 0.5)
+            else:
+                for li, co in zip(poly.loop_indices, vz):
+                    uvl.data[li].uv = (co.x / size + 0.5, co.y / size + 0.5)
         _cube_cache[key] = me
     ob = bpy.data.objects.new(name, _cube_cache[key])
     coll.objects.link(ob)
@@ -815,14 +980,53 @@ def block(name, loc, mats, size=1.0):
     return ob
 
 
+def cross_plant(name, texname, loc, tint=None, height=0.9, emission=0.0):
+    m = tex_mat("M_" + texname + ("_t" if tint else ""), tex_path(texname), tint=tint, clip=True,
+                emission=emission)
+    vs, fs = [], []
+    for a in (45, 135):
+        c, s = math.cos(math.radians(a)) * 0.45, math.sin(math.radians(a)) * 0.45
+        b = len(vs)
+        vs += [(-c, -s, 0), (c, s, 0), (c, s, height), (-c, -s, height)]
+        fs.append((b, b + 1, b + 2, b + 3))
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(vs, [], fs)
+    me.update()
+    uvl = me.uv_layers.new(name="UVMap")
+    for poly in me.polygons:
+        for li, q in zip(poly.loop_indices, [(0, 0), (1, 0), (1, 1), (0, 1)]):
+            uvl.data[li].uv = q
+    me.materials.append(m)
+    ob = bpy.data.objects.new(name, me)
+    coll.objects.link(ob)
+    ob.location = loc
+    return ob
+
+
 GRASS_TINT = (0.475, 0.753, 0.353)
 LEAF_TINT = (0.467, 0.671, 0.184)
-Y_MIN = -TRAVEL - 30
-Y_MAX = 30
+SPRUCE_TINT = (0.380, 0.600, 0.380)
+M = 30  # margin around the action
+AX0, AX1, AY0, AY1 = XMIN - M, XMAX + M, YMIN - M, YMAX + M
 
 
-def tree(x, y, h=None):
+def tree(x, y, h=None, kind="oak"):
     h = h or random.choice((4, 5, 5, 6))
+    if kind == "spruce":
+        log_m = (tex_mat("M_spruce_top", tex_path("spruce_log_top")), tex_mat("M_spruce_log", tex_path("spruce_log")),
+                 tex_mat("M_spruce_top", tex_path("spruce_log_top")))
+        leaf = tex_mat("M_spruce_leaves", tex_path("spruce_leaves"), tint=SPRUCE_TINT, clip=True)
+        h += 2
+        for z in range(h):
+            block("log", (x, y, z + 0.5), log_m)
+        for z in range(2, h + 1):
+            r = max(0, min(2, (h - z) // 2)) if z < h else 0
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    if (dx or dy or z >= h) and abs(dx) + abs(dy) <= r + (z % 2):
+                        block("leaf", (x + dx, y + dy, z + 0.5), leaf)
+        block("leaf", (x, y, h + 0.5), leaf)
+        return
     log_m = (tex_mat("M_oak_top", tex_path("oak_log_top")), tex_mat("M_oak_log", tex_path("oak_log")),
              tex_mat("M_oak_top", tex_path("oak_log_top")))
     leaf = tex_mat("M_leaves", tex_path("oak_leaves"), tint=LEAF_TINT, clip=True)
@@ -839,102 +1043,192 @@ def tree(x, y, h=None):
                 block("leaf", (x + dx, y + dy, h + dz + 0.5), leaf)
 
 
-def cross_plant(name, texname, loc, tint=None):
-    m = tex_mat("M_" + texname, tex_path(texname), tint=tint, clip=True,
-                emission=2.0 if texname == "torch" else 0.0)
-    vs, fs = [], []
-    for a in (45, 135):
-        c, s = math.cos(math.radians(a)) * 0.45, math.sin(math.radians(a)) * 0.45
-        b = len(vs)
-        vs += [(-c, -s, 0), (c, s, 0), (c, s, 0.9), (-c, -s, 0.9)]
-        fs.append((b, b + 1, b + 2, b + 3))
-    me = bpy.data.meshes.new(name)
-    me.from_pydata(vs, [], fs)
-    me.update()
-    uvl = me.uv_layers.new(name="UVMap")
-    for poly in me.polygons:
-        for li, q in zip(poly.loop_indices, [(0, 0), (1, 0), (1, 1), (0, 1)]):
-            uvl.data[li].uv = q
-    me.materials.append(m)
-    ob = bpy.data.objects.new(name, me)
-    coll.objects.link(ob)
-    ob.location = loc
-    return ob
+def scatter(n_trees, tree_fn, n_small, small_fn):
+    placed = 0
+    for _ in range(n_trees * 6):
+        if placed >= n_trees:
+            break
+        x, y = random.randint(int(AX0), int(AX1)), random.randint(int(AY0), int(AY1))
+        if not near_path(x, y, 6):
+            tree_fn(x, y)
+            placed += 1
+    for _ in range(n_small):
+        x, y = random.randint(int(AX0), int(AX1)), random.randint(int(AY0), int(AY1))
+        if not near_path(x, y, 2.5):
+            small_fn(x + 0.5, y + 0.5)
 
 
-def scatter_outdoor():
-    ground = tex_mat("M_grass", tex_path("grass_block_top"), tint=GRASS_TINT)
-    tiled_plane("Ground", ground, -60, 60, Y_MIN - 40, Y_MAX + 40)
-    # trees and flowers, kept off the walking lane
-    y = Y_MAX
-    while y > Y_MIN:
-        for side in (-1, 1):
-            if random.random() < 0.55:
-                tree(side * random.randint(6, 16), round(y + random.uniform(-3, 3)))
-        y -= random.uniform(5, 9)
-    for _ in range(int((Y_MAX - Y_MIN) * 3)):
-        x = random.randint(-14, 14)
-        if -2 < x < 8:  # keep the walking lane and the usual camera side clear
-            continue
-        yy = random.randint(int(Y_MIN), int(Y_MAX))
+def area_trees(density):
+    return int((AX1 - AX0) * (AY1 - AY0) * density)
+
+
+def bg_grass():
+    sky_for_time()
+    tiled_plane("Ground", tex_mat("M_grass", tex_path("grass_block_top"), tint=GRASS_TINT), AX0 - 40, AX1 + 40, AY0 - 40, AY1 + 40)
+
+    def small(x, y):
         r = random.random()
         if r < 0.7:
-            cross_plant("grass", "short_grass", (x, yy, 0), GRASS_TINT)
+            cross_plant("grass", "short_grass", (x, y, 0), GRASS_TINT)
         elif r < 0.85:
-            cross_plant("poppy", "poppy", (x, yy, 0))
+            cross_plant("poppy", "poppy", (x, y, 0))
         else:
-            cross_plant("dandelion", "dandelion", (x, yy, 0))
+            cross_plant("dandelion", "dandelion", (x, y, 0))
+    scatter(area_trees(0.012), tree, area_trees(0.25), small)
 
 
-def build_cave():
+def bg_desert():
+    sky_for_time(((0.95, 0.88, 0.75), (0.45, 0.62, 0.95)))
+    tiled_plane("Ground", tex_mat("M_sand", tex_path("sand")), AX0 - 40, AX1 + 40, AY0 - 40, AY1 + 40)
+    cm = (tex_mat("M_cactus_top", tex_path("cactus_top")), tex_mat("M_cactus_side", tex_path("cactus_side"), clip=True),
+          tex_mat("M_cactus_top", tex_path("cactus_top")))
+
+    def cactus(x, y):
+        for z in range(random.randint(1, 3)):
+            block("cactus", (x, y, z + 0.5), cm, size=0.875)
+    scatter(area_trees(0.01), cactus, area_trees(0.03), lambda x, y: cross_plant("dead_bush", "dead_bush", (x, y, 0)))
+
+
+def bg_snow():
+    sky_for_time(((0.85, 0.9, 0.98), (0.55, 0.68, 0.92)))
+    tiled_plane("Ground", tex_mat("M_snow", tex_path("snow")), AX0 - 40, AX1 + 40, AY0 - 40, AY1 + 40)
+    scatter(area_trees(0.014), lambda x, y: tree(x, y, kind="spruce"), 0, None)
+
+
+def bg_nether():
+    world_gradient((0.22, 0.04, 0.03), (0.06, 0.01, 0.01))
+    sun(0.6, (60, 0, 20), (1.0, 0.5, 0.35), 20.0)
+    tiled_plane("Ground", tex_mat("M_netherrack", tex_path("netherrack")), AX0 - 40, AX1 + 40, AY0 - 40, AY1 + 40)
+    lava = tex_mat("M_lava", tex_path("lava_still"), emission=2.5)
+
+    def pool(x, y):
+        w, d = random.randint(2, 5), random.randint(2, 5)
+        tiled_plane("Lava", lava, x, x + w, y, y + d, z=0.01)
+        point("LavaGlow", (x + w / 2, y + d / 2, 1.0), 120, (1.0, 0.45, 0.15), 1.5)
+    gs = tex_mat("M_glowstone", tex_path("glowstone"), emission=2.0)
+
+    def pillar(x, y):
+        for z in range(random.randint(2, 6)):
+            block("netherrack", (x, y, z + 0.5), tex_mat("M_netherrack", tex_path("netherrack")))
+        block("glowstone", (x, y, 6.5), gs)
+    scatter(area_trees(0.003), pool, area_trees(0.04),
+            lambda x, y: cross_plant("fungus", "crimson_fungus", (x, y, 0)))
+    scatter(area_trees(0.004), pillar, 0, None)
+    point("Fill", ((XMIN + XMAX) / 2, (YMIN + YMAX) / 2 - 4, 4), 200, (1.0, 0.6, 0.4), 3)
+
+
+def bg_end():
+    world_gradient((0.07, 0.04, 0.1), (0.01, 0.0, 0.02))
+    sun(0.8, (40, 0, 30), (0.85, 0.8, 1.0), 10.0)
+    tiled_plane("Ground", tex_mat("M_end_stone", tex_path("end_stone")), AX0 - 20, AX1 + 20, AY0 - 20, AY1 + 20)
+    obs = tex_mat("M_obsidian", tex_path("obsidian"))
+    for i in range(6):
+        a = 2 * math.pi * i / 6
+        cx = (XMIN + XMAX) / 2 + math.cos(a) * 28
+        cy = (YMIN + YMAX) / 2 + math.sin(a) * 28
+        h = random.randint(14, 30)
+        for z in range(h):
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if abs(dx) + abs(dy) < 2 or z % 3 == 0:
+                        block("obsidian", (round(cx) + dx, round(cy) + dy, z + 0.5), obs)
+    point("Fill", ((XMIN + XMAX) / 2, (YMIN + YMAX) / 2 - 4, 4), 150, (0.8, 0.7, 1.0), 3)
+
+
+def bg_cave():
+    world_gradient((0.02, 0.02, 0.025), (0.01, 0.01, 0.012), 1.0)
     stone = tex_mat("M_stone_floor", tex_path("stone"))
     wall = tex_mat("M_stone_wall", tex_path("stone"), hide_backface=True)
-    half, hgt = 4, 5
-    y0, y1 = Y_MIN, Y_MAX
-    tiled_plane("Floor", stone, -half, half, y0, y1)
-    tiled_plane("Ceiling", wall, -half, half, y0, y1, z=hgt, normal_sign=-1)
+    hgt = 5
+    x0, x1 = XMIN - 4, XMAX + 4
+    y0, y1 = YMIN - 12, YMAX + 12
+    tiled_plane("Floor", stone, x0, x1, y0, y1)
+    tiled_plane("Ceiling", wall, x0, x1, y0, y1, z=hgt, normal_sign=-1)
     # wall normals point inwards; seen from outside they are back faces and vanish
-    tiled_plane("WallR", wall, y0, y1, 0, hgt, z=-half, axis="X", normal_sign=1)
-    tiled_plane("WallL", wall, y0, y1, 0, hgt, z=half, axis="X", normal_sign=-1)
-    tiled_plane("WallBack", wall, -half, half, 0, hgt, z=y1, axis="Y", normal_sign=1)
-    tiled_plane("WallFront", wall, -half, half, 0, hgt, z=y0, axis="Y", normal_sign=-1)
+    tiled_plane("WallR", wall, y0, y1, 0, hgt, z=x0, axis="X", normal_sign=1)
+    tiled_plane("WallL", wall, y0, y1, 0, hgt, z=x1, axis="X", normal_sign=-1)
+    tiled_plane("WallBack", wall, x0, x1, 0, hgt, z=y1, axis="Y", normal_sign=1)
+    tiled_plane("WallFront", wall, x0, x1, 0, hgt, z=y0, axis="Y", normal_sign=-1)
     ores = [tex_mat("M_" + n, tex_path(n), hide_backface=True) for n in ("coal_ore", "iron_ore", "diamond_ore")]
     y = y1 - 1
     while y > y0 + 1:
-        for side in (-1, 1):
+        for xw, side in ((x0, -1), (x1, 1)):
             if random.random() < 0.6:
                 z = random.randint(0, hgt - 1)
                 yy = round(y)
                 tiled_plane("Ore", random.choice(ores), yy, yy + 1, z, z + 1,
-                            z=side * (half - 0.002), axis="X", normal_sign=-side)
+                            z=xw - side * 0.002, axis="X", normal_sign=-side)
         y -= random.uniform(1.5, 4)
     y = y1 - 3
     while y > y0 + 2:
-        for side in (-1, 1):
-            point("CaveTorch", (side * (half - 0.4), y, 2.8), 60, (1.0, 0.7, 0.35), 0.15)
-            cross_plant("torch", "torch", (side * (half - 0.25), y, 2.2))
+        for xw, side in ((x0, -1), (x1, 1)):
+            point("CaveTorch", (xw - side * 0.4, y, 2.8), 60, (1.0, 0.7, 0.35), 0.15)
+            cross_plant("torch", "torch", (xw - side * 0.25, y, 2.2), emission=2.0)
         y -= 7
 
 
-BG = CFG["background"]
+def bg_world():
+    dim = CFG["world"].get("dimension", "overworld")
+    if dim == "nether":
+        world_gradient((0.22, 0.04, 0.03), (0.06, 0.01, 0.01))
+        sun(0.4, (60, 0, 20), (1.0, 0.5, 0.35), 20.0)
+    elif dim == "end":
+        world_gradient((0.07, 0.04, 0.1), (0.01, 0.0, 0.02))
+        sun(0.6, (40, 0, 30), (0.85, 0.8, 1.0), 10.0)
+    else:
+        sky_for_time()
+    W = WORLD
+    stage("building world mesh")
+    mats, keys = [], sorted(W["materials"].items(), key=lambda kv: kv[1])
+    for (tex, tint, kind, emission), idx in keys:
+        path = W["assets"].texture(tex)
+        if path is None:
+            m = color_mat("W_missing", (0.6, 0.6, 0.6))
+        else:
+            name = "W_" + os.path.basename(path)[:-4] + ("_t" if tint else "")
+            translucent = any(w in tex for w in ("water", "stained_glass", "ice", "slime", "honey"))
+            img = image(path)
+            m = tex_mat(name, path, tint=tint, emission=emission,
+                        alpha=(0.75 if "water" in tex else 0.85) if translucent else None,
+                        clip=(not translucent) and image_has_alpha(img))
+        mats.append(m)
+    verts, uvs, fm = W["verts"], W["uvs"], W["faces_mat"]
+    me = bpy.data.meshes.new("World")
+    nf = len(fm)
+    me.vertices.add(len(verts))
+    me.vertices.foreach_set("co", [c for v in verts for c in v])
+    me.loops.add(nf * 4)
+    me.loops.foreach_set("vertex_index", list(range(nf * 4)))
+    me.polygons.add(nf)
+    me.polygons.foreach_set("loop_start", list(range(0, nf * 4, 4)))
+    me.polygons.foreach_set("loop_total", [4] * nf)
+    me.polygons.foreach_set("material_index", fm)
+    uvl = me.uv_layers.new(name="UVMap")
+    uvl.data.foreach_set("uv", [c for uv in uvs for c in uv])
+    for m in mats:
+        me.materials.append(m)
+    me.update(calc_edges=True)
+    me.validate()
+    ob = bpy.data.objects.new("World", me)
+    coll.objects.link(ob)
+    # lights for torches & co, the ones nearest to the action first
+    cx, cy = (XMIN + XMAX) / 2, (YMIN + YMAX) / 2
+    lamps = sorted(W["lights"], key=lambda l: (l[0] - cx) ** 2 + (l[1] - cy) ** 2)[:40]
+    for (x, y, z, name) in lamps:
+        col = (0.45, 0.75, 1.0) if "soul" in name else (1.0, 0.72, 0.4)
+        point("BlockLight", (x, y, z), 30 if TIME != "day" or dim != "overworld" else 12, col, 0.2)
+
+
+BUILDERS = {"grass": bg_grass, "desert": bg_desert, "snow": bg_snow, "nether": bg_nether, "end": bg_end,
+            "cave": bg_cave, "world": bg_world}
 stage("building background: " + BG)
 scene.render.film_transparent = False
-if BG == "grass":
-    world_gradient((0.78, 0.87, 1.0), (0.36, 0.56, 0.96), 1.0)
-    sun(3.2, (50, 0, 35))
-    scatter_outdoor()
-elif BG == "night":
-    world_gradient((0.05, 0.07, 0.16), (0.005, 0.008, 0.03), 1.0)
-    sun(0.35, (55, 0, -40), (0.6, 0.7, 1.0), 1.0)
-    scatter_outdoor()
-elif BG == "cave":
-    world_gradient((0.02, 0.02, 0.025), (0.01, 0.01, 0.012), 1.0)
-    build_cave()
+if BG in BUILDERS:
+    BUILDERS[BG]()
 elif BG == "studio":
     c = tuple(CFG["bg_color"])
     world_split(c, (1, 1, 1), 0.45)
-    floor = color_mat("M_floor", c)
-    tiled_plane("Floor", floor, -200, 200, -200 - TRAVEL, 200)
+    tiled_plane("Floor", color_mat("M_floor", c), AX0 - 200, AX1 + 200, AY0 - 200, AY1 + 200)
     sun(2.4, (45, 0, 30))
 elif BG == "greenscreen":
     world_split((0.0, 1.0, 0.0), (1, 1, 1), 0.45)
@@ -946,94 +1240,156 @@ else:  # transparent
 
 
 # --------------------------------------------------------------------------
-# camera
+# weather (particles)
 # --------------------------------------------------------------------------
-cam_data = bpy.data.cameras.new("Camera")
-cam_data.lens = 50
-cam_data.sensor_fit = "VERTICAL"
-cam_data.sensor_height = 24
-cam_data.clip_end = 500
-cam = bpy.data.objects.new("Camera", cam_data)
-coll.objects.link(cam)
-scene.camera = cam
+def add_weather(kind):
+    w, d = (AX1 - AX0) + 20, (AY1 - AY0) + 20
+    bpy.ops.mesh.primitive_plane_add(size=1, location=((AX0 + AX1) / 2, (AY0 + AY1) / 2, 18))
+    em = bpy.context.active_object
+    em.name = "WeatherEmitter"
+    em.scale = (w, d, 1)
+    if kind == "rain":
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, -50))
+        drop = bpy.context.active_object
+        drop.scale = (0.015, 0.015, 0.35)
+        drop.data.materials.append(flat_mat("M_rain", (0.75, 0.82, 0.95), 0.45))
+    else:
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, -50))
+        drop = bpy.context.active_object
+        drop.scale = (0.1, 0.1, 0.1)
+        drop.data.materials.append(flat_mat("M_snowflake", (1, 1, 1), 0.95))
+    drop.name = "WeatherDrop"
+    camera_only(drop)
+    drop.hide_render = False
+    ps_mod = em.modifiers.new("Weather", "PARTICLE_SYSTEM")
+    ps = ps_mod.particle_system.settings
+    life = 40 if kind == "rain" else 400
+    ps.count = int(w * d * (3.0 if kind == "rain" else 0.9))
+    ps.frame_start = -life
+    ps.frame_end = FRAMES + 1
+    ps.lifetime = life
+    ps.emit_from = "FACE"
+    ps.normal_factor = -14.0 if kind == "rain" else -1.2
+    ps.effector_weights.gravity = 0.0
+    if kind == "snow":
+        ps.brownian_factor = 0.6
+    ps.render_type = "OBJECT"
+    ps.instance_object = drop
+    ps.particle_size = 1.0
+    ps.use_rotations = kind == "rain"
+    if kind == "rain":
+        ps.rotation_mode = "VEL"
+        ps.rotation_factor_random = 0.0
+    em.show_instancer_for_render = False
+    em.show_instancer_for_viewport = False
+    camera_only(em)
 
-pivot = bpy.data.objects.new("CameraPivot", None)
-coll.objects.link(pivot)
-target = bpy.data.objects.new("CameraTarget", None)
-coll.objects.link(target)
-cam.parent = pivot
 
-CAM = CFG["camera"]
-zoom = float(CFG.get("zoom", 1.0)) or 1.0
-dist = 7.0 / zoom
-if CFG["resolution"][1] > CFG["resolution"][0]:  # portrait frames need more headroom
-    dist *= 1.35
-look_h = 1.05
-presets = {
-    "front": (0, -dist, 1.3),
-    "diagonal": (dist * 0.68, -dist * 0.72, 1.6),
-    "side": (dist, 0, 1.2),
-    "back": (0, dist, 1.6),
-    "closeup": (dist * 0.25, -dist * 0.42, 1.65),
-    "low": (dist * 0.45, -dist * 0.7, 0.25),
-    "high": (dist * 0.5, -dist * 0.55, 4.5),
-}
-if CAM == "closeup":
-    look_h = 1.5
-if CAM == "low":
-    look_h = 1.25
+if WEATHER in ("rain", "snow") and BG not in ("cave", "studio", "greenscreen", "transparent"):
+    add_weather(WEATHER)
 
-follow = bool(CFG["follow"])
-# the pivot rides along with the character (or stays at the start)
-if follow:
-    c = pivot.constraints.new("COPY_LOCATION")
-    c.target = RIG
-    c.use_z = False
-tc = target.constraints.new("COPY_LOCATION")
-tc.target = RIG
-tc.use_z = False
-target.location = (0, 0, 0)
-tc.use_offset = False
-tz = target.constraints.new("COPY_LOCATION")  # follow jumps / sitting halfway
-tz.target = RIG
-tz.use_x = tz.use_y = False
-tz.influence = 0.5
-target_off = bpy.data.objects.new("CameraLook", None)
-coll.objects.link(target_off)
-target_off.parent = target
-target_off.location = (0, 0, look_h)
 
-if CAM == "orbit":
-    turns = max(0.5, min(1.0, TOTAL / 8))
-    step = max(1, FRAMES // 48)
-    for f in list(range(1, FRAMES + 1, step)) + [FRAMES]:
-        k = (f - 1) / max(1, FRAMES - 1)
-        a = math.radians(-60) + 2 * math.pi * turns * k
-        cam.location = (math.sin(a) * dist, -math.cos(a) * dist, 1.5)
-        cam.keyframe_insert("location", frame=f)
-else:
-    cam.location = presets.get(CAM, presets["diagonal"])
-
-if BG in ("cave", "night"):
-    fill = point("CameraFill", (0, 0, 0), 120 if BG == "cave" else 40, (1.0, 0.92, 0.82), 1.5)
+if BG in ("cave",) or TIME == "night" or (BG == "world" and CFG["world"].get("dimension") != "overworld"):
+    fill = point("CameraFill", (0, 0, 0), 120 if BG == "cave" else 90, (1.0, 0.92, 0.82), 1.5)
     fill.parent = cam
     fill.location = (0.8, 0.6, 0)
+    camera_only(fill)
 
-trk = cam.constraints.new("TRACK_TO")
-trk.target = target_off
-trk.track_axis = "TRACK_NEGATIVE_Z"
-trk.up_axis = "UP_Y"
-if not follow and TRAVEL > 0.5:
-    # a fixed camera framed on the middle of the walk
-    pivot.location = (0, -TRAVEL / 2, 0)
-    cam.location = Vector(cam.location) * (1 + TRAVEL / 12)
+
+# --------------------------------------------------------------------------
+# overlays: letterbox, title, subtitles (objects in front of the lens)
+# --------------------------------------------------------------------------
+RW, RH = int(CFG["resolution"][0]), int(CFG["resolution"][1])
+OD = 0.5  # overlay distance in front of the lens
+HALF_H = OD * (cam_data.sensor_height / 2) / cam_data.lens
+HALF_W = HALF_H * RW / RH
+
+
+def overlay_plane(name, x0, x1, y0, y1, mat):
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([(x0, y0, -OD), (x1, y0, -OD), (x1, y1, -OD), (x0, y1, -OD)], [], [(0, 1, 2, 3)])
+    me.materials.append(mat)
+    ob = bpy.data.objects.new(name, me)
+    coll.objects.link(ob)
+    ob.parent = cam
+    camera_only(ob)
+    return ob
+
+
+def find_font():
+    cands = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", f)
+             for f in ("YuGothB.ttc", "meiryob.ttc", "meiryo.ttc", "BIZ-UDGothicB.ttc", "msgothic.ttc")]
+    cands += ["/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+              "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc",
+              "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc"]
+    for p in cands:
+        if os.path.exists(p):
+            try:
+                return bpy.data.fonts.load(p)
+            except Exception:
+                continue
+    return None
+
+
+_font = [None, False]
+
+
+def text_obj(name, body, size, y, start, end, color=(1, 1, 1)):
+    if not _font[1]:
+        _font[0], _font[1] = find_font(), True
+    objs = []
+    for shadow in (True, False):
+        cu = bpy.data.curves.new(name + ("_shadow" if shadow else ""), "FONT")
+        cu.body = body
+        if _font[0]:
+            cu.font = _font[0]
+        cu.align_x = "CENTER"
+        cu.align_y = "CENTER"
+        cu.size = size
+        ob = bpy.data.objects.new(cu.name, cu)
+        coll.objects.link(ob)
+        ob.parent = cam
+        off = size * 0.06 if shadow else 0.0
+        ob.location = (off, y - off, -OD + (0.0 if shadow else 0.0005))
+        ob.data.materials.append(flat_mat("M_" + cu.name, (0, 0, 0) if shadow else color))
+        camera_only(ob)
+        # visible only between start and end
+        f0, f1 = max(1, int(start * FPS) + 1), int(end * FPS) + 1
+        keys = [(1, f0 > 1)] + ([(f0, False)] if f0 > 1 else []) + [(f1, True)]
+        for fr, hidden in keys:
+            ob.hide_render = hidden
+            ob.hide_viewport = hidden
+            ob.keyframe_insert("hide_render", frame=fr)
+            ob.keyframe_insert("hide_viewport", frame=fr)
+        objs.append(ob)
+    return objs
+
+
+bar = 0.0
+if CFG["letterbox"]:
+    target_h = HALF_W / 2.39
+    bar = max(0.0, HALF_H - target_h)
+    if bar > 0:
+        black = flat_mat("M_letterbox", (0, 0, 0))
+        overlay_plane("LetterboxTop", -HALF_W * 1.1, HALF_W * 1.1, HALF_H - bar, HALF_H * 1.1, black)
+        overlay_plane("LetterboxBottom", -HALF_W * 1.1, HALF_W * 1.1, -HALF_H * 1.1, -HALF_H + bar, black)
+if CFG.get("title"):
+    text_obj("Title", CFG["title"], HALF_H * 0.42, 0.0, 0.0, float(CFG.get("title_seconds", 2.5)))
+for i, sub in enumerate(CFG.get("subtitles") or []):
+    if not sub.get("text"):
+        continue
+    size = HALF_H * (0.2 if not PORTRAIT else 0.12)
+    y = -HALF_H + max(bar, 0) + size * (1.6 if bar else 2.2)
+    if bar:
+        y = -HALF_H + bar / 2  # inside the bottom bar
+    text_obj("Subtitle%d" % i, sub["text"], size, y, float(sub.get("start", 0)), float(sub.get("end", 2)))
 
 
 # --------------------------------------------------------------------------
 # render settings
 # --------------------------------------------------------------------------
 r = scene.render
-r.resolution_x, r.resolution_y = int(CFG["resolution"][0]), int(CFG["resolution"][1])
+r.resolution_x, r.resolution_y = RW, RH
 r.resolution_percentage = 100
 try:
     scene.view_settings.view_transform = "Standard"
@@ -1120,6 +1476,7 @@ if CFG["save_blend"] and CFG.get("preview_frame") is None:
     log("BM_FILE blend", path)
 
 _done = [0]
+TOTAL_RENDER = 1
 
 
 def on_frame(sc, *_):

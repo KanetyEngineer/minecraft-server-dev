@@ -24,18 +24,19 @@ jobs:
       - name: Install build tools
         run: python -m pip install pyinstaller==6.11.1 pillow
       - name: Syntax check
-        run: python -m py_compile app/blockmotion.py blender/generate.py
+        run: python -m py_compile app/blockmotion.py blender/generate.py blender/bm_motions.py blender/bm_world.py
       - name: Build exe
         run: >
           pyinstaller --noconfirm --windowed --name BlockMotion
           --icon assets/icon.ico
-          --add-data "blender;blender" --add-data "assets;assets"
+          --paths blender --add-data "blender;blender" --add-data "assets;assets"
           app/blockmotion.py
       - name: Smoke test (exe starts and finds its files)
         shell: pwsh
         run: |
           $p = Start-Process dist/BlockMotion/BlockMotion.exe -ArgumentList "--version" -PassThru -Wait
           if (!(Test-Path dist/BlockMotion/_internal/blender/generate.py)) { throw "generate.py missing" }
+          if (!(Test-Path dist/BlockMotion/_internal/blender/bm_world.py)) { throw "bm_world.py missing" }
           if (!(Test-Path dist/BlockMotion/_internal/assets/textures/stone.png)) { throw "assets missing" }
       - name: Package
         shell: pwsh
