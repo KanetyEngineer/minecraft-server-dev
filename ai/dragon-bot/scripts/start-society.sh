@@ -15,6 +15,6 @@ stop_all() {
 stop_all
 [ "$1" = "stop" ] && { echo "町を止めました"; exit 0; }
 mkdir -p society/town society/data society/logs
-nohup node scripts/society-world.mjs >> society/world.log 2>&1 &
+nohup node --env-file=.env scripts/society-world.mjs >> society/world.log 2>&1 &
 echo "町の管理役を起動しました（ログ: society/world.log）"
 echo "町のダッシュボード: node scripts/society-dashboard.mjs → http://localhost:3300/"

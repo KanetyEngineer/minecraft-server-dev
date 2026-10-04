@@ -129,6 +129,23 @@ console.log(`町の管理役を開始（1 年 = ${YEAR_MS / 60_000} 分、住人
 let delay = 0;
 for (const p of Object.values(world.people)) if (p.alive) { setTimeout(() => start(p), delay); delay += 3000; }
 setTimeout(() => setInterval(tick, 10_000), delay);
+
+// 録画の見張り（1 分ごと）: ServerReplay が町を録画していなければ（鯖の再起動などで止まったら）録画を始め直す。
+// 録画の範囲は広場のまわり半径 8 チャンク（128 マス）。SOCIETY_RECORD=0 で見張らない
+async function watchRecording() {
+  try {
+    const [st] = await rconSend(['replay status']);
+    if (/Currently Recording Chunks/.test(st ?? '') && !/Not Currently Recording Chunks/.test(st ?? '')) return;
+    // 録画の中心は広場（住人の公開情報の plaza。まだ無ければ録画しない）
+    const plaza = fs.readdirSync(TOWN).filter((f) => f.endsWith('.json') && f !== 'world.json').map((f) => readJson(path.join(TOWN, f))?.plaza).find(Boolean);
+    if (!plaza) return;
+    const [r] = await rconSend([`replay start chunks around ${Math.floor(plaza.x / 16)} ${Math.floor(plaza.z / 16)} radius 8`]);
+    event('record', `録画が止まっていたので始め直した（${String(r ?? '').slice(0, 60)}）`);
+  } catch (e) {
+    console.error(`録画の確認に失敗: ${e.message}`);
+  }
+}
+if (process.env.SOCIETY_RECORD !== '0') { setTimeout(watchRecording, 20_000); setInterval(watchRecording, 60_000); }
 const shutdown = () => { stopping = true; for (const n of [...procs.keys()]) stop(n); setTimeout(() => process.exit(0), 1000); };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
