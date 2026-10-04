@@ -1,0 +1,15 @@
+{
+  "carpet.category.solaria": "solaria",
+  "carpet.rule.potionDupe.desc": "Brings back the 1.21.1 potion duplication: a thrown potion that goes through a nether portal still splashes in the old dimension",
+  "carpet.rule.potionDupe.extra.0": "Uses the 1.21.1 projectile tick order, honey block sliding, hit margin and 300 tick portal cooldown",
+  "carpet.rule.potionDupeScope.desc": "Which projectiles potionDupe applies to",
+  "carpet.rule.potionDupeScope.extra.0": "potions: splash and lingering potions, all: every thrown projectile except ender pearls",
+  "carpet.rule.potionDupeHitAfterPortal.desc": "potionDupe part: the projectile still hits in the tick it went through a portal",
+  "carpet.rule.potionDupeLegacyPortalCooldown.desc": "potionDupe part: 300 tick portal cooldown for projectiles (1.21.2+ uses 2)",
+  "carpet.rule.potionDupeLegacyPhysics.desc": "potionDupe part: 1.21.1 tick order, honey block sliding and hit margin",
+  "carpet.rule.lightSuppression.desc": "Lets old light suppressors work: the light engine handles only a limited number of light tasks per tick",
+  "carpet.rule.lightSuppression.extra.0": "A machine that makes more light updates than that builds up a queue, so other light updates wait behind it",
+  "carpet.rule.lightSuppression.extra.1": "Light updates still queued when the server stops are lost, as in old versions. Chunk loading also waits while suppressed",
+  "carpet.rule.lightSuppressionTasksPerTick.desc": "Light tasks handled per tick while lightSuppression is on (rounded up to batches of 1000)",
+  "carpet.rule.lightSuppressionTasksPerTick.extra.0": "Lower makes suppressors easier to build, higher keeps normal lighting faster"
+}

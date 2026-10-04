@@ -1,9 +1,9 @@
-name: solaria-tweaks
+name: solaria-carpet
 on:
   push:
-    paths: ['mods/solaria-tweaks/**', '.github/workflows/solaria-tweaks.yml']
+    paths: ['mods/solaria-carpet/**', '.github/workflows/solaria-carpet.yml']
   pull_request:
-    paths: ['mods/solaria-tweaks/**', '.github/workflows/solaria-tweaks.yml']
+    paths: ['mods/solaria-carpet/**', '.github/workflows/solaria-carpet.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -17,20 +17,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: current }
       - name: Build
-        working-directory: mods/solaria-tweaks
+        working-directory: mods/solaria-carpet
         run: gradle --no-daemon build 2>&1 | tee /tmp/build.log
       - name: Mixin target warnings
         if: always()
         run: grep -iE "mixin|cannot find|unable to locate|no refMap" /tmp/build.log || echo "none"
       - uses: actions/upload-artifact@v4
         with:
-          name: solaria-tweaks
-          path: mods/solaria-tweaks/build/libs/*.jar
+          name: solaria-carpet
+          path: mods/solaria-carpet/build/libs/*.jar
       - name: Publish jars to solaria-dist branch
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p /tmp/dist
-          JAR=$(ls mods/solaria-tweaks/build/libs/*.jar | grep -v sources | head -1)
+          JAR=$(ls mods/solaria-carpet/build/libs/*.jar | grep -v sources | head -1)
           cp "$JAR" /tmp/dist/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -41,7 +41,7 @@ jobs:
             git switch --orphan solaria-dist
           fi
           git clean -fdxq
-          rm -f solaria-tweaks-*.jar
+          rm -f solaria-carpet-*.jar
           cp -r /tmp/dist/* .
-          echo "Built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD.txt
-          git add -A && git commit -qm "solaria-tweaks build ${GITHUB_SHA::7}" && git push origin solaria-dist
+          echo "solaria-carpet built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD-carpet.txt
+          git add -A && git commit -qm "solaria-carpet build ${GITHUB_SHA::7}" && git push origin solaria-dist
