@@ -82,6 +82,7 @@ async function handleRequests() {
       const [mother, father] = a.sex === 'F' ? [a, b] : [b, a];
       const child = makeChild(world, mother, father);
       world.people[child.name] = child;
+      await whitelist([child.name]);
       for (const p of [mother, father]) { p.children.push(child.name); p.lastBirthAt = now(); }
       world.births.push({ at: now(), child: child.name, mother: mother.name, father: father.name });
       event('birth', `👶 ${callOf(mother.name)}と${callOf(father.name)}に子どもの${child.persona.call}（${child.persona.mbti}・第 ${child.generation} 世代）が生まれた`,
@@ -124,6 +125,11 @@ async function tick() {
   }
 }
 
+// ホワイトリスト: 鯖が white-list=true のときに備え、戸籍の生きている人と観察者を登録する（生まれた子も登録する）
+async function whitelist(names) {
+  try { await rconSend(names.map((n) => `whitelist add ${n}`)); } catch {}
+}
+whitelist([...Object.values(world.people).filter((p) => p.alive).map((p) => p.name), ...(process.env.SOCIETY_OBSERVERS || 'kanetyyy').split(',')]);
 console.log(`町の管理役を開始（1 年 = ${YEAR_MS / 60_000} 分、住人 ${Object.values(world.people).filter((p) => p.alive).length} 人）`);
 // 起動は 3 秒ずつずらす（一度に入ると鯖が混む）
 let delay = 0;

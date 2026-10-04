@@ -45,9 +45,9 @@ export function rcon(host, port, password, commands) {
   });
 }
 
-// rcon.txt（鯖を用意したときに作られる）を読んでコマンドを送る
+// rcon.txt（鯖を用意したときに作られる。SOCIETY_RCON_FILE で別のファイルにできる）を読んでコマンドを送る
 export async function rconSend(commands) {
-  const [addr, password] = fs.readFileSync(path.join(serverDir(), 'rcon.txt'), 'utf8').trim().split(/\r?\n/);
+  const [addr, password] = fs.readFileSync(path.join(serverDir(), process.env.SOCIETY_RCON_FILE || 'rcon.txt'), 'utf8').trim().split(/\r?\n/);
   const [host, port] = addr.split(':');
   return rcon(host, Number(port), password, commands);
 }
