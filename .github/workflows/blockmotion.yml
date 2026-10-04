@@ -1,0 +1,45 @@
+name: BlockMotion (Windows build)
+
+on:
+  push:
+    paths:
+      - "tools/blockmotion/**"
+      - ".github/workflows/blockmotion.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/blockmotion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install pyinstaller==6.11.1 pillow
+      - name: Syntax check
+        run: python -m py_compile app/blockmotion.py blender/generate.py
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --windowed --name BlockMotion
+          --icon assets/icon.ico
+          --add-data "blender;blender" --add-data "assets;assets"
+          app/blockmotion.py
+      - name: Smoke test (exe starts and finds its files)
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/BlockMotion/BlockMotion.exe -ArgumentList "--version" -PassThru -Wait
+          if (!(Test-Path dist/BlockMotion/_internal/blender/generate.py)) { throw "generate.py missing" }
+          if (!(Test-Path dist/BlockMotion/_internal/assets/textures/stone.png)) { throw "assets missing" }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md dist/BlockMotion/README.md
+          Compress-Archive -Path dist/BlockMotion -DestinationPath BlockMotion-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlockMotion-windows
+          path: tools/blockmotion/BlockMotion-windows.zip
