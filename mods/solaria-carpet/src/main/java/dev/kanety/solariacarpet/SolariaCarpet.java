@@ -27,7 +27,7 @@ public class SolariaCarpet implements ModInitializer, CarpetExtension {
 
     @Override
     public void onTick(MinecraftServer server) {
-        LightSuppression.onServerTick();
+        LightSuppression.onServerTick(server);
     }
 
     @Override

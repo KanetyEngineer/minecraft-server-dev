@@ -8,6 +8,7 @@
     "ProjectileMixin",
     "ProjectileUtilMixin",
     "ThrowableProjectileMixin",
+    "ServerChunkCacheMixin",
     "ThreadedLevelLightEngineMixin"
   ],
   "injectors": { "defaultRequire": 1 }

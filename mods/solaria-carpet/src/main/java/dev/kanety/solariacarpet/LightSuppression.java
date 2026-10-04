@@ -1,25 +1,46 @@
 package dev.kanety.solariacarpet;
 
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+
 /**
- * lightSuppression rule: the light thread may only run a limited number of task batches (1000 tasks each) per server
- * tick, as the old light engine effectively could. A light suppressor that floods the queue with more updates than
+ * lightSuppression rule: the light thread may only run a limited number of task batches (1000 tasks each) per
+ * 50 ms, as the old light engine effectively could. A light suppressor that floods the queue with more updates than
  * that builds a backlog again, so other light updates wait behind it, and whatever is still queued when the server
  * stops is never applied (the server does not wait for the light queue on shutdown).
+ *
+ * The budget is counted in real time, not in ticks, so it keeps refilling while the server thread is stuck waiting
+ * for a chunk (a bot or a teleport loading a new chunk needs its light done first). While the server thread waits
+ * like that, the budget is ten times larger so the wait stays short.
  */
 public final class LightSuppression {
-    private static volatile long tick;
+    public static final long WINDOW_NANOS = 50_000_000L;
+    private static volatile MinecraftServer server;
+    private static volatile int waiting;
 
     private LightSuppression() {}
 
-    public static void onServerTick() {
-        tick++;
+    public static void onServerTick(MinecraftServer s) {
+        server = s;
+        waiting = 0; // getChunk is never running at this point; also heals a counter left over by an exception
+        if (!SolariaCarpetSettings.lightSuppression) return;
+        // Make sure a skipped batch is retried every tick, so a backlog drains at the configured rate.
+        for (ServerLevel level : s.getAllLevels()) level.getChunkSource().getLightEngine().tryScheduleUpdate();
     }
 
-    public static long tick() {
-        return tick;
+    /** Called around ServerChunkCache#getChunk. */
+    public static void enterGetChunk() {
+        MinecraftServer s = server;
+        if (s != null && s.isSameThread()) waiting++;
     }
 
-    public static int batchesPerTick() {
-        return Math.max(1, (SolariaCarpetSettings.lightSuppressionTasksPerTick + 999) / 1000);
+    public static void exitGetChunk() {
+        MinecraftServer s = server;
+        if (s != null && s.isSameThread() && waiting > 0) waiting--;
+    }
+
+    public static int batchesPerWindow() {
+        int base = Math.max(1, (SolariaCarpetSettings.lightSuppressionTasksPerTick + 999) / 1000);
+        return waiting > 0 ? base * 10 : base;
     }
 }

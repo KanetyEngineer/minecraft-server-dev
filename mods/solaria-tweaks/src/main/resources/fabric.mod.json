@@ -22,10 +22,8 @@
     "java": ">=21",
     "fabric-api": "*"
   },
-  "recommends": {
-    "malilib": ">=0.27.19-"
-  },
   "suggests": {
+    "malilib": ">=0.27.19-",
     "syncmatica": "*",
     "xaeroworldmap": "*",
     "xaerominimap": "*"
