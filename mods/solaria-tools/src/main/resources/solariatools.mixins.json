@@ -1,9 +1,0 @@
-{
-  "required": true,
-  "minVersion": "0.8",
-  "package": "dev.kanety.solaria.mixin",
-  "plugin": "dev.kanety.solaria.mixin.SolariaMixinPlugin",
-  "compatibilityLevel": "JAVA_21",
-  "client": ["XaeroGuiMapMixin"],
-  "injectors": { "defaultRequire": 0 }
-}
