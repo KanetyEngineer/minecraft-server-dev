@@ -12,6 +12,7 @@ import fi.dy.masa.malilib.config.options.ConfigBoolean;
 import fi.dy.masa.malilib.config.options.ConfigHotkey;
 import fi.dy.masa.malilib.config.options.ConfigInteger;
 import fi.dy.masa.malilib.config.options.ConfigOptionList;
+import fi.dy.masa.malilib.config.options.ConfigString;
 import fi.dy.masa.malilib.hotkeys.IHotkey;
 import fi.dy.masa.malilib.util.FileUtils;
 import fi.dy.masa.malilib.util.data.json.JsonUtils;
@@ -32,7 +33,11 @@ public final class MalilibConfigs implements IConfigHandler {
     public static final ConfigOptionList OBSERVER_GUARD = new ConfigOptionList("observerGuardMode", GuardModeEntry.DIFF).apply(GENERIC);
     public static final ConfigBoolean HUD_ENABLED = new ConfigBoolean("hudEnabled", true).apply(GENERIC);
     public static final ConfigInteger HUD_MAX_LINES = new ConfigInteger("hudMaxLines", 6, 1, 20).apply(GENERIC);
-    public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES);
+    public static final ConfigInteger FILTER_COUNT = new ConfigInteger("filterCount", 18, 1, 64).apply(GENERIC);
+    public static final ConfigInteger FILLER_COUNT = new ConfigInteger("fillerCount", 1, 1, 64).apply(GENERIC);
+    public static final ConfigString FILLER_ITEM = new ConfigString("fillerItem", "").apply(GENERIC);
+    public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES,
+            FILTER_COUNT, FILLER_COUNT, FILLER_ITEM);
 
     public static final ConfigHotkey OPEN_CONFIG = new ConfigHotkey("openConfigGui", "LEFT_CONTROL,B").apply(HOTKEYS);
     public static final ConfigHotkey OPEN_BUILD_PLANS = new ConfigHotkey("openBuildPlans", "B").apply(HOTKEYS);
@@ -56,6 +61,21 @@ public final class MalilibConfigs implements IConfigHandler {
             ClientConfig.get().hudMaxLines = c.getIntegerValue();
             ClientConfig.save();
         });
+        FILTER_COUNT.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().filterCount = c.getIntegerValue();
+            ClientConfig.save();
+        });
+        FILLER_COUNT.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().fillerCount = c.getIntegerValue();
+            ClientConfig.save();
+        });
+        FILLER_ITEM.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().fillerItem = c.getStringValue().strip();
+            ClientConfig.save();
+        });
         ClientConfig.onChange = MalilibConfigs::pull;
     }
 
@@ -68,6 +88,9 @@ public final class MalilibConfigs implements IConfigHandler {
             OBSERVER_GUARD.setOptionListValue(GuardModeEntry.of(cfg.guardMode()));
             HUD_ENABLED.setBooleanValue(cfg.hudEnabled);
             HUD_MAX_LINES.setIntegerValue(cfg.hudMaxLines);
+            FILTER_COUNT.setIntegerValue(cfg.filterCount);
+            FILLER_COUNT.setIntegerValue(cfg.fillerCount);
+            FILLER_ITEM.setValueFromString(cfg.fillerItem == null ? "" : cfg.fillerItem);
         } finally {
             pulling = false;
         }

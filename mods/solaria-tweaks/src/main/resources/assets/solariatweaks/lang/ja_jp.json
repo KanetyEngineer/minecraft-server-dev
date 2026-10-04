@@ -24,5 +24,14 @@
   "solariatweaks.config.hotkeys.comment.openSharedWaypoints": "サーバー共有の地点の一覧を開きます",
   "solariatweaks.config.hotkeys.name.cycleObserverGuard": "cycleObserverGuard",
   "solariatweaks.config.hotkeys.prettyName.cycleObserverGuard": "オブザーバー警告の切り替え",
-  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "OFF → 設計図と違うものだけ → すべてのブロック の順に切り替えます"
+  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "OFF → 設計図と違うものだけ → すべてのブロック の順に切り替えます",
+  "solariatweaks.config.generic.name.filterCount": "filterCount",
+  "solariatweaks.config.generic.prettyName.filterCount": "フィルター: 1枠目の個数",
+  "solariatweaks.config.generic.comment.filterCount": "「フィルターを詰める」で1枠目に入れる、手に持ったアイテムの数（普通の仕分け機は18）",
+  "solariatweaks.config.generic.name.fillerCount": "fillerCount",
+  "solariatweaks.config.generic.prettyName.fillerCount": "フィルター: 埋め物の個数",
+  "solariatweaks.config.generic.comment.fillerCount": "「フィルターを詰める」で2〜5枠目に入れる埋め物の数",
+  "solariatweaks.config.generic.name.fillerItem": "fillerItem",
+  "solariatweaks.config.generic.prettyName.fillerItem": "フィルター: 埋め物のアイテム",
+  "solariatweaks.config.generic.comment.fillerItem": "埋め物にするアイテムID（例 minecraft:stick）。空欄なら金床で名前を付けたアイテムを使います"
 }

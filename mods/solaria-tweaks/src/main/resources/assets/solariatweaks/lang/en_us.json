@@ -24,5 +24,14 @@
   "solariatweaks.config.hotkeys.comment.openSharedWaypoints": "Open the list of server waypoints",
   "solariatweaks.config.hotkeys.name.cycleObserverGuard": "cycleObserverGuard",
   "solariatweaks.config.hotkeys.prettyName.cycleObserverGuard": "Cycle observer guard",
-  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "Cycle off → diff → all"
+  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "Cycle off → diff → all",
+  "solariatweaks.config.generic.name.filterCount": "filterCount",
+  "solariatweaks.config.generic.prettyName.filterCount": "Filter: first slot count",
+  "solariatweaks.config.generic.comment.filterCount": "Items of the held item put in the first slot by \"Fill filter\" (18 for a standard sorter)",
+  "solariatweaks.config.generic.name.fillerCount": "fillerCount",
+  "solariatweaks.config.generic.prettyName.fillerCount": "Filter: filler count",
+  "solariatweaks.config.generic.comment.fillerCount": "Filler items put in each of slots 2-5",
+  "solariatweaks.config.generic.name.fillerItem": "fillerItem",
+  "solariatweaks.config.generic.prettyName.fillerItem": "Filter: filler item",
+  "solariatweaks.config.generic.comment.fillerItem": "Item id used as filler (e.g. minecraft:stick). Empty = any renamed item"
 }

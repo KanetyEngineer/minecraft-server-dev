@@ -1,6 +1,7 @@
 package dev.kanety.solaria.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.kanety.solaria.SolariaTweaks;
 import dev.kanety.solaria.client.malilib.MalilibCompat;
@@ -87,6 +88,38 @@ public class SolariaTweaksClient implements ClientModInitializer {
             ClientWaypoints.reset();
         });
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
+                ClientCommandManager.literal("filterfill")
+                        .executes(c -> {
+                            ClientConfig cfg = ClientConfig.get();
+                            c.getSource().sendFeedback(Component.literal("フィルター詰め: 1枠目 " + cfg.filterCount + " 個、埋め物 "
+                                    + cfg.fillerCount + " 個ずつ（" + (cfg.fillerItem.isBlank() ? "名前を付けたアイテム" : cfg.fillerItem) + "）\n"
+                                    + "/filterfill count <個数>、/filterfill filler <個数>、/filterfill item <アイテムID|renamed> で変更できます"));
+                            return 1;
+                        })
+                        .then(ClientCommandManager.literal("count").then(ClientCommandManager.argument("n", IntegerArgumentType.integer(1, 64))
+                                .executes(c -> {
+                                    ClientConfig.get().filterCount = IntegerArgumentType.getInteger(c, "n");
+                                    ClientConfig.save();
+                                    c.getSource().sendFeedback(Component.literal("1枠目に入れる数を " + ClientConfig.get().filterCount + " 個にしました"));
+                                    return 1;
+                                })))
+                        .then(ClientCommandManager.literal("filler").then(ClientCommandManager.argument("n", IntegerArgumentType.integer(1, 64))
+                                .executes(c -> {
+                                    ClientConfig.get().fillerCount = IntegerArgumentType.getInteger(c, "n");
+                                    ClientConfig.save();
+                                    c.getSource().sendFeedback(Component.literal("埋め物を 1 枠に " + ClientConfig.get().fillerCount + " 個ずつ入れます"));
+                                    return 1;
+                                })))
+                        .then(ClientCommandManager.literal("item").then(ClientCommandManager.argument("id", StringArgumentType.greedyString())
+                                .executes(c -> {
+                                    String id = StringArgumentType.getString(c, "id").strip();
+                                    ClientConfig.get().fillerItem = id.equalsIgnoreCase("renamed") ? "" : id;
+                                    ClientConfig.save();
+                                    c.getSource().sendFeedback(Component.literal("埋め物を「" + (ClientConfig.get().fillerItem.isBlank()
+                                            ? "名前を付けたアイテム" : ClientConfig.get().fillerItem) + "」にしました"));
+                                    return 1;
+                                })))));
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
                 ClientCommandManager.literal("observerguard")
                         .executes(c -> {
                             c.getSource().sendFeedback(Component.literal("オブザーバー警告: " + ClientConfig.get().guardMode().label
@@ -110,5 +143,6 @@ public class SolariaTweaksClient implements ClientModInitializer {
                                 }))));
         HudElementRegistry.addLast(SolariaTweaks.id("build_hud"), BuildHud::render);
         ScreenEvents.AFTER_INIT.register(XaeroMapIntegration::onScreenInit);
+        ScreenEvents.AFTER_INIT.register(FilterFill::onScreenInit);
     }
 }

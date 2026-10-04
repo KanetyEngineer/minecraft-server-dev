@@ -1,5 +1,6 @@
 package dev.kanety.solaria.mixin.client;
 
+import dev.kanety.solaria.client.FilterFill;
 import dev.kanety.solaria.client.ObserverGuard;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
@@ -17,6 +18,10 @@ public abstract class MultiPlayerGameModeMixin {
     @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true, require = 1)
     private void solariatweaks$observerGuard(LocalPlayer player, InteractionHand hand, BlockHitResult hit,
                                              CallbackInfoReturnable<InteractionResult> cir) {
-        if (ObserverGuard.shouldBlock(player, hand, hit)) cir.setReturnValue(InteractionResult.FAIL);
+        if (ObserverGuard.shouldBlock(player, hand, hit)) {
+            cir.setReturnValue(InteractionResult.FAIL);
+            return;
+        }
+        FilterFill.lastUsedPos = hit.getBlockPos();
     }
 }

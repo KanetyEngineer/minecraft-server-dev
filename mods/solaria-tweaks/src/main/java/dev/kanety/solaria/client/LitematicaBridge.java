@@ -14,6 +14,24 @@ public final class LitematicaBridge {
 
     private LitematicaBridge() {}
 
+    public static boolean available() {
+        return !failed && FabricLoader.getInstance().isModLoaded("litematica");
+    }
+
+    /** Litematica's schematic world (the ghost blocks), or null. */
+    public static Level schematicWorld() {
+        if (!available()) return null;
+        try {
+            if (getSchematicWorld == null) {
+                getSchematicWorld = Class.forName("fi.dy.masa.litematica.world.SchematicWorldHandler").getMethod("getSchematicWorld");
+            }
+            return getSchematicWorld.invoke(null) instanceof Level level ? level : null;
+        } catch (Throwable t) {
+            failed = true;
+            return null;
+        }
+    }
+
     /** The block the visible schematic wants at this position, or null if Litematica has nothing there. */
     public static BlockState expectedState(BlockPos pos) {
         if (failed || !FabricLoader.getInstance().isModLoaded("litematica")) return null;

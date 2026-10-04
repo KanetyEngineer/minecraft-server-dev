@@ -21,6 +21,13 @@ public final class ClientConfig {
     public Boolean observerGuard;
     /** Warn before placing a block where an observer is looking: "off", "diff" (only blocks unlike the schematic) or "all". */
     public String observerGuardMode;
+    /** Sorter filter fill: items of the held item in the first slot, filler items in each other slot. */
+    public int filterCount = 18;
+    public int fillerCount = 1;
+    /** Filler item id; empty = any renamed item. */
+    public String fillerItem = "";
+    /** Remembered container layout (ItemStack JSON per slot, null = empty). */
+    public java.util.List<com.google.gson.JsonElement> fillTemplate;
 
     public enum GuardMode {
         OFF("off", "OFF"), DIFF("diff", "設計図と違うものだけ"), ALL("all", "すべてのブロック");

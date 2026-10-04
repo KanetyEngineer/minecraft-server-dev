@@ -3,7 +3,11 @@ package dev.kanety.solariacarpet.mixin;
 import dev.kanety.solariacarpet.LightSuppression;
 import dev.kanety.solariacarpet.SolariaCarpetSettings;
 import net.minecraft.server.level.ThreadedLevelLightEngine;
+import it.unimi.dsi.fastutil.objects.ObjectList;
+import net.minecraft.util.thread.ConsecutiveExecutor;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,6 +20,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(ThreadedLevelLightEngine.class)
 public abstract class ThreadedLevelLightEngineMixin {
+    @Shadow @Final private ConsecutiveExecutor consecutiveExecutor;
+    @Shadow @Final private ObjectList<?> lightTasks;
+
+    @Shadow
+    private void runUpdate() {
+        throw new AssertionError();
+    }
+
     @Unique private long solariacarpet$windowStart;
     @Unique private int solariacarpet$batches;
 
@@ -32,5 +44,13 @@ public abstract class ThreadedLevelLightEngineMixin {
             return;
         }
         solariacarpet$batches++;
+    }
+
+    /** After the rule is turned off, keep going until a backlog left over from suppression is gone. */
+    @Inject(method = "runUpdate", at = @At("TAIL"))
+    private void solariacarpet$drain(CallbackInfo ci) {
+        if (!SolariaCarpetSettings.lightSuppression && lightTasks.size() >= 1000) {
+            consecutiveExecutor.schedule(this::runUpdate);
+        }
     }
 }

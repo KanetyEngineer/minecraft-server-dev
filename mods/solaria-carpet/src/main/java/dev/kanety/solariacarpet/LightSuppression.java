@@ -23,8 +23,8 @@ public final class LightSuppression {
     public static void onServerTick(MinecraftServer s) {
         server = s;
         waiting = 0; // getChunk is never running at this point; also heals a counter left over by an exception
-        if (!SolariaCarpetSettings.lightSuppression) return;
-        // Make sure a skipped batch is retried every tick, so a backlog drains at the configured rate.
+        // Make sure a skipped batch is retried every tick, so a backlog drains at the configured rate (and keeps
+        // draining after the rule is turned off). Does nothing when the queue is empty.
         for (ServerLevel level : s.getAllLevels()) level.getChunkSource().getLightEngine().tryScheduleUpdate();
     }
 
