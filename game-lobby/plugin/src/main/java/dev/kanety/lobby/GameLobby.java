@@ -9,6 +9,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.title.Title;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
@@ -37,7 +38,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
 
     record Destination(String id, String name, List<String> description, Material icon, Material pad,
                        Material frame, Particle particle, String host, int port, String version,
-                       String brand, String info, boolean enabled) {
+                       String brand, String info, boolean enabled, String theme) {
         boolean ready() {
             return enabled && host != null && !host.isBlank();
         }
@@ -46,14 +47,21 @@ public final class GameLobby extends JavaPlugin implements Listener {
     /** Gate placed on the plaza: pad center and the direction the arch faces (towards the plaza center). */
     record Gate(Destination dest, int x, int z, int dx, int dz) {}
 
+    /** Particles that float around a decoration. */
+    record Ambient(Location loc, Particle particle, double spread) {}
+
     static final int Y = 64;
     static final int RADIUS = 16;
     static final int GATE_DIST = 12;
+    static final int CLEAR = 40;
     static final String LABEL_TAG = "lobby_label";
+    /** Bump when the plaza layout changes, so a running world gets rebuilt once on the next start. */
+    static final String BUILD_VERSION = "2-decor";
     static final MiniMessage MM = MiniMessage.miniMessage();
 
     private final Map<String, Destination> destinations = new LinkedHashMap<>();
     private final List<Gate> gates = new ArrayList<>();
+    private final List<Ambient> ambient = new ArrayList<>();
     private final Map<UUID, Long> cooldown = new HashMap<>();
     private NamespacedKey menuKey;
     private World world;
@@ -65,7 +73,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
         world = Bukkit.getWorlds().getFirst();
         loadDestinations();
         setupWorld();
-        if (!new java.io.File(getDataFolder(), "built.flag").exists()) {
+        if (!BUILD_VERSION.equals(readFlag())) {
             buildPlaza();
         } else {
             layoutGates();
@@ -78,6 +86,14 @@ public final class GameLobby extends JavaPlugin implements Listener {
     }
 
     private long configStamp;
+
+    private String readFlag() {
+        try {
+            return java.nio.file.Files.readString(new java.io.File(getDataFolder(), "built.flag").toPath()).trim();
+        } catch (java.io.IOException e) {
+            return "";
+        }
+    }
 
     private java.io.File configFile() {
         return new java.io.File(getDataFolder(), "config.yml");
@@ -114,7 +130,8 @@ public final class GameLobby extends JavaPlugin implements Listener {
                     d.getString("version", ""),
                     d.getString("require-brand", ""),
                     d.getString("info", ""),
-                    d.getBoolean("enabled", false)));
+                    d.getBoolean("enabled", false),
+                    d.getString("theme", id)));
         }
     }
 
@@ -157,14 +174,36 @@ public final class GameLobby extends JavaPlugin implements Listener {
             int dz = dx == 0 ? -Integer.signum(z) : 0;
             gates.add(new Gate(list.get(i), x, z, dx, dz));
         }
+        ambient.clear();
+        for (Gate g : gates) {
+            switch (g.dest().theme()) {
+                case "halloween" -> {
+                    ambient.add(new Ambient(at(g, 0, 21, 5).getLocation().add(0.5, 0.5, 0.5), Particle.SOUL_FIRE_FLAME, 2.5));
+                    ambient.add(new Ambient(at(g, 0, 18, 2).getLocation().add(0.5, 0.5, 0.5), Particle.SOUL, 4));
+                }
+                case "tiktok-defense" -> {
+                    ambient.add(new Ambient(at(g, -9, 22, 12).getLocation().add(0.5, 0.5, 0.5), Particle.FLAME, 0.6));
+                    ambient.add(new Ambient(at(g, 9, 22, 12).getLocation().add(0.5, 0.5, 0.5), Particle.FLAME, 0.6));
+                }
+                case "clash-royale" ->
+                        ambient.add(new Ambient(at(g, 0, 27, 12).getLocation().add(0.5, 0.5, 0.5), Particle.WAX_ON, 2));
+                case "anime-umetate" -> {
+                    ambient.add(new Ambient(at(g, -6, 25, 7).getLocation().add(0.5, 0.5, 0.5), Particle.CHERRY_LEAVES, 3));
+                    ambient.add(new Ambient(at(g, 6, 25, 7).getLocation().add(0.5, 0.5, 0.5), Particle.CHERRY_LEAVES, 3));
+                    ambient.add(new Ambient(at(g, 0, 28, 7).getLocation().add(0.5, 0.5, 0.5), Particle.ELECTRIC_SPARK, 2.5));
+                }
+                default -> {
+                }
+            }
+        }
     }
 
     private void buildPlaza() {
         world.getEntitiesByClass(TextDisplay.class).stream()
                 .filter(e -> e.getScoreboardTags().contains(LABEL_TAG)).forEach(Entity::remove);
-        for (int x = -RADIUS - 2; x <= RADIUS + 2; x++)
-            for (int z = -RADIUS - 2; z <= RADIUS + 2; z++)
-                for (int y = Y; y <= Y + 8; y++)
+        for (int x = -CLEAR; x <= CLEAR; x++)
+            for (int z = -CLEAR; z <= CLEAR; z++)
+                for (int y = Y - 12; y <= Y + 24; y++)
                     world.getBlockAt(x, y, z).setType(Material.AIR, false);
 
         for (int x = -RADIUS; x <= RADIUS; x++) {
@@ -191,17 +230,29 @@ public final class GameLobby extends JavaPlugin implements Listener {
             world.getBlockAt(x, Y + 2, z).setType(Material.SOUL_LANTERN, false);
         }
         // center beacon-like pillar with welcome text
-        world.getBlockAt(0, Y, 0).setType(Material.SEA_LANTERN, false);
+        // beacon under the spawn point: its beam shoots up through the glass the players spawn on
+        for (int x = -1; x <= 1; x++)
+            for (int z = -1; z <= 1; z++)
+                world.getBlockAt(x, Y - 2, z).setType(Material.GOLD_BLOCK, false);
+        world.getBlockAt(0, Y - 1, 0).setType(Material.BEACON, false);
+        world.getBlockAt(0, Y, 0).setType(Material.YELLOW_STAINED_GLASS, false);
         label(new Location(world, 0.5, Y + 3.2, -2.5),
                 MM.deserialize(getConfig().getString("lobby-name", "GAME LOBBY"))
                         .append(Component.newline())
-                        .append(Component.text("ゲートに乗るか、コンパスを右クリック", NamedTextColor.GRAY)), 2.0f);
+                        .append(Component.text("ゲートに乗るか、コンパスを右クリック", NamedTextColor.GRAY))
+                        .append(Component.newline())
+                        .append(Component.text("配布物とあそび方: games.sharytech.com", NamedTextColor.AQUA)), 2.0f);
+        label(new Location(world, 0.5, Y + 13, 0.5),
+                MM.deserialize(getConfig().getString("lobby-name", "GAME LOBBY")), 6.0f);
 
         layoutGates();
-        for (Gate g : gates) buildGate(g);
+        for (Gate g : gates) {
+            buildGate(g);
+            decorate(g);
+        }
 
         try {
-            new java.io.File(getDataFolder(), "built.flag").createNewFile();
+            java.nio.file.Files.writeString(new java.io.File(getDataFolder(), "built.flag").toPath(), BUILD_VERSION);
         } catch (java.io.IOException ignored) {
         }
     }
@@ -233,6 +284,288 @@ public final class GameLobby extends JavaPlugin implements Listener {
         label(l, text, 1.4f);
     }
 
+    // ---------- decorations ----------
+    // Each gate gets a themed floating island behind it, built in gate-local coordinates:
+    // u = sideways, w = distance from the plaza center along the gate's axis, y = height above the floor.
+
+    private Block at(Gate g, int u, int w, int y) {
+        return world.getBlockAt(g.x() - g.dx() * (w - GATE_DIST) + g.dz() * u, Y + y,
+                g.z() - g.dz() * (w - GATE_DIST) - g.dx() * u);
+    }
+
+    private void put(Gate g, int u, int w, int y, Material m) {
+        at(g, u, w, y).setType(m, false);
+    }
+
+    private void put(Gate g, int u, int w, int y, org.bukkit.block.data.BlockData d) {
+        at(g, u, w, y).setBlockData(d, false);
+    }
+
+    /** Puts a block only where the island has ground, so paths do not stick out into the void. */
+    private void onGround(Gate g, int u, int w, Material m) {
+        if (!at(g, u, w, 0).getType().isAir() && !at(g, u, w, -1).getType().isAir()) put(g, u, w, 0, m);
+    }
+
+    private BlockFace towardsCenter(Gate g) {
+        if (g.dx() > 0) return BlockFace.EAST;
+        if (g.dx() < 0) return BlockFace.WEST;
+        return g.dz() > 0 ? BlockFace.SOUTH : BlockFace.NORTH;
+    }
+
+    private org.bukkit.block.data.BlockData facing(Material m, Gate g) {
+        var d = m.createBlockData();
+        if (d instanceof org.bukkit.block.data.Directional dir) dir.setFacing(towardsCenter(g));
+        if (d instanceof org.bukkit.block.data.Rotatable rot) rot.setRotation(towardsCenter(g));
+        return d;
+    }
+
+    private static final Random RNG = new Random(7);
+
+    private void island(Gate g, int cw, int r, Material top, Material fill) {
+        for (int u = -r; u <= r; u++) {
+            for (int w = cw - r; w <= cw + r; w++) {
+                double d = Math.hypot(u, w - cw);
+                if (d > r + 0.3) continue;
+                Block b = at(g, u, w, 0);
+                if (Math.hypot(b.getX(), b.getZ()) <= RADIUS + 0.5) continue;
+                b.setType(top, false);
+                int depth = 1 + (int) ((r - d) * 0.9 + RNG.nextDouble());
+                for (int k = 1; k <= depth; k++) put(g, u, w, -k, k <= 2 ? fill : Material.STONE);
+            }
+        }
+    }
+
+    private void decorate(Gate g) {
+        // a strip in the gate's color leads from the center to the gate
+        for (int w = 3; w <= GATE_DIST - 2; w++) put(g, 0, w, 0, g.dest().pad());
+        switch (g.dest().theme()) {
+            case "halloween" -> halloween(g);
+            case "tiktok-defense" -> defense(g);
+            case "clash-royale" -> clash(g);
+            case "anime-umetate" -> anime(g);
+            default -> island(g, 24, 8, Material.GRASS_BLOCK, Material.DIRT);
+        }
+    }
+
+    private void halloween(Gate g) {
+        island(g, 25, 9, Material.PODZOL, Material.DIRT);
+        for (int i = 0; i < 25; i++) onGround(g, RNG.nextInt(15) - 7, 18 + RNG.nextInt(14),
+                RNG.nextBoolean() ? Material.SOUL_SOIL : Material.COARSE_DIRT);
+        // giant jack o'lantern with a glowing face towards the plaza
+        int cw = 26, cy = 5;
+        double ru = 5.2, ry = 4.3, rw = 4.6;
+        for (int u = -6; u <= 6; u++)
+            for (int y = 0; y <= 10; y++)
+                for (int w = cw - 5; w <= cw + 5; w++) {
+                    double e = sq(u / ru) + sq((y - cy) / ry) + sq((w - cw) / rw);
+                    if (e <= 1 && e > 0.45) put(g, u, w, y, Material.PUMPKIN);
+                }
+        String[] face = {
+                // y = cy+2 .. cy-3, u = -4 .. 4
+                "..#...#..",
+                ".###.###.",
+                "....#....",
+                "#.......#",
+                "##.#.#.##",
+                ".#######.",
+        };
+        for (int row = 0; row < face.length; row++) {
+            int y = cy + 2 - row;
+            for (int col = 0; col < 9; col++) {
+                if (face[row].charAt(col) != '#') continue;
+                int u = col - 4;
+                for (int w = cw - 5; w <= cw; w++) {
+                    if (sq(u / ru) + sq((y - cy) / ry) + sq((w - cw) / rw) <= 1) {
+                        put(g, u, w, y, Material.SHROOMLIGHT);
+                        put(g, u, w + 1, y, Material.SHROOMLIGHT);
+                        break;
+                    }
+                }
+            }
+        }
+        put(g, 0, cw, cy + 5, Material.DARK_OAK_LOG);
+        put(g, 0, cw, cy + 6, Material.DARK_OAK_LOG);
+        put(g, 1, cw, cy + 6, Material.MOSS_BLOCK);
+        put(g, -1, cw + 1, cy + 5, Material.MOSS_BLOCK);
+        // dead trees with cobwebs
+        for (int s = -1; s <= 1; s += 2) {
+            int u = 7 * s, w = 21;
+            for (int y = 1; y <= 7; y++) put(g, u, w, y, Material.DARK_OAK_LOG);
+            put(g, u + s, w, 4, Material.DARK_OAK_WOOD);
+            put(g, u + 2 * s, w, 5, Material.DARK_OAK_WOOD);
+            put(g, u + 2 * s, w, 6, Material.DARK_OAK_FENCE);
+            put(g, u - s, w, 6, Material.DARK_OAK_WOOD);
+            put(g, u - 2 * s, w, 7, Material.DARK_OAK_FENCE);
+            put(g, u, w + 1, 7, Material.DARK_OAK_WOOD);
+            put(g, u + 2 * s, w, 4, Material.COBWEB);
+            put(g, u - s, w, 5, Material.COBWEB);
+            put(g, u + s, w, 1, facing(Material.JACK_O_LANTERN, g));
+        }
+        // graves and soul fires
+        for (int u : new int[]{-5, -2, 2, 5}) {
+            put(g, u, 18, 1, Material.MOSSY_STONE_BRICK_WALL);
+            put(g, u, 18, 2, Material.MOSSY_STONE_BRICK_WALL);
+        }
+        put(g, -3, 20, 1, Material.SOUL_CAMPFIRE);
+        put(g, 3, 20, 1, Material.SOUL_CAMPFIRE);
+        // lantern posts beside the gate and cobwebs in its corners
+        for (int s = -1; s <= 1; s += 2) {
+            put(g, 4 * s, GATE_DIST, 1, Material.DARK_OAK_FENCE);
+            put(g, 4 * s, GATE_DIST, 2, Material.DARK_OAK_FENCE);
+            put(g, 4 * s, GATE_DIST, 3, facing(Material.JACK_O_LANTERN, g));
+            put(g, s, GATE_DIST, 4, Material.COBWEB);
+        }
+    }
+
+    private void defense(Gate g) {
+        island(g, 24, 9, Material.ANDESITE, Material.STONE);
+        for (int i = 0; i < 25; i++) onGround(g, RNG.nextInt(17) - 8, 17 + RNG.nextInt(14),
+                RNG.nextBoolean() ? Material.GRAVEL : Material.COBBLESTONE);
+        // fortress wall with TikTok-colored neon stripes
+        for (int u = -7; u <= 7; u++) {
+            for (int w = 21; w <= 22; w++) {
+                for (int y = 1; y <= 6; y++) {
+                    double r = RNG.nextDouble();
+                    put(g, u, w, y, r < 0.2 ? Material.CRACKED_STONE_BRICKS : r < 0.3 ? Material.MOSSY_STONE_BRICKS : Material.STONE_BRICKS);
+                }
+                if ((u & 1) == 0) put(g, u, w, 7, Material.STONE_BRICKS);
+            }
+            put(g, u, 21, 4, Material.CYAN_CONCRETE);
+            put(g, u, 21, 5, Material.RED_CONCRETE);
+            if (u % 3 == 0) put(g, u, 21, 6, Material.SEA_LANTERN);
+        }
+        for (int u : new int[]{-4, 0, 4}) put(g, u, 21, 2, Material.TARGET);
+        for (int u : new int[]{-5, -1, 3}) put(g, u, 21, 7, facing(Material.ZOMBIE_HEAD, g));
+        put(g, 5, 21, 7, facing(Material.SKELETON_SKULL, g));
+        // watchtowers
+        for (int s = -1; s <= 1; s += 2) {
+            int cu = 9 * s;
+            for (int u = cu - 1; u <= cu + 1; u++)
+                for (int w = 21; w <= 23; w++) {
+                    for (int y = 1; y <= 9; y++) put(g, u, w, y, Material.POLISHED_BLACKSTONE_BRICKS);
+                    put(g, u, w, 7, Material.CYAN_CONCRETE);
+                    put(g, u, w, 10, Material.RED_CONCRETE);
+                    if (u != cu && w != 22) put(g, u, w, 11, Material.POLISHED_BLACKSTONE_BRICK_WALL);
+                }
+            put(g, cu, 22, 10, Material.SEA_LANTERN);
+            put(g, cu, 22, 11, Material.END_ROD);
+            put(g, cu, 21, 4, Material.IRON_BARS);
+        }
+        // sandbag barricades beside the gate
+        for (int s = -1; s <= 1; s += 2) {
+            put(g, 4 * s, GATE_DIST, 1, Material.MUD_BRICKS);
+            put(g, 5 * s, GATE_DIST, 1, Material.MUD_BRICKS);
+            put(g, 4 * s, GATE_DIST - 1, 1, Material.MUD_BRICKS);
+            put(g, 4 * s, GATE_DIST, 2, Material.MUD_BRICK_WALL);
+            put(g, 4 * s, GATE_DIST, 3, Material.LANTERN);
+            put(g, 5 * s, GATE_DIST, 2, Material.TARGET);
+        }
+    }
+
+    private void clash(Gate g) {
+        island(g, 25, 10, Material.GRASS_BLOCK, Material.DIRT);
+        // river with two bridges, like the arena
+        for (int u = -10; u <= 10; u++)
+            for (int w = 19; w <= 20; w++)
+                onGround(g, u, w, Math.abs(Math.abs(u) - 5) <= 1 ? Material.SPRUCE_PLANKS : Material.LIGHT_BLUE_CONCRETE);
+        // king tower
+        for (int u = -3; u <= 3; u++)
+            for (int w = 24; w <= 30; w++) {
+                boolean edge = Math.abs(u) == 3 || w == 24 || w == 30;
+                for (int y = 1; y <= 8; y++) {
+                    if (!edge && y < 8) continue;
+                    put(g, u, w, y, y == 6 && edge ? Material.BLUE_CONCRETE : Material.STONE_BRICKS);
+                }
+                if (edge) put(g, u, w, 9, ((u + w) & 1) == 0 ? Material.GOLD_BLOCK : Material.STONE_BRICKS);
+            }
+        put(g, 0, 24, 1, Material.AIR);
+        put(g, 0, 24, 2, Material.AIR);
+        put(g, -2, 24, 4, Material.BLUE_STAINED_GLASS);
+        put(g, 2, 24, 4, Material.BLUE_STAINED_GLASS);
+        for (int u = -1; u <= 1; u++)
+            for (int w = 26; w <= 28; w++) {
+                if (u == 0 && w == 27) continue;
+                put(g, u, w, 9, Material.GOLD_BLOCK);
+                put(g, u, w, 10, Material.GOLD_BLOCK);
+                if (u != 0 && w != 27) put(g, u, w, 11, Material.GOLD_BLOCK);
+            }
+        put(g, 0, 26, 10, Material.REDSTONE_BLOCK);
+        put(g, 0, 27, 9, Material.GLOWSTONE);
+        for (int u = -3; u <= 3; u += 6)
+            for (int w = 24; w <= 30; w += 6) put(g, u, w, 10, facing(Material.BLUE_BANNER, g));
+        // princess towers
+        for (int s = -1; s <= 1; s += 2) {
+            int cu = 7 * s;
+            for (int u = cu - 1; u <= cu + 1; u++)
+                for (int w = 22; w <= 24; w++) {
+                    for (int y = 1; y <= 6; y++) put(g, u, w, y, y == 5 ? Material.BLUE_CONCRETE : Material.STONE_BRICKS);
+                    if (u != cu && w != 23) put(g, u, w, 7, Material.GOLD_BLOCK);
+                }
+            put(g, cu, 23, 7, Material.LANTERN);
+            put(g, cu, 22, 8, facing(Material.BLUE_BANNER, g));
+        }
+        // banners beside the gate
+        for (int s = -1; s <= 1; s += 2) {
+            put(g, 4 * s, GATE_DIST, 1, Material.GOLD_BLOCK);
+            put(g, 4 * s, GATE_DIST, 2, facing(Material.BLUE_BANNER, g));
+        }
+    }
+
+    private void anime(Gate g) {
+        island(g, 25, 9, Material.GRASS_BLOCK, Material.DIRT);
+        for (int i = 0; i < 25; i++) onGround(g, RNG.nextInt(15) - 7, 18 + RNG.nextInt(14), Material.MOSS_BLOCK);
+        for (int w = 16; w <= 31; w++) onGround(g, 0, w, Material.GRAVEL);
+        // torii
+        int tw = 19;
+        for (int s = -1; s <= 1; s += 2) {
+            put(g, 3 * s, tw, 1, Material.BLACK_CONCRETE);
+            for (int y = 2; y <= 7; y++) put(g, 3 * s, tw, y, Material.RED_CONCRETE);
+        }
+        for (int u = -4; u <= 4; u++) put(g, u, tw, 5, Material.RED_CONCRETE);
+        for (int u = -5; u <= 5; u++) put(g, u, tw, 7, Material.RED_CONCRETE);
+        for (int u = -6; u <= 6; u++) put(g, u, tw, 8, Material.BLACK_CONCRETE);
+        put(g, -7, tw, 9, Material.BLACK_CONCRETE);
+        put(g, 7, tw, 9, Material.BLACK_CONCRETE);
+        put(g, 0, tw, 6, Material.GOLD_BLOCK);
+        // stone lanterns along the approach
+        for (int s = -1; s <= 1; s += 2)
+            for (int w : new int[]{22, 26}) {
+                put(g, 2 * s, w, 1, Material.STONE_BRICK_WALL);
+                put(g, 2 * s, w, 2, Material.LANTERN);
+                put(g, 2 * s, w, 3, Material.STONE_BRICK_SLAB);
+            }
+        // cherry trees
+        var leaves = (org.bukkit.block.data.type.Leaves) Material.CHERRY_LEAVES.createBlockData();
+        leaves.setPersistent(true);
+        for (int[] t : new int[][]{{-6, 25}, {6, 25}, {-5, 30}, {5, 30}}) {
+            for (int u = -3; u <= 3; u++)
+                for (int w = -3; w <= 3; w++)
+                    for (int y = -2; y <= 2; y++)
+                        if (sq(u / 3.2) + sq(w / 3.2) + sq(y / 2.2) <= 1 && RNG.nextDouble() < 0.92)
+                            put(g, t[0] + u, t[1] + w, 7 + y, leaves);
+            for (int y = 1; y <= 6; y++) put(g, t[0], t[1], y, Material.CHERRY_LOG);
+            for (int k = 0; k < 4; k++) onGround(g, t[0] + RNG.nextInt(5) - 2, t[1] + RNG.nextInt(5) - 2, Material.PINK_PETALS);
+        }
+        // a charged energy ball (kamehameha) floating behind the torii
+        for (int u = -3; u <= 3; u++)
+            for (int w = -3; w <= 3; w++)
+                for (int y = -3; y <= 3; y++) {
+                    double d = Math.sqrt(u * u + w * w + y * y);
+                    if (d <= 1.5) put(g, u, 28 + w, 7 + y, Material.SEA_LANTERN);
+                    else if (d <= 2.7) put(g, u, 28 + w, 7 + y, Material.LIGHT_BLUE_STAINED_GLASS);
+                }
+        // small stone lanterns beside the gate
+        for (int s = -1; s <= 1; s += 2) {
+            put(g, 4 * s, GATE_DIST, 1, Material.STONE_BRICK_WALL);
+            put(g, 4 * s, GATE_DIST, 2, Material.LANTERN);
+            put(g, 4 * s, GATE_DIST, 3, Material.STONE_BRICK_SLAB);
+        }
+    }
+
+    private static double sq(double v) {
+        return v * v;
+    }
+
     private void label(Location l, Component text, float scale) {
         world.spawn(l, TextDisplay.class, td -> {
             td.text(text);
@@ -248,6 +581,12 @@ public final class GameLobby extends JavaPlugin implements Listener {
 
     private void tickParticles() {
         if (world.getPlayers().isEmpty()) return;
+        for (Ambient a : ambient) {
+            for (int k = 0; k < 2; k++) {
+                world.spawnParticle(a.particle(), a.loc().clone().add((Math.random() - 0.5) * 2 * a.spread(),
+                        (Math.random() - 0.5) * a.spread(), (Math.random() - 0.5) * 2 * a.spread()), 1, 0, 0, 0, 0.01);
+            }
+        }
         for (Gate g : gates) {
             int px = g.dz() != 0 ? 1 : 0, pz = g.dx() != 0 ? 1 : 0;
             Particle p = g.dest().ready() ? g.dest().particle() : Particle.SMOKE;
