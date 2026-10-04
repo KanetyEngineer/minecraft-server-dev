@@ -1073,7 +1073,7 @@ def set_engine():
         sh.color_type = "TEXTURE"
         sh.show_shadows = True
         scene.display.render_aa = "8"
-        scene.view_settings.exposure = 1.0
+        scene.view_settings.exposure = 0.5
     else:
         for name in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
             try:
