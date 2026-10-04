@@ -1,160 +1,174 @@
-# PROJECT DRAGONFALL のロゴを作る（ドット絵の文字とエンダードラゴンの目）
+# PROJECT DRAGONFALL のロゴ（アニメのタイトルロゴ風: 鋭い明朝の「竜墜」＋金属の質感＋斬撃の線）
 # 使い方: python3 brand.py <出力フォルダ>
-import sys, os
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+# フォントは Google Fonts（OFL）: fetch_fonts.sh で fonts/ に入れる
+import sys, os, math
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
-BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-JP = '/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf'
-PURPLE_TOP = (232, 160, 255)
-PURPLE_MID = (178, 76, 255)
-PURPLE_DEEP = (70, 16, 120)
+HERE = os.path.dirname(os.path.abspath(__file__))
+FONTS = os.environ.get('DRAGONFALL_FONTS', os.path.join(HERE, 'fonts'))
+MINCHO = os.path.join(FONTS, 'ShipporiMinchoB1-ExtraBold.ttf')
+ORBITRON = os.path.join(FONTS, 'Orbitron[wght].ttf')
+MICHROMA = os.path.join(FONTS, 'Michroma-Regular.ttf')
+DELA = os.path.join(FONTS, 'DelaGothicOne-Regular.ttf')
+SS = 3  # 3 倍で描いてから縮小し、輪郭をくっきりさせる
 
-
-def pixel_text(text, px, cell, font=BOLD):
-    """小さいサイズでアンチエイリアス無しに描いてから拡大し、マイクラ風のドット文字にする"""
-    f = ImageFont.truetype(font, px)
-    l, t, r, b = f.getbbox(text)
-    small = Image.new('L', (r - l + 2, b - t + 2), 0)
-    d = ImageDraw.Draw(small)
-    d.fontmode = '1'
-    d.text((1 - l, 1 - t), text, font=f, fill=255)
-    return small, small.resize((small.width * cell, small.height * cell), Image.NEAREST)
+CHROME = ((255, 255, 255), (214, 190, 255), (150, 70, 250), (52, 8, 104))  # 上の明るい金属 → 中央で硬く切り替わって濃い紫へ
+SILVER = ((255, 255, 255), (232, 228, 245), (170, 160, 205), (110, 96, 160))
 
 
-def gradient_fill(mask, top, mid, bottom):
-    """上から下へ 3 色のグラデーションで塗る（ドットの段ごとに色を変えて、ドット絵らしくする）"""
-    w, h = mask.size
-    img = Image.new('RGBA', (w, h))
-    px = img.load()
+def font(path, size, weight=None):
+    f = ImageFont.truetype(path, size)
+    if weight:
+        try: f.set_variation_by_axes([weight])
+        except Exception: pass
+    return f
+
+
+def grad_img(w, h, colors, split=0.5):
+    top, top2, mid, bottom = colors
+    g = Image.new('RGB', (1, h))
     for y in range(h):
         t = y / max(1, h - 1)
-        a, b, k = (top, mid, t / 0.5) if t < 0.5 else (mid, bottom, (t - 0.5) / 0.5)
-        c = tuple(int(a[i] + (b[i] - a[i]) * k) for i in range(3))
-        for x in range(w):
-            px[x, y] = (*c, 255)
-    img.putalpha(mask)
-    return img
+        if t < split: a, b, k = top, top2, t / split
+        else: a, b, k = mid, bottom, (t - split) / (1 - split)
+        g.putpixel((0, y), tuple(int(a[i] + (b[i] - a[i]) * k) for i in range(3)))
+    return g.resize((w, h))
 
 
-# マイクラのタイトル風の 5x7 ドットフォント（1 ドット = 立体的なブロック）
-GLYPHS = {
-    'D': ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
-    'R': ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
-    'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-    'G': ['.####', '#....', '#....', '#.###', '#...#', '#...#', '.###.'],
-    'O': ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    'N': ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'],
-    'F': ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
-    'L': ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
-    'P': ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
-    'J': ['....#', '....#', '....#', '....#', '#...#', '#...#', '.###.'],
-    'E': ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
-    'C': ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
-    'T': ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
-    ' ': ['...', '...', '...', '...', '...', '...', '...'],
-}
+def grow(m, r):
+    """マスクを r ピクセル太らせる（大きい MaxFilter は遅いので小さいのを繰り返す）"""
+    while r > 0:
+        s = min(r, 6); m = m.filter(ImageFilter.MaxFilter(s * 2 + 1)); r -= s
+    return m
 
 
-def block_text(text, cell, top, mid, bottom, spacing=1):
-    """1 ドットを、上と左が明るく下と右が暗いブロックとして描く（立体的なドット文字）"""
-    cols = sum(len(GLYPHS[c][0]) + spacing for c in text) - spacing
-    img = Image.new('RGBA', (cols * cell, 7 * cell), (0, 0, 0, 0))
+def styled(text, path, size, colors=CHROME, skew=0.18, outline=0.07, outer=0.025, tracking=0.0, weight=None, split=0.5):
+    """斜体・金属グラデーション・濃い縁取り・外側の白い細線つきの文字（透明 PNG）"""
+    f = font(path, size * SS, weight)
+    adv = [f.getlength(ch) for ch in text]
+    track = size * SS * tracking
+    l, t, r, b = f.getbbox(text)
+    w = int(sum(adv) + track * (len(text) - 1)) + size * SS
+    h = (b - t) + size * SS
+    mask = Image.new('L', (w, h), 0)
+    d = ImageDraw.Draw(mask)
+    x = size * SS // 2
+    for ch, a in zip(text, adv):
+        d.text((x, size * SS // 2 - t), ch, font=f, fill=255)
+        x += a + track
+    extra = int(h * skew)
+    mask = mask.transform((w + extra, h), Image.AFFINE, (1, skew, -extra, 0, 1, 0), resample=Image.BICUBIC)
+    bbox = mask.getbbox()
+    o = int(size * SS * outline); oo = int(size * SS * outer)
+    pad = o + oo + 4 * SS
+    mask = mask.crop((bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad))
+    w, h = mask.size
+    m_out = grow(mask, o)
+    m_outer = grow(m_out, oo)
+
+    def lay(m, c):
+        L = Image.new('RGBA', (w, h), c + (0,)); L.putalpha(m); return L
+    img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    if oo: img.alpha_composite(lay(m_outer, (245, 235, 255)))  # 外側の白い細線
+    img.alpha_composite(lay(m_out, (12, 0, 26)))               # 濃い縁取り
+    body = grad_img(w, h, colors, split).convert('RGBA'); body.putalpha(mask)
+    img.alpha_composite(body)
+    inner = ImageChops.subtract(mask, mask.filter(ImageFilter.MinFilter(3)))  # 輪郭の内側の細いハイライト
+    img.alpha_composite(lay(inner.point(lambda v: v // 2), (255, 255, 255)))
+    return img.resize((w // SS, h // SS), Image.LANCZOS)
+
+
+def sharp_eye(size, ring_only=False):
+    """エンダードラゴンの目（鋭いひし形と、縦に細い瞳）。ring_only は背景の枠だけ"""
+    S = size * SS
+    img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    bev = max(1, cell // 6)
-    x0 = 0
-    for ch in text:
-        g = GLYPHS[ch]
-        for y, row in enumerate(g):
-            t = y / 6
-            a, b, k = (top, mid, t / 0.5) if t < 0.5 else (mid, bottom, (t - 0.5) / 0.5)
-            c = tuple(int(a[i] + (b[i] - a[i]) * k) for i in range(3))
-            hi = tuple(min(255, int(v * 1.25 + 30)) for v in c)
-            lo = tuple(int(v * 0.6) for v in c)
-            for x, on in enumerate(row):
-                if on != '#': continue
-                X, Y = (x0 + x) * cell, y * cell
-                d.rectangle([X, Y, X + cell - 1, Y + cell - 1], fill=lo + (255,))
-                d.rectangle([X, Y, X + cell - 1 - bev, Y + cell - 1 - bev], fill=hi + (255,))
-                d.rectangle([X + bev, Y + bev, X + cell - 1 - bev, Y + cell - 1 - bev], fill=c + (255,))
-        x0 += len(g[0]) + spacing
-    return img
+    c = S / 2
+    dia = lambda r: [(c, c - r), (c + r, c), (c, c + r), (c - r, c)]
+    if ring_only:
+        d.polygon(dia(c), fill=(170, 80, 255, 255)); d.polygon(dia(c * 0.985), fill=(0, 0, 0, 0))
+        d.polygon(dia(c * 0.9), fill=(170, 80, 255, 200)); d.polygon(dia(c * 0.89), fill=(0, 0, 0, 0))
+        return img.resize((size, size), Image.LANCZOS)
+    d.polygon(dia(c), fill=(10, 0, 22, 255))
+    d.polygon(dia(c * 0.9), fill=(150, 50, 240, 255))
+    d.polygon(dia(c * 0.72), fill=(40, 6, 80, 255))
+    d.polygon(dia(c * 0.62), fill=(240, 225, 255, 255))
+    d.polygon([(c, c - S * 0.27), (c + S * 0.045, c), (c, c + S * 0.27), (c - S * 0.045, c)], fill=(14, 0, 26, 255))
+    d.polygon([(c - S * 0.17, c - S * 0.06), (c - S * 0.06, c - S * 0.17), (c - S * 0.03, c - S * 0.14), (c - S * 0.14, c - S * 0.03)], fill=(255, 255, 255, 255))
+    return img.resize((size, size), Image.LANCZOS)
 
 
-# エンダードラゴンの目（13x13 のドット絵）。. = 透明、P = 紫、L = 明るい紫、W = 白、K = 黒（瞳）
-EYE = [
-    '......P......',
-    '.....PLP.....',
-    '....PLLLP....',
-    '...PLLWLLP...',
-    '..PLLWKWLLP..',
-    '.PLLWWKWWLLP.',
-    'PLLWWWKWWWLLP',
-    '.PLLWWKWWLLP.',
-    '..PLLWKWLLP..',
-    '...PLLWLLP...',
-    '....PLLLP....',
-    '.....PLP.....',
-    '......P......',
-]
-EYE_COLORS = {'P': (120, 30, 200), 'L': (205, 120, 255), 'W': (250, 235, 255), 'K': (16, 0, 28)}
-
-
-def eye_icon(cell):
-    n = len(EYE)
-    img = Image.new('RGBA', (n * cell, n * cell), (0, 0, 0, 0))
+def slash(w, h, thick, color=(235, 215, 255)):
+    """斬撃の線（細長い刃の形。中央が太く両端がとがる）"""
+    img = Image.new('RGBA', (w * SS, h * SS), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    for y, row in enumerate(EYE):
-        for x, ch in enumerate(row):
-            if ch in EYE_COLORS:
-                d.rectangle([x * cell, y * cell, (x + 1) * cell - 1, (y + 1) * cell - 1], fill=EYE_COLORS[ch] + (255,))
-    return img
+    x0, y0, x1, y1 = 0, h * SS * 0.8, w * SS, h * SS * 0.2
+    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+    ang = math.atan2(y1 - y0, x1 - x0); nx, ny = -math.sin(ang), math.cos(ang)
+    t = thick * SS
+    d.polygon([(x0, y0), (mx + nx * t, my + ny * t), (x1, y1), (mx - nx * t * 0.35, my - ny * t * 0.35)], fill=color + (255,))
+    return img.resize((w, h), Image.LANCZOS)
 
 
-def glow(img, radius, color, strength=2):
+def glow(img, radius, color, strength=1.0):
     a = img.split()[-1].filter(ImageFilter.GaussianBlur(radius))
     g = Image.new('RGBA', img.size, color + (0,))
-    g.putalpha(a.point(lambda v: min(255, v * strength)))
+    g.putalpha(a.point(lambda v: min(255, int(v * strength))))
     return g
 
 
-def logo(cell=12, pad=80):
-    """ロゴ一式（透明 PNG）。目のアイコン＋ PROJECT / DRAGONFALL ＋日本語の副題"""
-    title = block_text('DRAGONFALL', cell * 2 + cell // 3, PURPLE_TOP, PURPLE_MID, PURPLE_DEEP)
-    small = block_text('PROJECT', cell - 2, (255, 255, 255), (225, 205, 255), (175, 145, 230))
-    sub_f = ImageFont.truetype(JP, cell * 3)
-    sub = Image.new('RGBA', (title.width, cell * 4), (0, 0, 0, 0))
-    ImageDraw.Draw(sub).text((sub.width // 2, 0), 'A I  エ ン ダ ー ド ラ ゴ ン 討 伐 計 画', font=sub_f, fill=(225, 210, 255, 255), anchor='ma', stroke_width=1, stroke_fill=(225, 210, 255, 255))
-    eye = eye_icon(cell)
+ORDER = ('glow', 'ring', 'lines', 'blade', 'kanji', 'eng', 'proj', 'band', 'eye')
 
-    gap = cell * 2
-    w = max(title.width, eye.width) + pad * 2
-    depth = cell  # DRAGONFALL の奥行き（マイクラのタイトルのように下へ押し出す）
-    h = eye.height + gap + small.height + cell * 2 + title.height + depth + gap + sub.height + pad * 2
-    out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-    y = pad
-    parts = []
-    for part in (eye, None, small, 'cell', 'cell', title, 'depth', None, sub):
-        if part is None: y += gap; continue
-        if part == 'cell': y += cell; continue
-        if part == 'depth': y += depth; continue
-        parts.append((part, ((w - part.width) // 2, y)))
-        y += part.height
-    # 文字の影（右下に 1 ドット）→ 光 → 本体
-    for part, (x, yy) in parts:
-        shadow = Image.new('RGBA', part.size, (20, 0, 40, 0))
-        shadow.putalpha(part.split()[-1])
-        out.alpha_composite(shadow, (x + cell // 2, yy + cell // 2))
-    # DRAGONFALL の押し出し（暗い紫を 1px ずつ下へずらして重ねる）
-    tx, ty = parts[2][1]
-    side = Image.new('RGBA', title.size, (48, 8, 86, 0)); side.putalpha(title.split()[-1])
-    side_dark = Image.new('RGBA', title.size, (28, 4, 52, 0)); side_dark.putalpha(title.split()[-1])
-    for k in range(depth, 0, -1):
-        out.alpha_composite(side_dark if k > depth * 0.6 else side, (tx, ty + k))
-    glow_layer = Image.new('RGBA', out.size, (0, 0, 0, 0))
-    for part, pos in parts: glow_layer.alpha_composite(part, pos)
-    out = Image.alpha_composite(glow(glow_layer, cell * 2, (170, 60, 255), 1.4), out)
-    for part, pos in parts: out.alpha_composite(part, pos)
-    return out, parts
+
+def logo(scale=1.0):
+    """ロゴ一式（透明 PNG）と、パーツごとの層（同じ大きさ、オープニングの演出用）を返す"""
+    s = lambda v: int(v * scale)
+    kanji = styled('竜墜', MINCHO, s(380), CHROME, skew=0.16, outline=0.028, outer=0.012, tracking=-0.02, split=0.52)
+    eng = styled('DRAGONFALL', ORBITRON, s(118), CHROME, skew=0.2, outline=0.09, outer=0.03, tracking=0.08, weight=900)
+    proj = styled('PROJECT', MICHROMA, s(40), SILVER, skew=0.2, outline=0.08, outer=0.0, tracking=0.6)
+    sub_f = font(DELA, s(40))
+    sub_txt = 'AI エンダードラゴン討伐計画'
+    sw = int(sub_f.getlength(sub_txt)) + s(110)
+    band = Image.new('RGBA', (sw, s(70)), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(band)
+    k = s(26)
+    bd.polygon([(k, 0), (sw, 0), (sw - k, band.height), (0, band.height)], fill=(18, 2, 38, 235))
+    bd.polygon([(k, 0), (sw, 0), (sw - 2, 4), (k + 1, 4)], fill=(190, 120, 255, 255))
+    bd.text((sw // 2, band.height // 2), sub_txt, font=sub_f, fill=(245, 238, 255), anchor='mm')
+    eye_ring = sharp_eye(s(620), ring_only=True)
+    eye = sharp_eye(s(64))
+    blade = slash(int(kanji.width * 1.4), int(kanji.height * 0.95), s(10))
+
+    W = max(kanji.width, eng.width) + s(300)
+    H = s(60) + proj.height + kanji.height + eng.height + band.height + s(60)
+    pos = {}
+    y = s(40)
+    pos['proj'] = ((W - proj.width) // 2, y); y += proj.height + s(4)
+    pos['kanji'] = ((W - kanji.width) // 2, y); y += kanji.height - s(18)
+    pos['eng'] = ((W - eng.width) // 2 + s(30), y); y += eng.height + s(4)
+    pos['band'] = ((W - band.width) // 2 + s(20), y)
+    H = y + band.height + s(40)
+    kx, ky = pos['kanji']
+    pos['ring'] = (kx + (kanji.width - eye_ring.width) // 2, ky + (kanji.height - eye_ring.height) // 2 + s(20))
+    pos['blade'] = (kx - int(kanji.width * 0.2), ky)
+    pos['eye'] = (pos['proj'][0] - eye.width - s(16), pos['proj'][1] + (proj.height - eye.height) // 2)
+    lines = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(lines)
+    py = pos['proj'][1] + proj.height // 2
+    lx1 = pos['eye'][0] - s(24); rx0 = pos['proj'][0] + proj.width + s(24)
+    ld.polygon([(lx1 - s(380), py), (lx1, py - 1), (lx1, py + 2)], fill=(210, 180, 255, 230))
+    ld.polygon([(rx0, py - 1), (rx0 + s(380), py), (rx0, py + 2)], fill=(210, 180, 255, 230))
+    parts = {'ring': eye_ring, 'blade': blade, 'kanji': kanji, 'eng': eng, 'proj': proj, 'band': band, 'eye': eye}
+    layers = {'lines': lines}
+    for name, im in parts.items():
+        L = Image.new('RGBA', (W, H), (0, 0, 0, 0)); L.alpha_composite(im, pos[name]); layers[name] = L
+    layers['ring'].putalpha(layers['ring'].split()[-1].point(lambda v: v * 45 // 100))
+    glow_src = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    for n in ('kanji', 'eng'): glow_src.alpha_composite(layers[n])
+    layers['glow'] = glow(glow_src, s(22), (150, 50, 255), 0.75)
+    out = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    for n in ORDER: out.alpha_composite(layers[n])
+    return out, layers
 
 
 if __name__ == '__main__':
@@ -162,11 +176,10 @@ if __name__ == '__main__':
     os.makedirs(dst, exist_ok=True)
     img, _ = logo()
     img.save(os.path.join(dst, 'dragonfall_logo.png'))
-    # 暗い背景つき（確認用・サムネイル素材）
     bg = Image.new('RGBA', (1920, 1080), (8, 2, 16, 255))
-    s = min(1700 / img.width, 950 / img.height)
-    lg = img.resize((int(img.width * s), int(img.height * s)), Image.NEAREST)
+    s = min(1760 / img.width, 1000 / img.height)
+    lg = img.resize((int(img.width * s), int(img.height * s)), Image.LANCZOS)
     bg.alpha_composite(lg, ((1920 - lg.width) // 2, (1080 - lg.height) // 2))
     bg.convert('RGB').save(os.path.join(dst, 'dragonfall_logo_dark.png'))
-    eye_icon(64).save(os.path.join(dst, 'dragonfall_icon.png'))
+    sharp_eye(512).save(os.path.join(dst, 'dragonfall_icon.png'))
     print('ok', img.size)
