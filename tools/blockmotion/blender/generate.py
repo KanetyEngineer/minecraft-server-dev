@@ -874,7 +874,7 @@ def scatter_outdoor():
         y -= random.uniform(5, 9)
     for _ in range(int((Y_MAX - Y_MIN) * 3)):
         x = random.randint(-14, 14)
-        if abs(x) < 2:
+        if -2 < x < 8:  # keep the walking lane and the usual camera side clear
             continue
         yy = random.randint(int(Y_MIN), int(Y_MAX))
         r = random.random()
@@ -966,6 +966,8 @@ cam.parent = pivot
 CAM = CFG["camera"]
 zoom = float(CFG.get("zoom", 1.0)) or 1.0
 dist = 7.0 / zoom
+if CFG["resolution"][1] > CFG["resolution"][0]:  # portrait frames need more headroom
+    dist *= 1.35
 look_h = 1.05
 presets = {
     "front": (0, -dist, 1.3),
