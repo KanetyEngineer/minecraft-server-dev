@@ -9,7 +9,8 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readWorld, writeWorld, initialWorld, takeRequests, canMarry, canHaveChild, makeChild, ageOf, YEAR_MS } from '../src/society/population.js';
 import { personaByName } from '../src/society/personas.js';
-import { rconSend } from '../src/society/rcon.js';
+import crypto from 'node:crypto';
+import { rconSend, serverDir } from '../src/society/rcon.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -126,8 +127,24 @@ async function tick() {
 }
 
 // ホワイトリスト: 鯖が white-list=true のときに備え、戸籍の生きている人と観察者を登録する（生まれた子も登録する）
+// オフラインの鯖では `whitelist add` が名前を小文字にして別の UUID で登録してしまい、生まれた子が入れなかった。
+// whitelist.json に正しい大文字小文字の名前とオフライン UUID（"OfflinePlayer:" + 名前の MD5、版 3）を書いてから読み直させる
+function offlineUuid(name) {
+  const h = crypto.createHash('md5').update(`OfflinePlayer:${name}`).digest();
+  h[6] = (h[6] & 0x0f) | 0x30;
+  h[8] = (h[8] & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
 async function whitelist(names) {
-  try { await rconSend(names.map((n) => `whitelist add ${n}`)); } catch {}
+  try {
+    const file = path.join(serverDir(), 'whitelist.json');
+    const list = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
+    const keep = list.filter((e) => !names.some((n) => n.toLowerCase() === String(e.name).toLowerCase() && n !== e.name));
+    for (const n of names) if (!keep.some((e) => e.name === n)) keep.push({ uuid: offlineUuid(n), name: n });
+    fs.writeFileSync(file, JSON.stringify(keep, null, 2));
+    await rconSend(['whitelist reload']);
+  } catch {}
 }
 whitelist([...Object.values(world.people).filter((p) => p.alive).map((p) => p.name), ...(process.env.SOCIETY_OBSERVERS || 'kanetyyy').split(',')]);
 console.log(`町の管理役を開始（1 年 = ${YEAR_MS / 60_000} 分、住人 ${Object.values(world.people).filter((p) => p.alive).length} 人）`);
