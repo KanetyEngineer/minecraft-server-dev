@@ -24,7 +24,7 @@ except ImportError:  # the preview pictures are optional
     Image = ImageTk = None
 
 APP_NAME = "BlockMotion"
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 
 def resource_dir():

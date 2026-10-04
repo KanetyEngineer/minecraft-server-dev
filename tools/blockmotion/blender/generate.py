@@ -1052,9 +1052,11 @@ def scatter(n_trees, tree_fn, n_small, small_fn):
         if not near_path(x, y, 6):
             tree_fn(x, y)
             placed += 1
+    used = set()  # one plant per block: two plants in one cell overlap exactly and EEVEE paints them black
     for _ in range(n_small):
         x, y = random.randint(int(AX0), int(AX1)), random.randint(int(AY0), int(AY1))
-        if not near_path(x, y, 2.5):
+        if (x, y) not in used and not near_path(x, y, 2.5):
+            used.add((x, y))
             small_fn(x + 0.5, y + 0.5)
 
 
