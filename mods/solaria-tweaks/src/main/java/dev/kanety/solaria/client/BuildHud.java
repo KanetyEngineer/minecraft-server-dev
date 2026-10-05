@@ -26,13 +26,13 @@ public final class BuildHud {
             colors.add(0xFFFFD27F);
             int shown = 0;
             for (ClientBuildState.Material m : p.materials()) {
-                if (m.assignee() == null || !m.assignee().uuid().equals(me) || m.remaining() <= 0) continue;
+                if (m.ignored() || m.assignee() == null || !m.assignee().uuid().equals(me) || m.remaining() <= 0) continue;
                 if (shown++ >= cfg.hudMaxLines) break;
                 lines.add("  " + BuildScreen.itemName(m.item()) + " あと " + BuildScreen.stacks(m.remaining()));
                 colors.add(0xFFFFFFFF);
             }
             for (ClientBuildState.Area a : p.areas()) {
-                if (a.assignee() == null || !a.assignee().uuid().equals(me)) continue;
+                if (a.ignored() || a.assignee() == null || !a.assignee().uuid().equals(me)) continue;
                 lines.add("  区画 " + a.id() + "  " + pct(a.progress()) + "  (" + a.x1() + "," + a.z1() + ")");
                 colors.add(a.done() >= a.total() ? 0xFF7FFF7F : 0xFF9FD7FF);
             }

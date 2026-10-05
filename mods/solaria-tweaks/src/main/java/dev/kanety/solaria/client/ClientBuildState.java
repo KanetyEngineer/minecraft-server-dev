@@ -14,7 +14,7 @@ public final class ClientBuildState {
 
     public record Placement(String id, String name, String dim, String owner, int x, int y, int z) {}
 
-    public record Material(String item, int req, int placed, int stock, int held, Person assignee) {
+    public record Material(String item, int req, int placed, int stock, int held, Person assignee, boolean ignored) {
         public int remaining() {
             return Math.max(0, req - placed - stock - held);
         }
@@ -24,7 +24,7 @@ public final class ClientBuildState {
         }
     }
 
-    public record Area(String id, int total, int done, int x1, int z1, int x2, int z2, Person assignee) {
+    public record Area(String id, int total, int done, int x1, int z1, int x2, int z2, Person assignee, boolean ignored) {
         public double progress() {
             return total == 0 ? 0 : (double) done / total;
         }
@@ -83,14 +83,14 @@ public final class ClientBuildState {
             for (JsonElement m : o.getAsJsonArray("materials")) {
                 JsonObject mo = m.getAsJsonObject();
                 mats.add(new Material(str(mo, "item"), mo.get("req").getAsInt(), mo.get("placed").getAsInt(),
-                        mo.get("stock").getAsInt(), mo.get("held").getAsInt(), person(mo.get("assignee"))));
+                        mo.get("stock").getAsInt(), mo.get("held").getAsInt(), person(mo.get("assignee")), bool(mo, "ignored")));
             }
             List<Area> areas = new ArrayList<>();
             for (JsonElement a : o.getAsJsonArray("areas")) {
                 JsonObject ao = a.getAsJsonObject();
                 areas.add(new Area(str(ao, "id"), ao.get("total").getAsInt(), ao.get("done").getAsInt(),
                         ao.get("x1").getAsInt(), ao.get("z1").getAsInt(), ao.get("x2").getAsInt(), ao.get("z2").getAsInt(),
-                        person(ao.get("assignee"))));
+                        person(ao.get("assignee")), bool(ao, "ignored")));
             }
             pr.add(new Project(str(o, "name"), str(o, "placement"), str(o, "placementName"), str(o, "dim"),
                     str(o, "status"), str(o, "owner"), str(o, "ownerUuid"), str(o, "areaMode"), o.get("gridSize").getAsInt(),
@@ -105,6 +105,11 @@ public final class ClientBuildState {
     private static String str(JsonObject o, String key) {
         JsonElement e = o.get(key);
         return e == null || e.isJsonNull() ? "" : e.getAsString();
+    }
+
+    private static boolean bool(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        return e != null && !e.isJsonNull() && e.getAsBoolean();
     }
 
     private static Person person(JsonElement e) {

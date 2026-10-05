@@ -27,6 +27,31 @@ public final class BuildProject {
         public Map<String, Person> materialAssign = new LinkedHashMap<>();
         public Map<String, Person> areaAssign = new LinkedHashMap<>();
         public List<Long> storages = new ArrayList<>();
+        /** Materials and areas left out of the plan (not gathered / not built by this plan). */
+        public List<String> ignoredItems = new ArrayList<>();
+        public List<String> ignoredAreas = new ArrayList<>();
+    }
+
+    public boolean isIgnored(Item item) {
+        return data.ignoredItems != null && data.ignoredItems.contains(itemId(item));
+    }
+
+    public boolean isAreaIgnored(String area) {
+        return data.ignoredAreas != null && data.ignoredAreas.contains(area);
+    }
+
+    /** Adds or removes an ignore entry; returns true if something changed. */
+    public boolean setIgnored(boolean area, String id, boolean ignored) {
+        if (data.ignoredItems == null) data.ignoredItems = new ArrayList<>();
+        if (data.ignoredAreas == null) data.ignoredAreas = new ArrayList<>();
+        List<String> list = area ? data.ignoredAreas : data.ignoredItems;
+        if (ignored) {
+            if (list.contains(id)) return false;
+            list.add(id);
+            (area ? data.areaAssign : data.materialAssign).remove(id);
+            return true;
+        }
+        return list.remove(id);
     }
 
     public static final class Person {
@@ -191,6 +216,7 @@ public final class BuildProject {
     public double materialProgress() {
         long req = 0, have = 0;
         for (Map.Entry<Item, Integer> e : required.entrySet()) {
+            if (isIgnored(e.getKey())) continue;
             int r = e.getValue();
             req += r;
             have += Math.min(r, placed.getOrDefault(e.getKey(), 0) + stock.getOrDefault(e.getKey(), 0) + held.getOrDefault(e.getKey(), 0));
@@ -198,9 +224,22 @@ public final class BuildProject {
         return req == 0 ? 1.0 : (double) have / req;
     }
 
-    public double buildProgress() {
+    /** Blocks of the plan without ignored areas. */
+    public int countedTotal() {
         int total = totalBlocks();
-        return total == 0 ? 0.0 : (double) doneBlocks / total;
+        for (int a = 0; a < areaIds.size(); a++) if (isAreaIgnored(areaIds.get(a))) total -= areaTotal[a];
+        return total;
+    }
+
+    public int countedDone() {
+        int done = doneBlocks;
+        for (int a = 0; a < areaIds.size(); a++) if (isAreaIgnored(areaIds.get(a))) done -= areaDone[a];
+        return done;
+    }
+
+    public double buildProgress() {
+        int total = countedTotal();
+        return total <= 0 ? (totalBlocks() == 0 ? 0.0 : 1.0) : (double) countedDone() / total;
     }
 
     JsonObject toJson() {
@@ -214,8 +253,8 @@ public final class BuildProject {
         o.addProperty("ownerUuid", data.ownerUuid);
         o.addProperty("areaMode", data.areaMode);
         o.addProperty("gridSize", data.gridSize);
-        o.addProperty("total", totalBlocks());
-        o.addProperty("done", doneBlocks);
+        o.addProperty("total", countedTotal());
+        o.addProperty("done", countedDone());
         o.addProperty("materialProgress", materialProgress());
         JsonArray members = new JsonArray();
         for (Person p : data.members) members.add(person(p));
@@ -240,6 +279,7 @@ public final class BuildProject {
             m.addProperty("held", held.getOrDefault(e.getKey(), 0));
             Person a = data.materialAssign.get(id);
             if (a != null) m.add("assignee", person(a));
+            if (isIgnored(e.getKey())) m.addProperty("ignored", true);
             mats.add(m);
         }
         o.add("materials", mats);
@@ -256,6 +296,7 @@ public final class BuildProject {
             a.addProperty("z2", areaBounds[i * 4 + 3]);
             Person p = data.areaAssign.get(id);
             if (p != null) a.add("assignee", person(p));
+            if (isAreaIgnored(id)) a.addProperty("ignored", true);
             areas.add(a);
         }
         o.add("areas", areas);

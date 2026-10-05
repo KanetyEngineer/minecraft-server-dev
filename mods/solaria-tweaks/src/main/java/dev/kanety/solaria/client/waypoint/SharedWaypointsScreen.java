@@ -1,5 +1,6 @@
 package dev.kanety.solaria.client.waypoint;
 
+import dev.kanety.solaria.client.ClientConfig;
 import dev.kanety.solaria.client.xaero.MinimapBridge;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -80,8 +81,18 @@ public class SharedWaypointsScreen extends Screen {
             addRenderableWidget(all);
         } else {
             List<ClientWaypoints.Entry> entries = ClientWaypoints.entries();
+            boolean xaero = MinimapBridge.loaded();
             for (int i = 0; i < n && scroll + i < entries.size(); i++) {
                 ClientWaypoints.Entry e = entries.get(scroll + i);
+                if (xaero) {
+                    boolean registered = MinimapBridge.isRegistered(e);
+                    Button reg = Button.builder(Component.literal(registered ? "登録済み" : "登録"), btn -> register(List.of(e)))
+                            .bounds(width - 70 - 64, TOP + i * ROW, 60, 18)
+                            .tooltip(Tooltip.create(Component.literal("Xaero's Minimap の自分の地点（今選んでいるセット）に追加します")))
+                            .build();
+                    reg.active = !registered;
+                    addRenderableWidget(reg);
+                }
                 Button b = Button.builder(Component.literal("削除"), btn -> minecraft.setScreen(new ConfirmScreen(ok -> {
                     if (ok) ClientWaypoints.remove(e.id());
                     minecraft.setScreen(this);
@@ -91,6 +102,22 @@ public class SharedWaypointsScreen extends Screen {
                         .build();
                 addRenderableWidget(b);
             }
+            if (xaero) {
+                Button all = Button.builder(Component.literal("まとめて登録"), b -> register(entries))
+                        .bounds(10, 22, 78, 18)
+                        .tooltip(Tooltip.create(Component.literal("まだ登録していない共有地点をすべて自分の地点に追加します")))
+                        .build();
+                all.active = !entries.isEmpty();
+                addRenderableWidget(all);
+                ClientConfig cfg = ClientConfig.get();
+                addRenderableWidget(Button.builder(Component.literal("地図に全部出す: " + (cfg.showSharedOnMap ? "ON" : "OFF")), b -> {
+                    cfg.showSharedOnMap = !cfg.showSharedOnMap;
+                    ClientConfig.save();
+                    rebuildWidgets();
+                }).bounds(width - 150, height - 26, 140, 20)
+                        .tooltip(Tooltip.create(Component.literal("ON: 共有地点がすべてすぐ地図に出ます（自分の地点ファイルには入りません）\nOFF: 「登録」したものだけが自分の地点として地図に出ます")))
+                        .build());
+            }
             addRenderableWidget(Button.builder(Component.literal("今いる場所を共有"), b -> {
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.player == null || mc.level == null) return;
@@ -99,6 +126,15 @@ public class SharedWaypointsScreen extends Screen {
             }).bounds(10, height - 26, 110, 20).build());
         }
         addRenderableWidget(Button.builder(Component.literal("閉じる"), b -> onClose()).bounds(width / 2 - 50, height - 26, 100, 20).build());
+    }
+
+    private void register(List<ClientWaypoints.Entry> entries) {
+        int added = MinimapBridge.register(entries);
+        if (minecraft != null && minecraft.player != null) {
+            minecraft.player.displayClientMessage(Component.literal(added < 0 ? "Xaero's Minimap に登録できませんでした（ログを確認してください）"
+                    : added == 0 ? "新しく登録する地点はありませんでした" : added + " 件の地点を自分の地点に登録しました"), false);
+        }
+        rebuildWidgets();
     }
 
     @Override
@@ -122,7 +158,7 @@ public class SharedWaypointsScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick);
         g.drawCenteredString(font, title, width / 2, 8, 0xFFFFFFFF);
         int n = visible();
-        int textW = width - 90;
+        int textW = width - 90 - (!localTab && MinimapBridge.loaded() ? 64 : 0);
         if (localTab) {
             if (!MinimapBridge.loaded()) {
                 g.drawCenteredString(font, "Xaero's Minimap が入っていません", width / 2, TOP + 4, 0xFFFF9F9F);

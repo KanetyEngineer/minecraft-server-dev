@@ -138,10 +138,11 @@ public class BuildScreen extends Screen {
         String me = me();
         List<ClientBuildState.Material> rows = new ArrayList<>();
         for (ClientBuildState.Material m : p.materials()) {
-            if (onlyMine && (m.assignee() == null || !m.assignee().uuid().equals(me))) continue;
+            if (onlyMine && (m.ignored() || m.assignee() == null || !m.assignee().uuid().equals(me))) continue;
             rows.add(m);
         }
-        rows.sort(Comparator.comparingInt(ClientBuildState.Material::remaining).reversed());
+        rows.sort(Comparator.comparing(ClientBuildState.Material::ignored)
+                .thenComparing(Comparator.comparingInt(ClientBuildState.Material::remaining).reversed()));
         return rows;
     }
 
@@ -149,9 +150,10 @@ public class BuildScreen extends Screen {
         String me = me();
         List<ClientBuildState.Area> rows = new ArrayList<>();
         for (ClientBuildState.Area a : p.areas()) {
-            if (onlyMine && (a.assignee() == null || !a.assignee().uuid().equals(me))) continue;
+            if (onlyMine && (a.ignored() || a.assignee() == null || !a.assignee().uuid().equals(me))) continue;
             rows.add(a);
         }
+        rows.sort(Comparator.comparing(ClientBuildState.Area::ignored));
         return rows;
     }
 
@@ -168,6 +170,9 @@ public class BuildScreen extends Screen {
                     + f.nearest().getX() + " " + f.nearest().getY() + " " + f.nearest().getZ() + "）";
             boolean mine = m.assignee() != null && m.assignee().uuid().equals(me);
             String cmd = (mine ? "bp unclaim " : "bp claim ") + p.name() + " " + m.item();
+            ignoreButton(m.ignored(), "bp " + (m.ignored() ? "unignore " : "ignore ") + p.name() + " " + m.item(), y,
+                    "この材料を集める対象と進捗から外します（足場や不要なブロック向け）。作成者と OP だけが使えます。");
+            if (m.ignored()) continue;
             addRenderableWidget(Button.builder(Component.literal(mine ? "外す" : "担当"), b -> run(cmd))
                     .bounds(right - 36, y, 36, 18)
                     .tooltip(Tooltip.create(Component.literal(itemName(m.item()) + "\n必要 " + m.req() + "（" + stacks(m.req()) + "）"
@@ -187,9 +192,18 @@ public class BuildScreen extends Screen {
             int y = listTop + i * ROW;
             boolean mine = a.assignee() != null && a.assignee().uuid().equals(me);
             String cmd = (mine ? "bp areaunclaim " : "bp areaclaim ") + p.name() + " " + a.id();
+            ignoreButton(a.ignored(), "bp " + (a.ignored() ? "areaunignore " : "areaignore ") + p.name() + " " + a.id(), y,
+                    "この区画を建築の対象と進捗から外します。作成者と OP だけが使えます。");
+            if (a.ignored()) continue;
             addRenderableWidget(Button.builder(Component.literal(mine ? "外す" : "担当"), b -> run(cmd))
                     .bounds(right - 36, y, 36, 18).build());
         }
+    }
+
+    private void ignoreButton(boolean ignored, String cmd, int y, String tip) {
+        addRenderableWidget(Button.builder(Component.literal(ignored ? "戻す" : "無視"), b -> run(cmd))
+                .bounds(right - 36 - 2 - 36, y, 36, 18)
+                .tooltip(Tooltip.create(Component.literal(ignored ? "対象に戻します。" : tip))).build());
     }
 
     private void initSettings(ClientBuildState.Project p, int cx) {
@@ -316,7 +330,7 @@ public class BuildScreen extends Screen {
         }
         int n = visibleRows();
         int barW = 70;
-        int assigneeX = right - 36 - 4 - 64;
+        int assigneeX = right - 74 - 4 - 64;
         int barX = assigneeX - 6 - barW;
         int nameW = barX - (cx + 20) - 64;
         for (int i = 0; i < n && scroll + i < rows.size(); i++) {
@@ -324,6 +338,11 @@ public class BuildScreen extends Screen {
             int y = listTop + i * ROW;
             if (i % 2 == 0) g.fill(cx, y - 1, right, y + ROW - 1, 0x22FFFFFF);
             g.renderItem(stack(m.item()), cx + 1, y + 1);
+            if (m.ignored()) {
+                g.drawString(font, font.plainSubstrByWidth(itemName(m.item()), nameW), cx + 20, y + 5, 0xFF777777, true);
+                g.drawString(font, "対象外", barX, y + 5, 0xFF777777, true);
+                continue;
+            }
             g.drawString(font, font.plainSubstrByWidth(itemName(m.item()), nameW), cx + 20, y + 5, 0xFFFFFFFF, true);
             String rem = m.remaining() == 0 ? "完了" : "あと " + stacks(m.remaining());
             ChestTrackerBridge.Found f = remembered.get(m.item());
@@ -344,16 +363,20 @@ public class BuildScreen extends Screen {
             return;
         }
         int n = visibleRows();
-        int assigneeX = right - 36 - 4 - 64;
+        int assigneeX = right - 74 - 4 - 64;
         int barW = 90;
         int barX = assigneeX - 6 - barW;
         for (int i = 0; i < n && scroll + i < rows.size(); i++) {
             ClientBuildState.Area a = rows.get(scroll + i);
             int y = listTop + i * ROW;
             if (i % 2 == 0) g.fill(cx, y - 1, right, y + ROW - 1, 0x22FFFFFF);
-            g.drawString(font, a.id(), cx + 2, y + 5, 0xFFFFD27F, true);
+            g.drawString(font, a.id(), cx + 2, y + 5, a.ignored() ? 0xFF777777 : 0xFFFFD27F, true);
             String range = "X " + a.x1() + "〜" + a.x2() + "  Z " + a.z1() + "〜" + a.z2();
-            g.drawString(font, font.plainSubstrByWidth(range, barX - cx - 40), cx + 36, y + 5, 0xFFDDDDDD, true);
+            g.drawString(font, font.plainSubstrByWidth(range, barX - cx - 40), cx + 36, y + 5, a.ignored() ? 0xFF777777 : 0xFFDDDDDD, true);
+            if (a.ignored()) {
+                g.drawString(font, "対象外", barX, y + 5, 0xFF777777, true);
+                continue;
+            }
             bar(g, barX, y + 3, barW, 12, a.progress(), a.progress(), BuildHud.pct(a.progress()));
             String who = a.assignee() == null ? "-" : a.assignee().name();
             g.drawString(font, font.plainSubstrByWidth(who, 64), assigneeX, y + 5, a.assignee() == null ? 0xFF888888 : 0xFF9FD7FF, true);

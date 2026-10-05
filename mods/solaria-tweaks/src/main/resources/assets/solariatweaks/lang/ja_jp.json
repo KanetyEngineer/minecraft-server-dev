@@ -33,5 +33,12 @@
   "solariatweaks.config.generic.comment.fillerCount": "「フィルターを詰める」で2〜5枠目に入れる埋め物の数",
   "solariatweaks.config.generic.name.fillerItem": "fillerItem",
   "solariatweaks.config.generic.prettyName.fillerItem": "フィルター: 埋め物のアイテム",
-  "solariatweaks.config.generic.comment.fillerItem": "埋め物にするアイテムID（例 minecraft:stick）。空欄なら金床で名前を付けたアイテムを使います"
+  "solariatweaks.config.generic.comment.fillerItem": "埋め物にするアイテムID（例 minecraft:stick）。空欄なら金床で名前を付けたアイテムを使います",
+  "key.solariatweaks.toggle_hud": "建築計画 HUD の表示切り替え",
+  "solariatweaks.config.hotkeys.name.toggleBuildHud": "toggleBuildHud",
+  "solariatweaks.config.hotkeys.prettyName.toggleBuildHud": "建築計画 HUD の表示切り替え",
+  "solariatweaks.config.hotkeys.comment.toggleBuildHud": "建築計画の HUD を表示・非表示に切り替えます",
+  "solariatweaks.config.generic.name.showSharedOnMap": "showSharedOnMap",
+  "solariatweaks.config.generic.prettyName.showSharedOnMap": "共有地点をすべて地図に出す",
+  "solariatweaks.config.generic.comment.showSharedOnMap": "ON: サーバー共有の地点がすぐ Xaero の地図に出ます\nOFF: 共有地点の一覧から好きなものを選んで、自分の地点として登録します"
 }

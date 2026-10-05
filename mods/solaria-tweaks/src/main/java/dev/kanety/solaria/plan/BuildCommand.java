@@ -113,6 +113,22 @@ public final class BuildCommand {
                                 .then(Commands.argument("area", StringArgumentType.word()).suggests(areas)
                                         .then(Commands.argument("player", EntityArgument.player())
                                                 .executes(c -> assignArea(c, EntityArgument.getPlayer(c, "player"), true))))))
+                .then(Commands.literal("ignore")
+                        .then(Commands.argument("project", StringArgumentType.word()).suggests(projects)
+                                .then(Commands.argument("item", StringArgumentType.greedyString()).suggests(items)
+                                        .executes(c -> ignoreMaterial(c, true)))))
+                .then(Commands.literal("unignore")
+                        .then(Commands.argument("project", StringArgumentType.word()).suggests(projects)
+                                .then(Commands.argument("item", StringArgumentType.greedyString()).suggests(items)
+                                        .executes(c -> ignoreMaterial(c, false)))))
+                .then(Commands.literal("areaignore")
+                        .then(Commands.argument("project", StringArgumentType.word()).suggests(projects)
+                                .then(Commands.argument("area", StringArgumentType.word()).suggests(areas)
+                                        .executes(c -> ignoreArea(c, true)))))
+                .then(Commands.literal("areaunignore")
+                        .then(Commands.argument("project", StringArgumentType.word()).suggests(projects)
+                                .then(Commands.argument("area", StringArgumentType.word()).suggests(areas)
+                                        .executes(c -> ignoreArea(c, false)))))
                 .then(Commands.literal("autoassign")
                         .then(Commands.argument("project", StringArgumentType.word()).suggests(projects)
                                 .executes(BuildCommand::autoAssign)))
@@ -256,7 +272,7 @@ public final class BuildCommand {
         CommandSourceStack s = c.getSource();
         send(s, Component.literal("「" + p.data.name + "」 " + p.placementName + " " + statusText(p)).withStyle(ChatFormatting.GOLD));
         send(s, Component.literal(" 材料 " + pct(p.materialProgress()) + " / 建築 " + pct(p.buildProgress())
-                + "（" + p.doneBlocks + " / " + p.totalBlocks() + " ブロック）"));
+                + "（" + p.countedDone() + " / " + p.countedTotal() + " ブロック）"));
         StringBuilder members = new StringBuilder();
         for (BuildProject.Person m : p.data.members) members.append(members.isEmpty() ? "" : ", ").append(m.name);
         send(s, Component.literal(" 参加者: " + (members.isEmpty() ? "なし" : members) + " / 倉庫 " + p.data.storages.size() + " 個"
@@ -271,6 +287,7 @@ public final class BuildCommand {
         List<Map.Entry<Item, Integer>> rows = new ArrayList<>(p.required.entrySet());
         rows.sort(Comparator.comparingInt((Map.Entry<Item, Integer> e) -> remaining(p, e.getKey(), e.getValue())).reversed());
         int shown = 0;
+        rows.removeIf(e -> p.isIgnored(e.getKey()));
         for (Map.Entry<Item, Integer> e : rows) {
             if (shown++ >= 15) break;
             Item item = e.getKey();
@@ -299,7 +316,7 @@ public final class BuildCommand {
             double prog = p.areaTotal[i] == 0 ? 0 : (double) p.areaDone[i] / p.areaTotal[i];
             send(s, Component.literal(" " + id + " (" + p.areaBounds[i * 4] + "," + p.areaBounds[i * 4 + 1] + " 〜 "
                     + p.areaBounds[i * 4 + 2] + "," + p.areaBounds[i * 4 + 3] + ") " + pct(prog)
-                    + " 担当 " + (a == null ? "なし" : a.name)));
+                    + (p.isAreaIgnored(id) ? " （対象外）" : " 担当 " + (a == null ? "なし" : a.name))));
         }
         return p.areaIds.size();
     }
@@ -348,6 +365,28 @@ public final class BuildCommand {
         return 1;
     }
 
+    private static int ignoreMaterial(CommandContext<CommandSourceStack> c, boolean ignore) throws CommandSyntaxException {
+        BuildProject p = project(c);
+        requireOwner(c.getSource(), p);
+        Item item = findItem(p, StringArgumentType.getString(c, "item"));
+        p.setIgnored(false, BuildProject.itemId(item), ignore);
+        manager().save();
+        send(c.getSource(), Component.literal(item.getDefaultInstance().getHoverName().getString()
+                + (ignore ? " を材料から外しました（集める対象と進捗に入りません）" : " を材料に戻しました")));
+        return 1;
+    }
+
+    private static int ignoreArea(CommandContext<CommandSourceStack> c, boolean ignore) throws CommandSyntaxException {
+        BuildProject p = project(c);
+        requireOwner(c.getSource(), p);
+        String area = StringArgumentType.getString(c, "area");
+        if (!p.areaIds.contains(area)) throw NO_AREA.create();
+        p.setIgnored(true, area, ignore);
+        manager().save();
+        send(c.getSource(), Component.literal("区画 " + area + (ignore ? " を建築の対象から外しました（進捗に入りません）" : " を建築の対象に戻しました")));
+        return 1;
+    }
+
     private static int autoAssign(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         BuildProject p = project(c);
         requireOwner(c.getSource(), p);
@@ -363,7 +402,7 @@ public final class BuildCommand {
         rows.sort(Comparator.comparingInt((Map.Entry<Item, Integer> e) -> remaining(p, e.getKey(), e.getValue())).reversed());
         for (Map.Entry<Item, Integer> e : rows) {
             int rem = remaining(p, e.getKey(), e.getValue());
-            if (rem <= 0) continue;
+            if (rem <= 0 || p.isIgnored(e.getKey())) continue;
             int best = 0;
             for (int i = 1; i < load.length; i++) if (load[i] < load[best]) best = i;
             load[best] += rem;
@@ -374,7 +413,7 @@ public final class BuildCommand {
         p.data.areaAssign.clear();
         for (int a = 0; a < p.areaIds.size(); a++) {
             int left = p.areaTotal[a] - p.areaDone[a];
-            if (left <= 0) continue;
+            if (left <= 0 || p.isAreaIgnored(p.areaIds.get(a))) continue;
             int best = 0;
             for (int i = 1; i < areaLoad.length; i++) if (areaLoad[i] < areaLoad[best]) best = i;
             areaLoad[best] += left;

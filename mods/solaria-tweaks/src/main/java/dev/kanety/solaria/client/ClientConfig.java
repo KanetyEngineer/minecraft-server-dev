@@ -17,6 +17,8 @@ public final class ClientConfig {
     /** Project shown on the HUD; empty = every plan you take part in. */
     public String hudProject = "";
     public int hudMaxLines = 6;
+    /** Off (default): shared waypoints are picked from the list and registered; on: all of them show on Xaero's map at once. */
+    public boolean showSharedOnMap = false;
     /** Old on/off switch from Solaria Tools, only read to migrate to observerGuardMode. */
     public Boolean observerGuard;
     /** Warn before placing a block where an observer is looking: "off", "diff" (only blocks unlike the schematic) or "all". */

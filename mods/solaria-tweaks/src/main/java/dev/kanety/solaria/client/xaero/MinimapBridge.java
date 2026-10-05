@@ -36,6 +36,28 @@ public final class MinimapBridge {
         }
     }
 
+    /** True when this shared waypoint is already in one of the player's own Xaero waypoint sets. */
+    public static boolean isRegistered(dev.kanety.solaria.client.waypoint.ClientWaypoints.Entry e) {
+        if (!LOADED) return false;
+        try {
+            return MinimapAccess.isRegistered(e);
+        } catch (Throwable t) {
+            MinimapAccess.failed(t);
+            return false;
+        }
+    }
+
+    /** Registers shared waypoints as the player's own Xaero waypoints; returns how many were added, or -1 on failure. */
+    public static int register(List<dev.kanety.solaria.client.waypoint.ClientWaypoints.Entry> entries) {
+        if (!LOADED) return -1;
+        try {
+            return MinimapAccess.register(entries);
+        } catch (Throwable t) {
+            MinimapAccess.failed(t);
+            return -1;
+        }
+    }
+
     /** Waypoints selected in Xaero's waypoint list screen; null if that could not be read. */
     public static List<LocalWaypoint> selectedIn(Object guiWaypoints) {
         if (!LOADED) return null;

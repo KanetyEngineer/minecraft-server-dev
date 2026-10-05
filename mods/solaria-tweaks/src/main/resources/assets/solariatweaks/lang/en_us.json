@@ -33,5 +33,12 @@
   "solariatweaks.config.generic.comment.fillerCount": "Filler items put in each of slots 2-5",
   "solariatweaks.config.generic.name.fillerItem": "fillerItem",
   "solariatweaks.config.generic.prettyName.fillerItem": "Filter: filler item",
-  "solariatweaks.config.generic.comment.fillerItem": "Item id used as filler (e.g. minecraft:stick). Empty = any renamed item"
+  "solariatweaks.config.generic.comment.fillerItem": "Item id used as filler (e.g. minecraft:stick). Empty = any renamed item",
+  "key.solariatweaks.toggle_hud": "Toggle build plan HUD",
+  "solariatweaks.config.hotkeys.name.toggleBuildHud": "toggleBuildHud",
+  "solariatweaks.config.hotkeys.prettyName.toggleBuildHud": "Toggle build plan HUD",
+  "solariatweaks.config.hotkeys.comment.toggleBuildHud": "Show or hide the build plan HUD",
+  "solariatweaks.config.generic.name.showSharedOnMap": "showSharedOnMap",
+  "solariatweaks.config.generic.prettyName.showSharedOnMap": "Show all shared waypoints on the map",
+  "solariatweaks.config.generic.comment.showSharedOnMap": "On: every server waypoint appears on Xaero's map right away.\nOff: pick the ones you want from the shared waypoint list and register them as your own waypoints"
 }

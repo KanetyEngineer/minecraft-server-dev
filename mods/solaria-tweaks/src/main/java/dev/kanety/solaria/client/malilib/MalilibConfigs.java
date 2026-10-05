@@ -32,18 +32,21 @@ public final class MalilibConfigs implements IConfigHandler {
 
     public static final ConfigOptionList OBSERVER_GUARD = new ConfigOptionList("observerGuardMode", GuardModeEntry.DIFF).apply(GENERIC);
     public static final ConfigBoolean HUD_ENABLED = new ConfigBoolean("hudEnabled", true).apply(GENERIC);
+    public static final ConfigBoolean SHOW_SHARED_ON_MAP = new ConfigBoolean("showSharedOnMap", false).apply(GENERIC);
     public static final ConfigInteger HUD_MAX_LINES = new ConfigInteger("hudMaxLines", 6, 1, 20).apply(GENERIC);
     public static final ConfigInteger FILTER_COUNT = new ConfigInteger("filterCount", 18, 1, 64).apply(GENERIC);
     public static final ConfigInteger FILLER_COUNT = new ConfigInteger("fillerCount", 1, 1, 64).apply(GENERIC);
     public static final ConfigString FILLER_ITEM = new ConfigString("fillerItem", "").apply(GENERIC);
-    public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES,
+    public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES, SHOW_SHARED_ON_MAP,
             FILTER_COUNT, FILLER_COUNT, FILLER_ITEM);
 
     public static final ConfigHotkey OPEN_CONFIG = new ConfigHotkey("openConfigGui", "LEFT_CONTROL,B").apply(HOTKEYS);
     public static final ConfigHotkey OPEN_BUILD_PLANS = new ConfigHotkey("openBuildPlans", "B").apply(HOTKEYS);
     public static final ConfigHotkey OPEN_SHARED_WAYPOINTS = new ConfigHotkey("openSharedWaypoints", "").apply(HOTKEYS);
     public static final ConfigHotkey CYCLE_OBSERVER_GUARD = new ConfigHotkey("cycleObserverGuard", "").apply(HOTKEYS);
-    public static final List<IHotkey> HOTKEY_LIST = ImmutableList.of(OPEN_CONFIG, OPEN_BUILD_PLANS, OPEN_SHARED_WAYPOINTS, CYCLE_OBSERVER_GUARD);
+    public static final ConfigHotkey TOGGLE_BUILD_HUD = new ConfigHotkey("toggleBuildHud", "").apply(HOTKEYS);
+    public static final List<IHotkey> HOTKEY_LIST = ImmutableList.of(OPEN_CONFIG, OPEN_BUILD_PLANS, OPEN_SHARED_WAYPOINTS, CYCLE_OBSERVER_GUARD,
+            TOGGLE_BUILD_HUD);
 
     private static boolean pulling;
 
@@ -54,6 +57,11 @@ public final class MalilibConfigs implements IConfigHandler {
         HUD_ENABLED.setValueChangeCallback(c -> {
             if (pulling) return;
             ClientConfig.get().hudEnabled = c.getBooleanValue();
+            ClientConfig.save();
+        });
+        SHOW_SHARED_ON_MAP.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().showSharedOnMap = c.getBooleanValue();
             ClientConfig.save();
         });
         HUD_MAX_LINES.setValueChangeCallback(c -> {
@@ -88,6 +96,7 @@ public final class MalilibConfigs implements IConfigHandler {
             OBSERVER_GUARD.setOptionListValue(GuardModeEntry.of(cfg.guardMode()));
             HUD_ENABLED.setBooleanValue(cfg.hudEnabled);
             HUD_MAX_LINES.setIntegerValue(cfg.hudMaxLines);
+            SHOW_SHARED_ON_MAP.setBooleanValue(cfg.showSharedOnMap);
             FILTER_COUNT.setIntegerValue(cfg.filterCount);
             FILLER_COUNT.setIntegerValue(cfg.fillerCount);
             FILLER_ITEM.setValueFromString(cfg.fillerItem == null ? "" : cfg.fillerItem);

@@ -47,6 +47,10 @@ public final class MalilibCompat {
                 SolariaTweaksClient.cycleObserverGuard(Minecraft.getInstance());
                 return true;
             });
+            MalilibConfigs.TOGGLE_BUILD_HUD.getKeybind().setCallback((action, key) -> {
+                SolariaTweaksClient.toggleBuildHud(Minecraft.getInstance());
+                return true;
+            });
             }
         });
     }

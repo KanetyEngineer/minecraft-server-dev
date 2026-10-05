@@ -1,6 +1,7 @@
 package dev.kanety.solaria.client.xaero;
 
 import dev.kanety.solaria.SolariaTweaks;
+import dev.kanety.solaria.client.ClientConfig;
 import dev.kanety.solaria.client.waypoint.ClientWaypoints;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.Registries;
@@ -25,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Shows the server's shared waypoints in Xaero's Minimap and World Map through Xaero's third-party waypoint support
+ * When "showSharedOnMap" is on, shows the server's shared waypoints in Xaero's Minimap and World Map through Xaero's third-party waypoint support
  * (the same way it shows Waystones), so they appear on the map whatever waypoint set is selected and stay out of the
  * player's own waypoint files.
  */
@@ -34,6 +35,7 @@ final class MinimapAccess {
 
     private static Object pushedRoot;
     private static int pushedVersion = -1;
+    private static boolean pushedShow;
     private static int ticks;
     private static boolean warned;
     private static final Map<Waypoint, Integer> ids = new IdentityHashMap<>();
@@ -61,7 +63,17 @@ final class MinimapAccess {
         }
         MinimapWorldRootContainer root = session.getWorldManager().getAutoRootContainer();
         if (root == null) return;
-        if (root == pushedRoot && pushedVersion == ClientWaypoints.version() && intact(session, root)) return;
+        boolean show = ClientConfig.get().showSharedOnMap;
+        if (!show) {
+            if (root != pushedRoot || pushedShow) {
+                for (MinimapWorldContainer sub : root.getSubContainers()) sub.getThirdPartyWaypointManager().clearOrigin(ORIGIN);
+                ids.clear();
+                pushedRoot = root;
+                pushedShow = false;
+            }
+            return;
+        }
+        if (root == pushedRoot && pushedShow && pushedVersion == ClientWaypoints.version() && intact(session, root)) return;
         push(session, root);
     }
 
@@ -93,7 +105,61 @@ final class MinimapAccess {
             ids.put(w, e.id());
         }
         pushedRoot = root;
+        pushedShow = true;
         pushedVersion = ClientWaypoints.version();
+    }
+
+    /** The player's own Xaero world (for the world/server they are on) that holds waypoints of the given dimension. */
+    private static MinimapWorld ownWorld(MinimapSession session, String dim, boolean create) {
+        MinimapWorld auto = session.getWorldManager().getAutoWorld();
+        if (auto == null) return null;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level != null && mc.level.dimension().identifier().toString().equals(dim)) return auto;
+        MinimapWorldRootContainer root = session.getWorldManager().getAutoRootContainer();
+        if (root == null) return null;
+        MinimapWorldContainer sub = container(session, root, dim);
+        MinimapWorld w = sub.getFirstWorldConnectedTo(auto);
+        if (w == null) w = sub.getFirstWorld();
+        if (w == null && create) w = sub.addWorld(auto.getNode());
+        return w;
+    }
+
+    private static boolean same(Waypoint w, ClientWaypoints.Entry e) {
+        return !w.isTemporary() && w.getX() == e.x() && w.getY() == e.y() && w.getZ() == e.z() && e.name().equals(w.getName());
+    }
+
+    /** True when one of the player's own waypoint sets already has this shared waypoint. */
+    static boolean isRegistered(ClientWaypoints.Entry e) {
+        MinimapSession session = session();
+        if (session == null) return false;
+        MinimapWorld world = ownWorld(session, e.dim(), false);
+        if (world == null) return false;
+        for (WaypointSet set : world.getIterableWaypointSets()) {
+            for (Waypoint w : set.getWaypoints()) if (same(w, e)) return true;
+        }
+        return false;
+    }
+
+    /** Adds shared waypoints to the selected waypoint set of the player's own world and saves it. Returns how many were added. */
+    static int register(List<ClientWaypoints.Entry> entries) throws java.io.IOException {
+        MinimapSession session = session();
+        if (session == null) return 0;
+        Map<MinimapWorld, Boolean> changed = new IdentityHashMap<>();
+        int added = 0;
+        for (ClientWaypoints.Entry e : entries) {
+            if (isRegistered(e)) continue;
+            MinimapWorld world = ownWorld(session, e.dim(), true);
+            if (world == null) continue;
+            WaypointSet set = world.getCurrentWaypointSet();
+            if (set == null) continue;
+            String initials = e.initials() == null || e.initials().isBlank() ? "S" : e.initials();
+            set.add(new Waypoint(e.x(), e.y(), e.z(), e.name(), initials, WaypointColor.fromIndex(Math.floorMod(e.color(), 16)),
+                    WaypointPurpose.NORMAL));
+            changed.put(world, true);
+            added++;
+        }
+        for (MinimapWorld world : changed.keySet()) session.getWorldManagerIO().saveWorld(world);
+        return added;
     }
 
     static int colorOf(Object xaeroWaypoint) {

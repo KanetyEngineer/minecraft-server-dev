@@ -45,9 +45,17 @@ public class SolariaTweaksClient implements ClientModInitializer {
         if (client.player != null) client.player.displayClientMessage(Component.literal("オブザーバー警告: " + next.label), true);
     }
 
+    public static void toggleBuildHud(Minecraft client) {
+        ClientConfig cfg = ClientConfig.get();
+        cfg.hudEnabled = !cfg.hudEnabled;
+        ClientConfig.save();
+        if (client.player != null) client.player.displayClientMessage(Component.literal("建築計画 HUD: " + (cfg.hudEnabled ? "表示" : "非表示")), true);
+    }
+
     public static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(SolariaTweaks.id("main"));
     public static KeyMapping openBuildScreen;
     public static KeyMapping cycleObserverGuard;
+    public static KeyMapping toggleBuildHud;
 
     @Override
     public void onInitializeClient() {
@@ -59,12 +67,15 @@ public class SolariaTweaksClient implements ClientModInitializer {
                     "key.solariatweaks.build_plans", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, CATEGORY));
             cycleObserverGuard = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                     "key.solariatweaks.observer_guard", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, CATEGORY));
+            toggleBuildHud = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    "key.solariatweaks.toggle_hud", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, CATEGORY));
         }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (openBuildScreen != null) {
                 while (openBuildScreen.consumeClick()) openBuildPlans(client);
                 while (cycleObserverGuard.consumeClick()) cycleObserverGuard(client);
+                while (toggleBuildHud.consumeClick()) toggleBuildHud(client);
             }
             ObserverGuard.tick(client);
             MinimapBridge.tick();
