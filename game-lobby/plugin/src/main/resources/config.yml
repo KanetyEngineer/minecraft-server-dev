@@ -29,7 +29,6 @@ destinations:
     require-brand: ""
     info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
     enabled: true
-    paid: true
 
   tiktok-defense:
     name: "<gradient:#ff0050:#00f2ea><bold>TikTok Defense</bold></gradient>"
@@ -46,7 +45,6 @@ destinations:
     require-brand: "fabric"
     info: "<gray>Fabric 26.1.2 と専用 MOD パック（Point Blank）が必要です"
     enabled: true
-    paid: true
 
   clash-royale:
     name: "<gradient:#3b82f6:#facc15><bold>Clash Royale MC</bold></gradient>"
@@ -63,7 +61,6 @@ destinations:
     require-brand: ""
     info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
     enabled: true   # host（公開アドレス）が入るまでは準備中と表示される
-    paid: true
 
   anime-umetate:
     name: "<gradient:#22d3ee:#f472b6><bold>アニメ技 埋め立て</bold></gradient>"
@@ -81,4 +78,3 @@ destinations:
     require-brand: ""
     info: "<gray>Minecraft Java 26.2（バニラ）で入れます"
     enabled: true   # host（公開アドレス）が入るまでは準備中と表示される
-    paid: true
