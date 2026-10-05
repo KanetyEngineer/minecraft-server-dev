@@ -1,0 +1,26 @@
+name = "sharytech-pass"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# 公開アドレス。Cloudflare のゾーン sharytech.com に DNS を自動で作る
+routes = [{ pattern = "pass.sharytech.com", custom_domain = true }]
+
+# 初回だけ: npx wrangler kv namespace create PASS を実行して出てきた id をここに書く
+[[kv_namespaces]]
+binding = "PASS"
+id = "REPLACE_WITH_KV_ID"
+
+[vars]
+PRODUCT_NAME = "SharyTech Games 参加券"
+SITE_URL = "https://pass.sharytech.com"
+GAMES_URL = "https://games.sharytech.com/"
+# 特定商取引法の表記。空欄の項目は「請求があった場合は遅滞なく開示します」と表示される
+SELLER_NAME = ""
+SELLER_MANAGER = ""
+SELLER_ADDRESS = ""
+SELLER_PHONE = ""
+SELLER_EMAIL = ""
+
+# シークレット（wrangler secret put で入れる。ファイルには書かない）
+#   STRIPE_SECRET_KEY  Stripe のシークレットキー（まず sk_test_…、本番は sk_live_…）
+#   ADMIN_TOKEN        PC の sync スクリプトと管理用の合言葉（長いランダム文字列）

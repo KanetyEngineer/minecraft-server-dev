@@ -38,7 +38,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
 
     record Destination(String id, String name, List<String> description, Material icon, Material pad,
                        Material frame, Particle particle, String host, int port, String version,
-                       String brand, String info, boolean enabled, String theme) {
+                       String brand, String info, boolean enabled, String theme, boolean paid) {
         boolean ready() {
             return enabled && host != null && !host.isBlank();
         }
@@ -83,6 +83,58 @@ public final class GameLobby extends JavaPlugin implements Listener {
         // config.yml を書き換えたら自動で読み直してゲートを作り直す（公開アドレスの追加などをコンソールなしで反映するため）
         configStamp = configFile().lastModified();
         Bukkit.getScheduler().runTaskTimer(this, this::watchConfig, 100L, 100L);
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::loadPaid, 0L, 100L);
+    }
+
+    // ---------- 参加券（paid: true の行き先は購入者だけ通す） ----------
+
+    /** UUIDs of players who bought the pass; written by paid-access/sync/sync.js. Null until the file exists (then nobody is blocked). */
+    private volatile java.util.Set<UUID> paidPlayers;
+    private long paidStamp = -1;
+
+    private void loadPaid() {
+        java.io.File f = new java.io.File(getDataFolder(), getConfig().getString("paid-list-file", "paid-players.txt"));
+        long m = f.exists() ? f.lastModified() : 0;
+        if (m == paidStamp) return;
+        paidStamp = m;
+        if (m == 0) {
+            paidPlayers = null;
+            return;
+        }
+        try {
+            java.util.Set<UUID> set = new java.util.HashSet<>();
+            for (String line : java.nio.file.Files.readAllLines(f.toPath())) {
+                line = line.trim();
+                if (!line.isEmpty()) {
+                    try {
+                        set.add(UUID.fromString(line));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+            paidPlayers = set;
+            getLogger().info("paid list: " + set.size() + " players");
+        } catch (java.io.IOException e) {
+            getLogger().warning("paid list: " + e.getMessage());
+        }
+    }
+
+    private boolean hasPass(Player p) {
+        java.util.Set<UUID> set = paidPlayers;
+        return set == null || p.isOp() || set.contains(p.getUniqueId());
+    }
+
+    private void showPassInfo(Player p, Destination d) {
+        String url = getConfig().getString("pass-url", "https://pass.sharytech.com/");
+        String link = url + (url.contains("?") ? "&" : "?") + "name=" + p.getName();
+        p.sendMessage(Component.text("━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
+        p.sendMessage(MM.deserialize(d.name()).append(Component.text(" に入るには参加券が必要です", NamedTextColor.YELLOW)));
+        p.sendMessage(Component.text("購入すると1分ほどで入れるようになります（Kanety SMP は無料のまま）", NamedTextColor.GRAY));
+        p.sendMessage(Component.text("▶ 参加券のページを開く", NamedTextColor.GREEN, TextDecoration.UNDERLINED)
+                .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(link))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text(url))));
+        p.sendMessage(Component.text("━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
+        p.playSound(p, Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.6f);
     }
 
     private long configStamp;
@@ -131,7 +183,8 @@ public final class GameLobby extends JavaPlugin implements Listener {
                     d.getString("require-brand", ""),
                     d.getString("info", ""),
                     d.getBoolean("enabled", false),
-                    d.getString("theme", id)));
+                    d.getString("theme", id),
+                    d.getBoolean("paid", false)));
         }
     }
 
@@ -608,6 +661,11 @@ public final class GameLobby extends JavaPlugin implements Listener {
         if (!d.ready()) {
             p.sendMessage(MM.deserialize(d.name()).append(Component.text(" はまだ準備中です", NamedTextColor.YELLOW)));
             p.playSound(p, Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.6f);
+            pushBack(p);
+            return;
+        }
+        if (d.paid() && !hasPass(p)) {
+            showPassInfo(p, d);
             pushBack(p);
             return;
         }
