@@ -1,0 +1,63 @@
+{
+  "tiktokUsername": "",
+  "signApiKey": "",
+  "rcon": { "host": "127.0.0.1", "port": 25584, "password": "" },
+  "panelPort": 8788,
+  "queue": { "intervalMs": 700, "maxLength": 60 },
+
+  "giftRules": {
+    "byName": {
+      "Rose": "zombie",
+      "バラ": "zombie",
+      "Heart Me": "heal",
+      "Ice Cream Cone": "freeze",
+      "アイスクリーム": "freeze",
+      "Perfume": "weapon",
+      "香水": "weapon",
+      "Doughnut": "repair",
+      "ドーナツ": "repair",
+      "Hand Hearts": "airstrike",
+      "ハンドハート": "airstrike",
+      "Galaxy": "nuke",
+      "ギャラクシー": "nuke"
+    },
+    "tiers": [
+      { "minCoins": 1,    "pick": "random", "actions": ["zombie"] },
+      { "minCoins": 5,    "pick": "random", "actions": ["runner", "skeleton"] },
+      { "minCoins": 10,   "pick": "random", "actions": ["creeper"] },
+      { "minCoins": 30,   "pick": "random", "actions": ["brute"] },
+      { "minCoins": 99,   "pick": "random", "actions": ["horde"] },
+      { "minCoins": 299,  "pick": "random", "actions": ["boss"] },
+      { "minCoins": 999,  "pick": "random", "actions": ["titan"] }
+    ],
+    "repeatSmallUpTo": 5
+  },
+
+  "follow": "zombie",
+  "share": "runner",
+  "subscribe": "weapon",
+  "likes": { "every": 1000, "action": "heal" },
+
+  "chatCommands": { "enabled": false, "cooldownSec": 30, "commands": { "!zombie": "zombie" } },
+
+  "cooldownSec": { "nuke": 60, "titan": 60, "boss": 15, "airstrike": 8 },
+  "fallbackAction": "firework",
+
+  "actionCounts": {},
+
+  "game": {
+    "time": 600, "coreHp": 100, "gateHp": 300, "leakMul": 5,
+    "waveSec": 6, "waveN": 1, "waveRamp": 60, "waveMax": 6,
+    "maxEnemies": 80, "repairPct": 30, "bossMax": 3, "titanMax": 1,
+    "spread": 3, "avatarScale": 0.12
+  },
+  "mobs": {},
+  "field": { "originX": 0, "originY": -58, "originZ": 0, "length": 120, "halfWidth": 4, "gates": 3, "timeOfDay": 12300, "trees": true },
+  "weapons": {
+    "loadout": ["pointblank:m4a1", "pointblank:glock17"],
+    "grenades": 4,
+    "ammoMags": 8,
+    "infiniteAmmo": true,
+    "giftPool": ["pointblank:m249", "pointblank:m134minigun", "pointblank:aa12", "pointblank:m32mgl", "pointblank:deserteagle", "pointblank:mk48", "pointblank:at4", "pointblank:gm6lynx"]
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "minecraft": "26.1.2",
+  "fabric-loader": "0.19.5",
+  "files": [
+    {
+      "slug": "fabric-api",
+      "version": "0.155.3+26.1.2",
+      "side": "both",
+      "path": "mods/fabric-api-0.155.3+26.1.2.jar",
+      "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/3dM0X6ou/fabric-api-0.155.3%2B26.1.2.jar",
+      "sha1": "16c30dfcceaed1ac3b6ac84cbd348a906dc5093e",
+      "sha512": "fa0308b42e9cd0dc3ff946f246d199d74547e0c946d7e3c9780a2537155307baf25129f69bd1349273babf879ffb4608b7e4af0740938f9c0f7b371b1c67d6ca",
+      "size": 2521340
+    },
+    {
+      "slug": "vics-point-blank",
+      "version": "2.2.0",
+      "side": "both",
+      "path": "mods/pointblank-fabric-26.1.2-2.2.0.jar",
+      "url": "https://cdn.modrinth.com/data/og4KPYmA/versions/KSJXZ5GE/pointblank-fabric-26.1.2-2.2.0.jar",
+      "sha1": "16d13ad1d683756781c3665bacbb0779aa58ec9f",
+      "sha512": "4db64b5dec6aabd9f5e7b6a6631d59e9fcea68f336701298b9a3e46933def4266dc5105c8e0e9ee2bce99be88d4d4f9ea630efdda7a4c3d382762d9b5ef6c202",
+      "size": 22042616
+    },
+    {
+      "slug": "geckolib",
+      "version": "5.5.2",
+      "side": "both",
+      "path": "mods/geckolib-fabric-26.1.2-5.5.2.jar",
+      "url": "https://cdn.modrinth.com/data/8BmcQJ2H/versions/XZTmZlwb/geckolib-fabric-26.1.2-5.5.2.jar",
+      "sha1": "f2ece9fcb2089c238f64c52e989790fe4e067512",
+      "sha512": "bf7a3802eb22d8f3798bd3b33d51cb5e6aceee634944abcc2651726929a220c85cc06047a4a9a7386e98138ac8dbe585768cf31c9d49de6b8368e71b2201dfb2",
+      "size": 696572
+    },
+    {
+      "slug": "lithium",
+      "version": "mc26.1.2-0.24.7-fabric",
+      "side": "both",
+      "path": "mods/lithium-fabric-0.24.7+mc26.1.2.jar",
+      "url": "https://cdn.modrinth.com/data/gvQqBUqZ/versions/Oqq8TOAV/lithium-fabric-0.24.7%2Bmc26.1.2.jar",
+      "sha1": "7959f418969ee8bfe50c0f21f352ed08b382f133",
+      "sha512": "37240bdbf93c19fdc6aa632d89223639f0ef9d923ee1793b33d624946b0482cc972834049ed07d71db3494e16c9de68e755937aac7c4ac5d7291bd38c1425899",
+      "size": 912821
+    },
+    {
+      "slug": "ferrite-core",
+      "version": "9.0.0-fabric",
+      "side": "both",
+      "path": "mods/ferritecore-9.0.0-fabric.jar",
+      "url": "https://cdn.modrinth.com/data/uXXizFIs/versions/d5ddUdiB/ferritecore-9.0.0-fabric.jar",
+      "sha1": "eac76ff0f3753422c61b2c44487d0d195d88d4bc",
+      "sha512": "d81fa97e11784c19d42f89c2f433831d007603dd7193cee45fa177e4a6a9c52b384b198586e04a0f7f63cd996fed713322578bde9a8db57e1188854ae5cbe584",
+      "size": 72677
+    },
+    {
+      "slug": "sodium",
+      "version": "mc26.1.2-0.9.2-fabric",
+      "side": "client",
+      "path": "mods/sodium-fabric-0.9.2+mc26.1.2.jar",
+      "url": "https://cdn.modrinth.com/data/AANobbMI/versions/tZQ3jqnf/sodium-fabric-0.9.2%2Bmc26.1.2.jar",
+      "sha1": "d107b02081262e243e80559192a2de86007155d6",
+      "sha512": "9a3cbc8111979fb2cada74d4df24867f4a8a76053b28d76796f0d1c9156cfc96c4f7d88b07072aea8d9574d46b5bc3ebf3b4d23c09c501f0089ee37681743475",
+      "size": 1940135
+    },
+    {
+      "slug": "iris",
+      "version": "1.11.4+26.1-fabric",
+      "side": "client",
+      "path": "mods/iris-fabric-1.11.4+mc26.1.2.jar",
+      "url": "https://cdn.modrinth.com/data/YL57xq9U/versions/sZbVsl2Q/iris-fabric-1.11.4%2Bmc26.1.2.jar",
+      "sha1": "6a345caf8850e38dccd076f984cf02d6ec39ed83",
+      "sha512": "d99b309d282edb1266dfbdfeda792beba1f808334489604818d6b298c328393dcd7eb5b28a56cea14c9cf8e4eb9c088cb2e80b228b3427a836d154a368b1bcb9",
+      "size": 2792203
+    },
+    {
+      "slug": "entityculling",
+      "version": "1.11.2",
+      "side": "client",
+      "path": "mods/entityculling-fabric-1.11.2-mc26.1.jar",
+      "url": "https://cdn.modrinth.com/data/NNAgCjsB/versions/YDFyjf5b/entityculling-fabric-1.11.2-mc26.1.jar",
+      "sha1": "16f2fe0c762370775257a450983ec6e8a1c70b75",
+      "sha512": "ae031b258e6b30999cd1387c50bde45ee2ca2016c80d7809b82ad48dcc6a6cba49403f9d90a1d99dd6abc290652cbf63ab52aea1b249dbba1a459547372dee66",
+      "size": 1506455
+    },
+    {
+      "slug": "modmenu",
+      "version": "18.0.2",
+      "side": "client",
+      "path": "mods/modmenu-18.0.2.jar",
+      "url": "https://cdn.modrinth.com/data/mOgUt4GM/versions/ZJ6YTrMY/modmenu-18.0.2.jar",
+      "sha1": "8fa5f0c6e844f44bfd836197b680ee6ea0006bcd",
+      "sha512": "37393e1d4a23a548463e92eb0687af69034ee7c308bd1d2d27d78df0292f124c4463f19d4b53128b59cda4e02d01d7ae09f06456d10abde19b6e450163e50e97",
+      "size": 859999
+    },
+    {
+      "slug": "complementary-reimagined",
+      "version": "r5.8",
+      "side": "shader",
+      "path": "shaderpacks/ComplementaryReimagined_r5.8.zip",
+      "url": "https://cdn.modrinth.com/data/HVnmMxH1/versions/7RRmkxkn/ComplementaryReimagined_r5.8.zip",
+      "sha1": "17154ff245b10ea906c59d97024f49cda69bf6aa",
+      "sha512": "8def9f83ba0015c3d7eadcec1fdb1ecb8ac999496f35d15468bae753c79b26168567e1375218a54fe0c50d97d140555ef26f79dbfcb8b4d526a7d8f3483407bc",
+      "size": 544613
+    }
+  ]
+}

@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Defense パネル</title>
+<style>
+  :root { --bg:#0f1218; --card:#181d27; --line:#2c3445; --text:#e8edf5; --muted:#93a0b5; --accent:#fe2c55; --cyan:#25f4ee; --ok:#22c55e; --bad:#ef4444; --warn:#eab308; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Yu Gothic UI","Meiryo",sans-serif; font-size:14px; }
+  header { padding:12px 18px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { margin:0; font-size:18px; color:var(--accent); }
+  h1 span { color:var(--cyan); }
+  .pill { padding:4px 10px; border-radius:999px; background:var(--card); border:1px solid var(--line); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--muted); }
+  .ok .dot { background:var(--ok); } .bad .dot { background:var(--bad); } .warn .dot { background:var(--warn); }
+  .tabs { display:flex; gap:4px; padding:10px 18px 0; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .tab { padding:9px 16px; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; cursor:pointer; color:var(--muted); background:none; font:inherit; white-space:nowrap; }
+  .tab.on { color:var(--text); background:var(--card); border-color:var(--line); }
+  .page { display:none; padding:14px 18px 90px; }
+  .page.on { display:block; }
+  .cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
+  @media (max-width: 900px) { .cols { grid-template-columns:1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  h2 { font-size:15px; margin:0 0 4px; }
+  .help { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  button { background:#232a38; color:var(--text); border:1px solid var(--line); border-radius:7px; padding:7px 11px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--cyan); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  button.cyan { background:var(--cyan); border-color:var(--cyan); color:#05252a; font-weight:700; }
+  button.small { padding:4px 8px; font-size:12px; }
+  button.del { color:#fca5a5; }
+  button.enemy { border-left:4px solid var(--accent); }
+  button.help2 { border-left:4px solid var(--cyan); }
+  label.f { display:block; margin:8px 0 3px; color:var(--muted); font-size:12px; }
+  input, select { background:#0b0e14; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; width:100%; }
+  input[type=checkbox] { width:auto; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .row > * { flex: 1 1 140px; }
+  .row > button, .row > .tight { flex: 0 0 auto; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:4px 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:6px 6px; border-bottom:1px solid #252c3b; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td input { min-width:60px; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px 10px; }
+  .chips label { display:flex; gap:4px; align-items:center; font-size:13px; white-space:nowrap; }
+  .msg { margin-top:8px; font-size:13px; } .msg.ok { color:#86efac; } .msg.bad { color:#fca5a5; }
+  #log { max-height: 60vh; overflow:auto; font-size:13px; }
+  .l { padding:4px 0; border-bottom:1px dashed #252c3b; display:flex; gap:8px; }
+  .l .t { color:var(--muted); flex:none; }
+  .k-gift { color:#fbbf24; } .k-action { color:#86efac; } .k-error { color:#fca5a5; } .k-warn { color:#fde68a; } .k-follow,.k-share,.k-like { color:#93c5fd; }
+  .grid { display:flex; flex-wrap:wrap; gap:6px; }
+  .savebar { position:fixed; left:0; right:0; bottom:0; padding:10px 18px; background:rgba(15,18,24,.95); border-top:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  .savebar .msg { margin:0; }
+  code { background:#0b0e14; border:1px solid var(--line); border-radius:4px; padding:0 5px; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:8px 0; }
+  .stat { background:#0b0e14; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:12px; }
+  .bar { height:8px; border-radius:4px; background:#2a3242; overflow:hidden; margin-top:4px; }
+  .bar i { display:block; height:100%; background:var(--ok); }
+  .kind { font-size:11px; padding:1px 6px; border-radius:4px; margin-left:4px; }
+  .kind.enemy { background:#4c0f1c; color:#fda4af; } .kind.help { background:#063b3d; color:#99f6e4; }
+  .fsel { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+  .fsel button.on { background:var(--cyan); color:#05252a; border-color:var(--cyan); font-weight:700; }
+  .fcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; margin-bottom:14px; }
+  .fcard { background:var(--card); border:1px solid var(--line); border-left:5px solid var(--fc,#888); border-radius:9px; padding:8px 10px; cursor:pointer; }
+  .fcard.on { outline:2px solid var(--cyan); }
+  .fcard h3 { margin:0 0 4px; font-size:14px; display:flex; justify-content:space-between; gap:6px; }
+  .fcard .s { font-size:12px; color:var(--muted); line-height:1.5; }
+  .fcard .s b { color:var(--text); font-weight:600; }
+  .st1 { color:#fca5a5; } .st0 { color:#86efac; } .st2 { color:#cbd5e1; } .vs { color:#f0abfc; }
+  .lb { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+  .lb ol { margin:4px 0 0; padding-left:22px; font-size:13px; } .lb h3 { margin:0; font-size:13px; }
+  .lb li span { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>TikTok <span>Defense</span></h1>
+  <span id="tt" class="pill"><span class="dot"></span>TikTok: -</span>
+  <span id="rc" class="pill"><span class="dot"></span>Minecraft: -</span>
+  <span class="pill">キュー <b id="q">0</b></span>
+  <span class="pill">累計コイン <b id="coins">0</b></span>
+  <span class="pill">いいね <b id="likes">0</b></span>
+  <button class="primary" onclick="post('api/tiktok',{connect:true})" title="IDが入っている全フィールド">TikTok 全部接続</button>
+  <button onclick="post('api/tiktok',{connect:false})">全部切断</button>
+</header>
+
+<div class="tabs">
+  <button class="tab on" data-p="live">ゲーム・テスト</button>
+  <button class="tab" data-p="conn">接続設定</button>
+  <button class="tab" data-p="gifts">ギフト</button>
+  <button class="tab" data-p="events">フォロー・いいね・コメント</button>
+  <button class="tab" data-p="game">ゲーム・フィールド</button>
+  <button class="tab" data-p="mobs">敵MOB</button>
+  <button class="tab" data-p="weapons">武器</button>
+  <button class="tab" data-p="adv">詳細</button>
+</div>
+
+<!-- ============================================================ live / test -->
+<div class="page on" id="p-live">
+  <div class="fcards" id="fcards"></div>
+  <div class="cols">
+    <div>
+      <section>
+        <div class="fsel"><b>操作するフィールド:</b> <span id="fsel" class="fsel" style="margin:0"></span></div>
+        <h2 id="g-title">フィールド 1</h2>
+        <p class="help" id="g-who"></p>
+        <div class="stats">
+          <div class="stat"><span>状態</span><b id="g-state">-</b></div>
+          <div class="stat"><span>残り時間</span><b id="g-left">-</b></div>
+          <div class="stat"><span>撃破数</span><b id="g-kills">-</b></div>
+          <div class="stat"><span>敵の数</span><b id="g-enemies">-</b></div>
+          <div class="stat"><span>前線の関門 HP</span><b id="g-gate">-</b><div class="bar"><i id="g-gatebar"></i></div></div>
+          <div class="stat"><span>コア HP</span><b id="g-core">-</b><div class="bar"><i id="g-corebar"></i></div></div>
+        </div>
+        <div class="grid">
+          <button class="primary" onclick="game('start')">▶ ゲーム開始（このフィールド）</button>
+          <button onclick="game('stop')">■ 停止</button>
+          <button onclick="game('clear')">敵を全部消す</button>
+          <button onclick="game('loadout')">初期装備を配り直す</button>
+          <button onclick="assign()" title="接続設定タブの「マイクラの名前」の人をこのフィールドに入れる">配信者をこのフィールドに入れる</button>
+          <button onclick="if(confirm('このフィールドを作り直します。ゲーム中なら止まります。よろしいですか？'))game('build')">このフィールドを作り直す</button>
+        </div>
+        <div class="grid" style="margin-top:8px">
+          <button onclick="if(confirm('待機所と、使う数のフィールドを全部作り直します。ゲーム中のものは止まります。よろしいですか？'))game('build','all')">全フィールドと待機所を作り直す</button>
+          <button onclick="game('build','lobby')">待機所だけ作り直す</button>
+        </div>
+        <div class="msg" id="game-msg"></div>
+        <p class="help" style="margin-top:8px">フィールドは同時にいくつでも動かせます。ギフトの効果はそのフィールドがゲーム中のときだけ、そのフィールドだけに起きます。プレイヤーは待機所の看板や <code>/trigger td.menu</code> で自分でフィールドを選んで「スタート」もできます。</p>
+      </section>
+      <section>
+        <h2>⚔ 対戦（2つのフィールドを同時スタート）</h2>
+        <p class="help">同じルールで2つのフィールドを同じ瞬間に始めます。先にコアが落ちた方の負け。両方守り切ったら撃破数、同じならコアHPで勝負。プレイヤーは待機所の「⚔ 対戦モード」看板で2人そろうと自動でも始まります。</p>
+        <div class="row">
+          <div class="tight" style="width:130px"><label class="f">フィールド A</label><select id="vs-a"></select></div>
+          <div class="tight" style="width:130px"><label class="f">フィールド B</label><select id="vs-b"></select></div>
+          <button class="primary" onclick="versus()">対戦スタート</button>
+          <button onclick="versus(true)">対戦を中止</button>
+        </div>
+        <div class="msg" id="vs-msg"></div>
+        <p class="help" id="vs-last" style="margin-top:8px"></p>
+      </section>
+      <section>
+        <h2>テストギフト（<span class="fname">フィールド1</span>へ）</h2>
+        <p class="help">本番と同じ流れで処理します（ギフト名の割り当て → なければコインの段階）。上で選んだフィールドだけに届きます。</p>
+        <div class="row">
+          <div><label class="f">名前</label><input id="tname" value="テスト視聴者"></div>
+          <div><label class="f">ギフト名</label><input id="tgift" value="テストギフト" list="giftNames"></div>
+          <div class="tight" style="width:90px"><label class="f">コイン/個</label><input id="tcoins" type="number" value="1" min="1"></div>
+          <div class="tight" style="width:80px"><label class="f">個数</label><input id="trep" type="number" value="1" min="1"></div>
+        </div>
+        <label class="f">アイコン画像のURL（空なら仮のアイコン）</label><input id="tavatar" placeholder="https://...">
+        <div style="margin-top:10px"><button class="primary" onclick="testGift()">テストギフトを送る</button></div>
+      </section>
+      <section>
+        <h2>アクションを直接実行（<span class="fname">フィールド1</span>）</h2>
+        <p class="help">赤は敵を増やす（妨害）、水色はプレイヤーを助ける効果です。</p>
+        <div class="grid" id="actions"></div>
+      </section>
+      <section>
+        <h2>OBS</h2>
+        <p class="help">ブラウザソースに追加（幅1280×高さ720、背景は透明）。フィールドごとに URL の最後の数字を変えます。</p>
+        <div id="ovl" style="font-size:13px;line-height:1.9"></div>
+      </section>
+    </div>
+    <div>
+      <section>
+        <h2>🏆 ランキング</h2>
+        <p class="help"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="lb-all" onchange="loadBoard()"> いまのルール以外の記録も含める</label> <span id="lb-rules"></span></p>
+        <div class="lb" id="lb"></div>
+        <h3 style="font-size:13px;margin:12px 0 4px">最近の結果</h3>
+        <div id="lb-recent" style="font-size:12px;max-height:180px;overflow:auto"></div>
+      </section>
+      <section><h2>ログ <label style="font-weight:400;font-size:12px;color:var(--muted)"><input type="checkbox" id="log-only"> 選んだフィールドだけ</label></h2><div id="log"></div></section>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ connection -->
+<div class="page" id="p-conn">
+  <div class="cols">
+    <div>
+      <section>
+        <h2>フィールドと配信者（TikTok）</h2>
+        <p class="help">フィールドごとに配信者を割り当てられます。そのフィールドには、その人の TikTok LIVE のギフトだけが届きます（同時にいくつでも接続できます）。「マイクラの名前」を入れると「配信者をこのフィールドに入れる」ボタンで入れられ、そのフィールドは対戦の自動マッチングに使われなくなります。TikTok の ID は @ の後ろ（URL を貼っても OK）。フィールド1 は前の「配信するアカウントの ID」です。</p>
+        <table><thead><tr><th style="width:70px">フィールド</th><th>マイクラの名前</th><th>TikTok の ID</th><th>状態</th><th style="width:110px"></th></tr></thead><tbody id="streamers"></tbody></table>
+        <label class="f">Euler Stream API キー（空でOK。接続が不安定なときだけ・全フィールド共通）</label>
+        <input id="c-sign" type="password" autocomplete="off">
+        <p class="help" style="margin-top:8px">保存すると変わったフィールドだけ接続し直します。配信していないときは60秒ごとに確認します。</p>
+      </section>
+      <section>
+        <h2>Minecraft サーバー（RCON）</h2>
+        <div class="row">
+          <div><label class="f">アドレス</label><input id="c-host"></div>
+          <div class="tight" style="width:110px"><label class="f">ポート</label><input id="c-port" type="number"></div>
+        </div>
+        <label class="f">RCON パスワード</label>
+        <div class="row"><input id="c-pass" type="password" autocomplete="off"><button class="small" type="button" onclick="toggle('c-pass')">表示</button></div>
+        <div style="margin-top:10px"><button onclick="rconTest()">接続テスト</button></div>
+        <div class="msg" id="rcon-msg"></div>
+      </section>
+    </div>
+    <section>
+      <h2>サーバーの自動設定</h2>
+      <p class="help">マイクラサーバーのフォルダ（server.properties があるフォルダ）を入れてボタンを押すと、RCON を有効にしてパスワードを作り、ワールドにゲーム用データパックを入れ、このアプリの接続設定も自動で埋めます。同梱のサーバーは設定済みです。</p>
+      <label class="f">サーバーのフォルダ</label>
+      <input id="s-dir" placeholder="例: C:\Users\you\Documents\ClaudeCode\tiktok-defense\server">
+      <label class="f">RCON ポート</label>
+      <input id="s-port" type="number" value="25584" style="max-width:140px">
+      <div style="margin-top:10px"><button class="primary" onclick="serverSetup()">サーバーを自動設定</button></div>
+      <div class="msg" id="setup-msg"></div>
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================ gifts -->
+<div class="page" id="p-gifts">
+  <section>
+    <h2>ギフト名で割り当て</h2>
+    <p class="help">名前が一致したギフトはこちらが優先されます。ギフト名は配信で受け取ると候補に出ます（TikTok の表示言語の名前）。連打（コンボ）は下の回数まで繰り返します。</p>
+    <table><thead><tr><th style="width:40%">ギフト名</th><th>アクション</th><th style="width:60px"></th></tr></thead><tbody id="byname"></tbody></table>
+    <div class="row" style="margin-top:8px">
+      <button class="tight" onclick="addByName()">＋ ギフトを追加</button>
+      <div class="tight" style="display:flex;gap:6px;align-items:center">連打の繰り返し 最大 <input id="c-repeat" type="number" min="1" max="50" style="width:70px"> 回</div>
+    </div>
+  </section>
+  <section>
+    <h2>コインの段階</h2>
+    <p class="help">名前の割り当てがないギフトは「コイン × 個数」の合計で、いちばん近い下の段階が使われます。「ランダム」はチェックしたうちから1つ、「全部」はすべて実行。</p>
+    <table><thead><tr><th style="width:110px">コイン以上</th><th style="width:110px">選び方</th><th>アクション</th><th style="width:60px"></th></tr></thead><tbody id="tiers"></tbody></table>
+    <button style="margin-top:8px" onclick="addTier()">＋ 段階を追加</button>
+  </section>
+</div>
+
+<!-- ============================================================ events -->
+<div class="page" id="p-events">
+  <div class="cols">
+    <section>
+      <h2>フォロー・シェア・サブスク・いいね</h2>
+      <label class="f">フォローされたとき</label><select id="c-follow"></select>
+      <label class="f">シェアされたとき</label><select id="c-share"></select>
+      <label class="f">サブスクされたとき</label><select id="c-sub"></select>
+      <div class="row">
+        <div><label class="f">いいねが何回ごと（0 で無効）</label><input id="c-likes" type="number" min="0"></div>
+        <div><label class="f">そのときのアクション</label><select id="c-likeact"></select></div>
+      </div>
+    </section>
+    <section>
+      <h2>コメントコマンド</h2>
+      <p class="help">コメントの先頭の言葉でアクションを起こします。荒れやすいので初期はオフ。</p>
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="c-chaton"> コメントコマンドを使う</label>
+      <label class="f">同じ人が次に使えるまで（秒）</label><input id="c-chatcd" type="number" min="0" style="max-width:140px">
+      <table style="margin-top:8px"><thead><tr><th style="width:40%">コメント</th><th>アクション</th><th style="width:60px"></th></tr></thead><tbody id="chat"></tbody></table>
+      <button style="margin-top:8px" onclick="addChat()">＋ コマンドを追加</button>
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================ game / field -->
+<div class="page" id="p-game">
+  <div class="cols">
+    <section>
+      <h2>ゲームのルール</h2>
+      <p class="help">保存するとすぐ反映されます（HPの最大値は次の「ゲーム開始」から）。</p>
+      <div class="grid2" id="gamefields"></div>
+    </section>
+    <section>
+      <h2>フィールド</h2>
+      <p class="help">一直線のレーン。奥（＋X 側）から敵が来て、手前のコアを目指します。関門は手前から 第1・第2… と並び、プレイヤーはいちばん奥の関門の上で戦います。形を変えたら「ゲーム・テスト」タブの「全フィールドと待機所を作り直す」を押してください。</p>
+      <div class="grid2">
+        <div><label class="f">レーンの長さ（60〜300）</label><input id="f-length" type="number" min="60" max="300"></div>
+        <div><label class="f">レーンの半分の幅（2〜12、幅は×2+1）</label><input id="f-halfWidth" type="number" min="2" max="12"></div>
+        <div><label class="f">関門の数（1〜8）</label><input id="f-gates" type="number" min="1" max="8"></div>
+        <div><label class="f">時刻（0〜23999、12300 = 夕焼け、13500 = 日没直後）</label><input id="f-timeOfDay" type="number" min="0" max="23999"></div>
+        <div><label class="f">基準 X</label><input id="f-originX" type="number"></div>
+        <div><label class="f">基準 Y（地面の上）</label><input id="f-originY" type="number"></div>
+        <div><label class="f">基準 Z</label><input id="f-originZ" type="number"></div>
+        <div><label class="f">まわりに木を植える</label><label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="f-trees"> 植える</label></div>
+        <div><label class="f">フィールドの数（1〜8）</label><input id="fs-count" type="number" min="1" max="8"></div>
+        <div><label class="f">フィールドどうしの間隔（Z、ブロック。170 以上推奨）</label><input id="fs-spacing" type="number" min="60" max="2000"></div>
+      </div>
+      <p class="help" style="margin-top:8px">フィールド1 が基準の場所、フィールド2 以降はそこから Z 方向に「間隔」ずつずらして並びます。敵は 160 ブロック先まで人を追うので、間隔が 170 より狭いと隣のフィールドの人を狙うことがあります。待機所はフィールド1 の −Z 側にできます。形・数・間隔を変えたら「全フィールドと待機所を作り直す」を押してください。</p>
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================ mobs -->
+<div class="page" id="p-mobs">
+  <section>
+    <h2>敵MOBの強さ</h2>
+    <p class="help">「関門へのダメージ」は関門の前にいる間、1秒ごとに関門の HP を減らす量です。コアに着いた敵は「関門へのダメージ × コアダメージ倍率」をコアに与えて消えます。保存後に出た敵から反映。</p>
+    <table><thead><tr><th>敵</th><th>HP</th><th>移動速度</th><th>大きさ</th><th>プレイヤーへの攻撃力</th><th>関門へのダメージ/秒</th></tr></thead><tbody id="mobtable"></tbody></table>
+  </section>
+  <section>
+    <h2>1回のアクションで出す数・効果の回数</h2>
+    <p class="help">ギフト1回でそのアクションを何回くり返すか（例: ゾンビ 3 にすると、バラ1本でゾンビ3体）。</p>
+    <div class="grid2" id="counts"></div>
+  </section>
+</div>
+
+<!-- ============================================================ weapons -->
+<div class="page" id="p-weapons">
+  <div class="cols">
+    <section>
+      <h2>初期装備（ゲーム開始時に配る）</h2>
+      <p class="help">最大9個。弾は「マガジン数」ぶん付きます。</p>
+      <div class="chips" id="loadout"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="f">手りゅう弾の数</label><input id="w-grenades" type="number" min="0" max="64"></div>
+        <div><label class="f">弾のマガジン数</label><input id="w-ammoMags" type="number" min="1" max="64"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="w-inf"> 弾を無限にする（ゲーム中、8秒ごとに減った弾を補充）</label>
+    </section>
+    <section>
+      <h2>「武器支給」ギフトで届く武器</h2>
+      <p class="help">チェックしたうちからランダムに1つ、全員に配ります。</p>
+      <div class="chips" id="giftpool"></div>
+    </section>
+  </div>
+</div>
+
+<!-- ============================================================ advanced -->
+<div class="page" id="p-adv">
+  <div class="cols">
+    <section>
+      <h2>クールダウン</h2>
+      <p class="help">同じアクションが続けて出ないよう、指定秒数の間は「代わりのアクション」に置き換えます（0 で制限なし）。</p>
+      <table><thead><tr><th>アクション</th><th style="width:120px">秒</th></tr></thead><tbody id="cooldowns"></tbody></table>
+      <label class="f">クールダウン中の代わりのアクション</label><select id="c-fallback"></select>
+    </section>
+    <section>
+      <h2>キュー・パネル・表示</h2>
+      <label class="f">アクションの間隔（ミリ秒）</label><input id="c-interval" type="number" min="200" max="10000">
+      <label class="f">キューにためる最大数（あふれたら古いものから捨てる）</label><input id="c-maxq" type="number" min="1" max="500">
+      <label class="f">敵の頭上のアイコンの大きさ（0.03〜0.5）</label><input id="g-avatarScale" type="number" step="0.01" min="0.03" max="0.5">
+      <label class="f">敵が出る位置の左右のばらつき（ブロック）</label><input id="g-spread" type="number" min="0" max="11">
+      <label class="f">パネルのポート番号（変更は再起動後）</label><input id="c-panelport" type="number" min="1024" max="65535">
+      <p class="help" style="margin-top:12px">設定ファイル: <code id="cfgfile"></code></p>
+    </section>
+  </div>
+</div>
+
+<div class="savebar" id="savebar" style="display:none">
+  <button class="primary" onclick="saveConfig()">設定を保存して反映</button>
+  <button onclick="loadConfig()">元に戻す</button>
+  <span class="msg" id="save-msg"></span>
+</div>
+<datalist id="giftNames"></datalist>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+let ACTIONS = {}, MOBS = {}, WEAPONS = {}, CFG = null, COLORS = [], MAXF = 8;
+let sel = Number(localStorage.getItem('td.field')) || 1;   // the field the controls act on
+let lastState = null;
+const CSS = { red:'#ef4444', blue:'#3b82f6', green:'#22c55e', yellow:'#eab308', aqua:'#22d3ee', light_purple:'#e879f9', gold:'#f59e0b', dark_aqua:'#0e9f9f' };
+
+const GAME_FIELDS = [
+  ['time', '制限時間（秒、0 = 無制限）'], ['coreHp', 'コアの HP'], ['gateHp', '関門1つの HP'],
+  ['leakMul', 'コアダメージ倍率'], ['repairPct', '修理で回復する割合（%）'], ['maxEnemies', '同時に出せる敵の上限'],
+  ['waveSec', '自然に湧く間隔（秒、0 = 湧かない）'], ['waveN', '1回に湧く数（最初）'],
+  ['waveRamp', '何秒ごとに湧く数を +1'], ['waveMax', '1回に湧く数の上限'],
+  ['bossMax', 'ボスの同時上限'], ['titanMax', 'タイタンの同時上限'],
+];
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TD-Panel': '1' }, body: JSON.stringify(body) });
+  refresh();
+  return r.json().catch(() => ({}));
+}
+function toggle(id) { const i = $(id); i.type = i.type === 'password' ? 'text' : 'password'; }
+
+// ---------------------------------------------------------------- tabs
+document.querySelectorAll('.tab').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('on', p.id === 'p-' + b.dataset.p));
+  $('savebar').style.display = b.dataset.p === 'live' ? 'none' : 'flex';
+});
+
+// ---------------------------------------------------------------- live
+function testGift() {
+  post('api/test', { field: sel, name: $('tname').value, coins: $('tcoins').value, repeat: $('trep').value, gift: $('tgift').value, avatar: $('tavatar').value });
+}
+async function game(cmd, field = sel) {
+  $('game-msg').className = 'msg'; $('game-msg').textContent = cmd === 'build' ? '作っています…（数十秒かかります）' : '…';
+  const r = await post('api/game', { cmd, field });
+  $('game-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('game-msg').textContent = r.message ?? '';
+}
+async function assign() {
+  const r = await post('api/assign', { field: sel });
+  $('game-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('game-msg').textContent = r.message ?? '';
+}
+async function versus(cancel) {
+  const r = await post('api/versus', cancel ? { cancel: true } : { a: Number($('vs-a').value), b: Number($('vs-b').value) });
+  $('vs-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('vs-msg').textContent = r.message ?? '';
+}
+function setField(n) {
+  sel = n; localStorage.setItem('td.field', n);
+  document.querySelectorAll('.fname').forEach((e) => e.textContent = 'フィールド' + n);
+  if (lastState) render(lastState);
+}
+async function loadBoard() {
+  let d;
+  try { d = await (await fetch('api/leaderboard?scope=' + ($('lb-all').checked ? 'all' : 'current'))).json(); } catch { return; }
+  $('lb-rules').textContent = d.scope === 'all' ? '（すべての記録）' : `（いまのルール: ${d.rules}）`;
+  const box = (t, list, unit) => `<div><h3>${t}</h3>${list.length ? `<ol>${list.map((e) => `<li>${esc(e.name)} <b>${e.value}</b>${unit}${e.field ? ` <span>F${e.field}</span>` : ''}</li>`).join('')}</ol>` : '<p class="help">まだありません</p>'}</div>`;
+  $('lb').innerHTML = box('ベスト撃破数', d.kills, '体') + box('最長生存', d.survival, '秒') + box('防衛成功の回数', d.wins, '回') + box('対戦の勝ち数', d.versus, '勝');
+  $('lb-recent').innerHTML = d.recent.map((r) => r.type === 'versus'
+    ? `<div class="l"><span class="t">${new Date(r.at).toLocaleString('ja-JP')}</span><span class="vs">対戦 F${r.a}（${esc(r.aWho)}）撃破${r.ka} vs F${r.b}（${esc(r.bWho)}）撃破${r.kb} → ${r.winner ? 'F' + r.winner + ' の勝ち' : '引き分け'}</span></div>`
+    : `<div class="l"><span class="t">${new Date(r.at).toLocaleString('ja-JP')}</span><span>F${r.field} ${esc(r.players.join(', ') || '（プレイヤーなし）')} ${r.result === 'win' ? '防衛成功' : 'コア陥落'}・撃破${r.kills}・生存${r.survived}秒${r.versus ? '（対戦）' : ''}</span></div>`).join('') || '<p class="help">まだありません</p>';
+}
+const mmss = (s) => s == null ? '-' : `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const STATE = { 0: '待機中', 1: 'ゲーム中', 2: '終了' };
+const TT = { connected: '接続中', connecting: '接続しています', offline: '配信していない', off: '未接続', error: 'エラー' };
+const ttClass = (t) => ({ connected: 'ok', connecting: 'warn', offline: 'warn', off: '', error: 'bad' }[t] ?? '');
+let lastVsN = null;
+async function refresh() {
+  let s;
+  try { s = await (await fetch('api/state')).json(); } catch { return; }
+  lastState = s;
+  render(s);
+}
+function render(s) {
+  if (sel > s.count) setField(1);
+  const conn = s.fields.filter((f) => f.tiktok === 'connected').length, withId = s.fields.filter((f) => f.username).length;
+  $('tt').className = 'pill ' + (withId === 0 ? '' : conn === withId ? 'ok' : conn ? 'warn' : 'bad');
+  $('tt').innerHTML = '<span class="dot"></span>TikTok: ' + (withId ? `${conn}/${withId} 接続` : 'IDなし（テストのみ）');
+  $('rc').className = 'pill ' + (s.rcon === 'connected' ? 'ok' : 'bad');
+  $('rc').innerHTML = '<span class="dot"></span>Minecraft: ' + esc(s.rcon + (s.rconDetail ? ' / ' + s.rconDetail : ''));
+  $('q').textContent = s.queue; $('coins').textContent = s.coins; $('likes').textContent = s.totalLikes;
+  const logs = $('log-only').checked ? s.log.filter((l) => !l.field || l.field === sel) : s.log;
+  $('log').innerHTML = logs.map((l) => `<div class="l k-${l.kind}"><span class="t">${l.t}</span><span>${esc(l.text)}</span></div>`).join('');
+  // field selector and cards
+  $('fsel').innerHTML = s.fields.map((f) => `<button class="small ${f.n === sel ? 'on' : ''}" style="border-left:4px solid ${CSS[f.color]}" onclick="setField(${f.n})">F${f.n}</button>`).join('');
+  $('fcards').innerHTML = s.fields.map((f) => {
+    const g = f.game ?? {};
+    const st = g.built === 0 ? '<span class="st2">未作成</span>' : g.vs ? '<span class="vs">対戦</span> ' + `<span class="st${g.state}">${STATE[g.state] ?? '-'}</span>` : `<span class="st${g.state}">${STATE[g.state] ?? '-'}</span>`;
+    const who = [...f.players, ...f.watchers.map((w) => w + '(観戦)')].join(', ') || 'だれもいない';
+    return `<div class="fcard ${f.n === sel ? 'on' : ''}" style="--fc:${CSS[f.color]}" onclick="setField(${f.n})">
+      <h3><span>フィールド${f.n}</span>${st}</h3>
+      <div class="s">${g.state === 1 ? `残り <b>${g.time > 0 ? mmss(g.left) : '∞'}</b> 撃破 <b>${g.kills}</b> 敵 <b>${g.enemies}</b><br>関門 <b>${g.front > 0 ? '第' + g.front + ' ' + g.gateHp : '最終'}</b> コア <b>${g.core}/${g.coreMax}</b><br>` : g.state === 2 ? `前回: <b>${g.result === 1 ? '防衛成功' : 'コア陥落'}</b> 撃破 <b>${g.kills}</b> 生存 <b>${g.elapsed}秒</b><br>` : ''}
+      人: <b>${esc(who)}</b><br>配信: <b>${esc(f.mcName || '-')}</b>${f.username ? ' @' + esc(f.username) : ''} <span class="${ttClass(f.tiktok)}">${f.username ? esc(TT[f.tiktok] ?? f.tiktok) : ''}</span>${f.queue ? `<br>キュー <b>${f.queue}</b>` : ''}</div></div>`;
+  }).join('');
+  const f = s.fields[sel - 1];
+  const g = f?.game;
+  $('g-title').textContent = `フィールド ${sel}`;
+  $('g-title').style.color = CSS[f?.color] ?? '';
+  $('g-who').textContent = `いる人: ${f.players.join(', ') || 'なし'}${f.watchers.length ? '／観戦: ' + f.watchers.join(', ') : ''}　配信者: ${f.mcName || '-'}${f.username ? ' @' + f.username + '（' + (TT[f.tiktok] ?? f.tiktok) + (f.tiktokDetail ? ' / ' + f.tiktokDetail : '') + '）' : ''}`;
+  if (g) {
+    $('g-state').textContent = (g.vs ? '対戦・' : '') + (STATE[g.state] ?? '-');
+    $('g-left').textContent = g.time > 0 ? mmss(g.left) : '無制限';
+    $('g-kills').textContent = g.kills ?? '-'; $('g-enemies').textContent = g.enemies ?? '-';
+    $('g-gate').textContent = g.front > 0 ? `第${g.front}関門 ${g.gateHp}/${g.gateMax}` : '最終防衛線';
+    $('g-gatebar').style.width = (g.front > 0 ? Math.max(0, 100 * g.gateHp / g.gateMax) : 0) + '%';
+    $('g-core').textContent = `${g.core ?? '-'}/${g.coreMax ?? '-'}`;
+    $('g-corebar').style.width = Math.max(0, 100 * (g.core ?? 0) / (g.coreMax || 1)) + '%';
+  }
+  // versus
+  const opts = s.fields.map((x) => `<option value="${x.n}">フィールド${x.n}</option>`).join('');
+  for (const [id, def] of [['vs-a', 1], ['vs-b', 2]]) {
+    const v = $(id).value || def;
+    if ($(id).options.length !== s.fields.length) { $(id).innerHTML = opts; $(id).value = Math.min(v, s.count); }
+  }
+  const v = s.versus;
+  const last = v.last ?? v.lastRaw;
+  $('vs-last').textContent = (v.on === 2 ? `いま: F${v.cur?.a} vs F${v.cur?.b} のカウントダウン中　` : v.on === 1 ? `いま: F${v.cur?.a} vs F${v.cur?.b} が対戦中　` : '')
+    + (last ? `前回: F${last.a}${last.aWho ? '（' + last.aWho + '）' : ''} 撃破${last.ka} vs F${last.b}${last.bWho ? '（' + last.bWho + '）' : ''} 撃破${last.kb} → ${(last.winner ?? (last.w === 1 ? last.a : last.w === 2 ? last.b : 0)) ? 'F' + (last.winner ?? (last.w === 1 ? last.a : last.b)) + ' の勝ち' : '引き分け'}` : '');
+  if (v.lastN !== lastVsN) { lastVsN = v.lastN; loadBoard(); }
+  // the connection tab's status column
+  s.fields.forEach((x) => { const e = $('st-' + x.n); if (e) { e.className = ttClass(x.tiktok); e.textContent = x.username ? (TT[x.tiktok] ?? x.tiktok) + (x.tiktokDetail ? ' / ' + x.tiktokDetail : '') : '-'; } });
+}
+
+// ---------------------------------------------------------------- settings
+const kindTag = (a) => `<span class="kind ${a.kind}">${a.kind === 'enemy' ? '敵' : '助'}</span>`;
+function actionOptions(sel, allowNone) {
+  return (allowNone ? `<option value="">（なし）</option>` : '') +
+    Object.entries(ACTIONS).map(([id, a]) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${a.kind === 'enemy' ? '［敵］' : '［助］'}${esc(a.label)}</option>`).join('');
+}
+function fillSelect(id, sel, allowNone) { $(id).innerHTML = actionOptions(sel, allowNone); }
+
+function addByName(name = '', action = 'zombie') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input class="bn-name" list="giftNames" value="${esc(name)}" placeholder="例: Rose"></td>
+    <td><select class="bn-act">${actionOptions(action)}</select></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">削除</button></td>`;
+  $('byname').append(tr);
+}
+function addTier(t = { minCoins: 1, pick: 'random', actions: [] }) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input class="t-min" type="number" min="1" value="${t.minCoins}"></td>
+    <td><select class="t-pick"><option value="random" ${t.pick !== 'all' ? 'selected' : ''}>ランダム</option><option value="all" ${t.pick === 'all' ? 'selected' : ''}>全部</option></select></td>
+    <td><div class="chips">${Object.entries(ACTIONS).map(([id, a]) =>
+      `<label><input type="checkbox" value="${id}" ${t.actions.includes(id) ? 'checked' : ''}>${esc(a.label)}${kindTag(a)}</label>`).join('')}</div></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">削除</button></td>`;
+  $('tiers').append(tr);
+}
+function addChat(word = '', action = 'zombie') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input class="ch-word" value="${esc(word)}" placeholder="例: !zombie"></td>
+    <td><select class="ch-act">${actionOptions(action)}</select></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">削除</button></td>`;
+  $('chat').append(tr);
+}
+function weaponChips(id, cls, selected) {
+  $(id).innerHTML = Object.entries(WEAPONS).filter(([, w]) => w.type === 'gun')
+    .map(([wid, w]) => `<label><input type="checkbox" class="${cls}" value="${wid}" ${selected.includes(wid) ? 'checked' : ''}>${esc(w.label)}</label>`).join('');
+}
+
+async function loadConfig() {
+  const d = await (await fetch('api/config')).json();
+  ACTIONS = d.actions; MOBS = d.mobs; WEAPONS = d.weapons; CFG = d.config;
+  const c = CFG;
+  COLORS = d.colors; MAXF = d.maxFields;
+  $('c-sign').value = c.signApiKey ?? '';
+  $('streamers').innerHTML = c.fields.list.map((s, i) => `<tr style="${i < c.fields.count ? '' : 'opacity:.45'}"><td><b style="color:${CSS[COLORS[i]]}">F${i + 1}</b></td>
+    <td><input class="st-mc" value="${esc(s.mcName)}" placeholder="例: Steve"></td>
+    <td><input class="st-tt" value="${esc(s.tiktokUsername)}" placeholder="例: my_account"></td>
+    <td id="st-${i + 1}" style="font-size:12px">-</td>
+    <td><button class="small" onclick="post('api/tiktok',{field:${i + 1},connect:true})">接続</button> <button class="small" onclick="post('api/tiktok',{field:${i + 1},connect:false})">切断</button></td></tr>`).join('');
+  $('fs-count').value = c.fields.count; $('fs-spacing').value = c.fields.spacing;
+  $('c-host').value = c.rcon.host; $('c-port').value = c.rcon.port; $('c-pass').value = c.rcon.password;
+  $('c-repeat').value = c.giftRules.repeatSmallUpTo ?? 5;
+  $('byname').innerHTML = ''; Object.entries(c.giftRules.byName).forEach(([n, a]) => addByName(n, a));
+  $('tiers').innerHTML = ''; c.giftRules.tiers.forEach((t) => addTier(t));
+  fillSelect('c-follow', c.follow, true); fillSelect('c-share', c.share, true); fillSelect('c-sub', c.subscribe, true);
+  $('c-likes').value = c.likes.every; fillSelect('c-likeact', c.likes.action, true);
+  $('c-chaton').checked = c.chatCommands.enabled; $('c-chatcd').value = c.chatCommands.cooldownSec;
+  $('chat').innerHTML = ''; Object.entries(c.chatCommands.commands).forEach(([w, a]) => addChat(w, a));
+  $('cooldowns').innerHTML = Object.entries(ACTIONS).map(([id, a]) =>
+    `<tr><td>${esc(a.label)}${kindTag(a)}</td><td><input class="cd" data-a="${id}" type="number" min="0" value="${c.cooldownSec[id] ?? 0}"></td></tr>`).join('');
+  fillSelect('c-fallback', c.fallbackAction);
+  $('c-interval').value = c.queue.intervalMs; $('c-maxq').value = c.queue.maxLength; $('c-panelport').value = c.panelPort;
+  $('g-avatarScale').value = c.game.avatarScale; $('g-spread').value = c.game.spread;
+  $('gamefields').innerHTML = GAME_FIELDS.map(([k, l]) => `<div><label class="f">${l}</label><input class="gf" data-k="${k}" type="number" value="${c.game[k]}"></div>`).join('');
+  for (const k of ['length', 'halfWidth', 'gates', 'timeOfDay', 'originX', 'originY', 'originZ']) $('f-' + k).value = c.field[k];
+  $('f-trees').checked = c.field.trees;
+  $('mobtable').innerHTML = Object.entries(MOBS).map(([m, def]) => `<tr><td>${esc(def.label)}</td>` +
+    ['hp', 'speed', 'scale', 'dmg', 'atk'].map((k) => `<td><input class="mob" data-m="${m}" data-k="${k}" type="number" step="${k === 'speed' || k === 'scale' ? '0.01' : '1'}" value="${c.mobs[m][k]}"></td>`).join('') + '</tr>').join('');
+  $('counts').innerHTML = Object.entries(ACTIONS).map(([id, a]) =>
+    `<div><label class="f">${esc(a.label)}${kindTag(a)}</label><input class="cnt" data-a="${id}" type="number" min="1" max="50" value="${c.actionCounts[id] ?? 1}"></div>`).join('');
+  weaponChips('loadout', 'w-lo', c.weapons.loadout);
+  weaponChips('giftpool', 'w-gp', c.weapons.giftPool);
+  $('w-grenades').value = c.weapons.grenades; $('w-ammoMags').value = c.weapons.ammoMags; $('w-inf').checked = c.weapons.infiniteAmmo;
+  $('cfgfile').textContent = d.configFile;
+  $('giftNames').innerHTML = d.recentGifts.map((g) => `<option value="${esc(g.name)}">${g.coins}コイン</option>`).join('')
+    + ['Rose', 'TikTok', 'GG', 'Finger Heart', 'Doughnut', 'Heart Me', 'Ice Cream Cone', 'Perfume', 'Hand Hearts', 'Galaxy', 'Lion', 'Universe']
+      .map((n) => `<option value="${n}">`).join('');
+  $('ovl').innerHTML = Array.from({ length: c.fields.count }, (_, i) => `F${i + 1}: <code>${OVL_BASE}overlay?field=${i + 1}</code>`).join('<br>');
+  $('save-msg').textContent = '';
+  if (!builtActions) buildActions();
+}
+let builtActions = false;
+function buildActions() {
+  builtActions = true;
+  $('actions').innerHTML = Object.entries(ACTIONS).map(([id, a]) =>
+    `<button class="${a.kind === 'enemy' ? 'enemy' : 'help2'}" onclick="post('api/test',{field:sel,action:'${id}',name:$('tname').value,avatar:$('tavatar').value})">${esc(a.label)}</button>`).join('');
+}
+
+function collect() {
+  const byName = {};
+  document.querySelectorAll('#byname tr').forEach((tr) => {
+    const n = tr.querySelector('.bn-name').value.trim();
+    if (n) byName[n] = tr.querySelector('.bn-act').value;
+  });
+  const tiers = [...document.querySelectorAll('#tiers tr')].map((tr) => ({
+    minCoins: Number(tr.querySelector('.t-min').value),
+    pick: tr.querySelector('.t-pick').value,
+    actions: [...tr.querySelectorAll('input[type=checkbox]:checked')].map((i) => i.value),
+  }));
+  const commands = {};
+  document.querySelectorAll('#chat tr').forEach((tr) => {
+    const w = tr.querySelector('.ch-word').value.trim();
+    if (w) commands[w] = tr.querySelector('.ch-act').value;
+  });
+  const cooldownSec = {};
+  document.querySelectorAll('.cd').forEach((i) => { if (Number(i.value) > 0) cooldownSec[i.dataset.a] = Number(i.value); });
+  const gameCfg = { avatarScale: Number($('g-avatarScale').value), spread: Number($('g-spread').value) };
+  document.querySelectorAll('.gf').forEach((i) => { gameCfg[i.dataset.k] = Number(i.value); });
+  const mobs = {};
+  document.querySelectorAll('.mob').forEach((i) => { (mobs[i.dataset.m] ??= {})[i.dataset.k] = Number(i.value); });
+  const actionCounts = {};
+  document.querySelectorAll('.cnt').forEach((i) => { actionCounts[i.dataset.a] = Number(i.value); });
+  const field = { trees: $('f-trees').checked };
+  for (const k of ['length', 'halfWidth', 'gates', 'timeOfDay', 'originX', 'originY', 'originZ']) field[k] = Number($('f-' + k).value);
+  const list = [...document.querySelectorAll('#streamers tr')].map((tr) => ({ mcName: tr.querySelector('.st-mc').value.trim(), tiktokUsername: tr.querySelector('.st-tt').value.trim() }));
+  return {
+    fields: { count: Number($('fs-count').value), spacing: Number($('fs-spacing').value), list },
+    tiktokUsername: list[0]?.tiktokUsername ?? '', signApiKey: $('c-sign').value,
+    rcon: { host: $('c-host').value, port: Number($('c-port').value), password: $('c-pass').value },
+    panelPort: Number($('c-panelport').value),
+    queue: { intervalMs: Number($('c-interval').value), maxLength: Number($('c-maxq').value) },
+    giftRules: { byName, tiers, repeatSmallUpTo: Number($('c-repeat').value) },
+    follow: $('c-follow').value, share: $('c-share').value, subscribe: $('c-sub').value,
+    likes: { every: Number($('c-likes').value), action: $('c-likeact').value },
+    chatCommands: { enabled: $('c-chaton').checked, cooldownSec: Number($('c-chatcd').value), commands },
+    cooldownSec, fallbackAction: $('c-fallback').value,
+    actionCounts, game: gameCfg, mobs, field,
+    weapons: {
+      loadout: [...document.querySelectorAll('.w-lo:checked')].map((i) => i.value),
+      giftPool: [...document.querySelectorAll('.w-gp:checked')].map((i) => i.value),
+      grenades: Number($('w-grenades').value), ammoMags: Number($('w-ammoMags').value), infiniteAmmo: $('w-inf').checked,
+    },
+  };
+}
+async function saveConfig() {
+  const r = await post('api/config', collect());
+  $('save-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad');
+  $('save-msg').textContent = r.message ?? (r.ok ? '保存しました' : '保存できませんでした');
+  if (r.ok) loadConfig().then(() => { $('save-msg').className = 'msg ok'; $('save-msg').textContent = r.message; });
+}
+async function rconTest() {
+  $('rcon-msg').className = 'msg'; $('rcon-msg').textContent = '確認中…';
+  const r = await post('api/rcon-test', { host: $('c-host').value, port: $('c-port').value, password: $('c-pass').value });
+  $('rcon-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('rcon-msg').textContent = r.message;
+}
+async function serverSetup() {
+  $('setup-msg').className = 'msg'; $('setup-msg').textContent = '設定中…';
+  const r = await post('api/server-setup', { serverDir: $('s-dir').value, port: $('s-port').value });
+  $('setup-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('setup-msg').textContent = r.message;
+  if (r.ok) loadConfig();
+}
+
+setField(sel);
+loadConfig();
+refresh();
+loadBoard();
+setInterval(refresh, 1000);
+setInterval(loadBoard, 15000);
+</script>
+</body>
+</html>

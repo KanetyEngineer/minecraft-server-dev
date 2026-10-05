@@ -1,0 +1,162 @@
+{
+  "actions": {
+    "zombie": {
+      "label": "ゾンビ",
+      "kind": "enemy",
+      "count": 1
+    },
+    "runner": {
+      "label": "俊足ゾンビ",
+      "kind": "enemy",
+      "count": 1
+    },
+    "skeleton": {
+      "label": "スケルトン狙撃兵",
+      "kind": "enemy",
+      "count": 1
+    },
+    "creeper": {
+      "label": "クリーパー（関門に大ダメージ）",
+      "kind": "enemy",
+      "count": 1
+    },
+    "brute": {
+      "label": "重装ゾンビ",
+      "kind": "enemy",
+      "count": 1
+    },
+    "horde": {
+      "label": "ゾンビの大群",
+      "kind": "enemy",
+      "count": 1
+    },
+    "boss": {
+      "label": "ボス・ラヴェジャー",
+      "kind": "enemy",
+      "count": 1
+    },
+    "titan": {
+      "label": "巨人タイタン",
+      "kind": "enemy",
+      "count": 1
+    },
+    "airstrike": {
+      "label": "空爆（前にいる敵を一掃）",
+      "kind": "help",
+      "count": 1
+    },
+    "nuke": {
+      "label": "全滅ボム",
+      "kind": "help",
+      "count": 1
+    },
+    "freeze": {
+      "label": "敵を凍結（8秒）",
+      "kind": "help",
+      "count": 1
+    },
+    "repair": {
+      "label": "関門を修理",
+      "kind": "help",
+      "count": 1
+    },
+    "heal": {
+      "label": "全員回復",
+      "kind": "help",
+      "count": 1
+    },
+    "weapon": {
+      "label": "武器支給（ランダム）",
+      "kind": "help",
+      "count": 1
+    },
+    "firework": {
+      "label": "花火（何も起きない）",
+      "kind": "help",
+      "count": 1
+    }
+  },
+  "mobs": {
+    "zombie": {
+      "label": "ゾンビ",
+      "hp": 20,
+      "speed": 0.23,
+      "scale": 1.0,
+      "dmg": 3,
+      "atk": 1
+    },
+    "runner": {
+      "label": "俊足ゾンビ",
+      "hp": 14,
+      "speed": 0.36,
+      "scale": 0.85,
+      "dmg": 2,
+      "atk": 1
+    },
+    "skeleton": {
+      "label": "スケルトン狙撃兵",
+      "hp": 20,
+      "speed": 0.25,
+      "scale": 1.0,
+      "dmg": 2,
+      "atk": 1
+    },
+    "creeper": {
+      "label": "クリーパー",
+      "hp": 20,
+      "speed": 0.26,
+      "scale": 1.0,
+      "dmg": 0,
+      "atk": 6
+    },
+    "brute": {
+      "label": "重装ゾンビ",
+      "hp": 60,
+      "speed": 0.2,
+      "scale": 1.35,
+      "dmg": 6,
+      "atk": 3
+    },
+    "boss": {
+      "label": "ボス・ラヴェジャー",
+      "hp": 300,
+      "speed": 0.28,
+      "scale": 1.0,
+      "dmg": 10,
+      "atk": 12
+    },
+    "titan": {
+      "label": "巨人タイタン",
+      "hp": 500,
+      "speed": 0.17,
+      "scale": 3.0,
+      "dmg": 12,
+      "atk": 20
+    }
+  },
+  "cfg": {
+    "time": 600,
+    "coreHp": 100,
+    "gateHp": 300,
+    "leakMul": 5,
+    "waveSec": 6,
+    "waveN": 1,
+    "waveRamp": 60,
+    "waveMax": 6,
+    "maxEnemies": 80,
+    "repairPct": 30,
+    "bossMax": 3,
+    "titanMax": 1
+  },
+  "maxFields": 8,
+  "fieldColors": [
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "aqua",
+    "light_purple",
+    "gold",
+    "dark_aqua"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "sharytech-tiktok-hub",
+  "version": "1.0.0",
+  "description": "SharyTech TikTok Hub: TikTok LIVE gifts -> every SharyTech Minecraft game (RCON), one app",
+  "main": "src/index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "sync-data": "node tools/sync-data.mjs"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "sharp": "^0.35.5",
+    "tiktok-live-connector": "^2.5.0"
+  }
+}

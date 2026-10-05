@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>アニメ技の埋め立て オーバーレイ</title>
+<style>
+  html, body { margin:0; background:transparent; overflow:hidden; font-family:"Yu Gothic UI","Meiryo",sans-serif; }
+  /* newest card at the top; older ones are pushed down */
+  #stack { position:absolute; left:24px; top:24px; display:flex; flex-direction:column; gap:0; max-width:min(720px, 90vw); }
+  .wrap { overflow:hidden; max-height:0; transition:max-height .35s ease, margin .35s ease; }
+  .wrap.in { max-height:140px; margin-bottom:10px; }
+  .wrap.out { max-height:0; margin-bottom:0; }
+  .card { display:flex; align-items:center; gap:14px; padding:12px 20px; border-radius:14px; background:rgba(20,10,30,.82);
+          border:2px solid #38bdf8; color:#fff; font-size:28px; font-weight:700; text-shadow:0 2px 4px #000;
+          opacity:0; transform:translateX(-30px); transition:opacity .35s, transform .35s; }
+  .wrap.in .card { opacity:1; transform:none; }
+  .wrap.out .card { opacity:0; transform:translateX(-30px); }
+  .card img { width:56px; height:56px; border-radius:50%; border:2px solid #fde047; flex:none; object-fit:cover; }
+  .name { color:#fde047; } .act { color:#7dd3fc; } .gift { color:#e9d5ff; font-size:20px; display:block; }
+  /* filling progress, top right */
+  #prog { position:absolute; right:24px; top:24px; width:min(420px, 40vw); padding:12px 18px; border-radius:14px; background:rgba(10,15,35,.82);
+          border:2px solid #22c55e; color:#fff; font-weight:700; text-shadow:0 2px 4px #000; display:none; }
+  #prog .top { display:flex; justify-content:space-between; font-size:24px; }
+  #prog .bar { margin-top:8px; height:18px; border-radius:9px; background:#1e293b; overflow:hidden; }
+  #prog .fill { height:100%; width:0; background:linear-gradient(90deg,#22c55e,#a3e635); transition:width .6s; }
+  #prog .sub { margin-top:6px; font-size:16px; color:#cbd5e1; }
+</style>
+</head>
+<body>
+<div id="stack"></div>
+<div id="prog"><div class="top"><span><span id="fl"></span>埋め立て <span id="pct">0</span>%</span><span id="time"></span></div>
+  <div class="bar"><div class="fill" id="fill"></div></div><div class="sub" id="sub"></div></div>
+<script>
+const SHOW_MS = 8000;   // each card disappears this long after it arrived
+const MAX = 5;          // more than this: the oldest goes right away
+const stack = document.getElementById('stack');
+// which field this overlay shows: /overlay?field=2 (default 1)
+const FIELD = Number(new URLSearchParams(location.search).get('field')) || 1;
+let since = null;
+
+function removeCard(w) {
+  if (w.classList.contains('out')) return;
+  clearTimeout(w.timer);
+  w.classList.remove('in');
+  w.classList.add('out');
+  setTimeout(() => w.remove(), 400);
+}
+
+function addCard(it) {
+  const w = document.createElement('div');
+  w.className = 'wrap';
+  const card = document.createElement('div');
+  card.className = 'card';
+  if (it.avatar) {
+    const img = document.createElement('img');
+    img.src = it.avatar;
+    img.onerror = () => img.remove();
+    card.append(img);
+  }
+  const text = document.createElement('div');
+  const gift = document.createElement('span'); gift.className = 'gift'; gift.textContent = '🎁 ' + it.gift;
+  const name = document.createElement('span'); name.className = 'name'; name.textContent = it.name;
+  const act = document.createElement('span'); act.className = 'act'; act.textContent = it.action;
+  text.append(gift, name, ' → ', act);
+  card.append(text);
+  w.append(card);
+  stack.prepend(w);
+  void w.offsetHeight; // apply the start state first so the slide-in animates
+  w.classList.add('in');
+  w.timer = setTimeout(() => removeCard(w), SHOW_MS);
+  const live = [...stack.children].filter((x) => !x.classList.contains('out'));
+  live.slice(MAX).forEach(removeCard); // newest first, so everything after the 5th is the oldest
+}
+
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+function showGame(g) {
+  const box = document.getElementById('prog');
+  if (!g) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  document.getElementById('pct').textContent = g.pct;
+  document.getElementById('fill').style.width = Math.min(100, g.pct) + '%';
+  document.getElementById('time').textContent = '⏱ ' + mmss(g.sec);
+  document.getElementById('fl').textContent = `F${g.field ?? FIELD} `;
+  document.getElementById('sub').textContent = `${g.state}${g.vs ? `（対戦 vs フィールド${g.vs}）` : ''}・${g.filled} / ${g.total} ブロック` + (g.best ? `・最速 ${mmss(g.best)}` : '');
+}
+
+async function poll() {
+  try {
+    const d = await (await fetch('api/overlay?field=' + FIELD + '&since=' + (since ?? 0), { cache: 'no-store' })).json();
+    // first poll, or the app was restarted: start from now, don't replay older triggers
+    if (since === null || d.latest < since) { since = d.latest; showGame(d.game); return; }
+    for (const it of d.items) addCard(it);
+    showGame(d.game);
+    since = d.latest;
+  } catch {}
+}
+setInterval(poll, 500);
+poll();
+</script>
+</body>
+</html>
