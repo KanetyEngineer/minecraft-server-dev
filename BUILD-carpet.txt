@@ -1,1 +1,1 @@
-solaria-carpet built from a7b8b1b9eab32c6550719a890563a953d66a87ac on claude/solaria-tools
+solaria-carpet built from 1df51c81f9549299eaf9d84460e8fcb71747de49 on claude/solaria-tools
