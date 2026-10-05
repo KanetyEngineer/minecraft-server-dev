@@ -16,6 +16,13 @@ const INTERACTIVE = /(chest|barrel|furnace|smoker|crafting_table|_door|_trapdoor
 const REPLACEABLE = /^(air|cave_air|void_air|short_grass|tall_grass|fern|large_fern|dead_bush|snow|water|lava|vine|glow_lichen|seagrass|tall_seagrass|short_dry_grass|tall_dry_grass|structure_void)$/;
 const FACE_ORDER = ['up', 'north', 'south', 'east', 'west', 'down'];
 const key = (p) => `${p.x},${p.y},${p.z}`;
+// ドア（トラップドアは含まない）。経路探索はドアを通れないので、ドアは最後に置く
+const isDoor = (t) => /_door$/.test(t.name);
+// 掘っても自分自身を落とさない（壊すと素材がなくなる）ブロック
+const FRAGILE = /(glass|ice$|_leaves$|glowstone|sea_lantern|bookshelf|_coral|turtle_egg|beehive|bee_nest)/;
+// 建てたブロックを経路探索が壊すときの手間。ふつうは壊さないが、建物の中に閉じ込められて出られないときだけ、
+// ドア → 壁の順に壊して外へ出る（壊したマスは、あとの見直しで置き直す）
+const escapeCost = (t) => (isDoor(t) ? 30 : FRAGILE.test(t.name) ? Infinity : 90);
 
 // 置く位置の近く（手が届く）で、置く位置そのものとその真下には立たないゴール
 class GoalPlaceNear extends goals.Goal {
@@ -56,6 +63,7 @@ export class Builder {
     this.scaffolds = new Set(scaffolds); // 建てるために置いた仮の足場 "x,y,z"（最後に片付ける）
     this.onScaffolds = onScaffolds;
     this.deferred = new Map(); // 付ける先がまだ無くて後回しにしたマス "x,y,z" -> pos
+    this.protectedKeys = new Set(); // 経路探索で壊さないマス（リスポーン地点のベッドなど）
     this.missing = new Map(); // 手に入らなかったアイテム -> 個数
     this.orientationOff = 0;
     this.placed = 0;
@@ -65,6 +73,7 @@ export class Builder {
     // 素材を用意してもらったときは、柱上り・穴のふた・松明などで建築の素材を使わない
     ctx.bot.keepForBuild = supplier?.stocked ? (name) => this.needed.has(name) : undefined;
     ctx.leaveBuildArea = () => this.leaveArea();
+    if (supplier) supplier.reserve = (name) => (this.needed.has(name) ? this.remaining().get(name) ?? 0 : 0);
   }
 
   get bot() { return this.ctx.bot; }
@@ -151,46 +160,80 @@ export class Builder {
     return { need: [...need.entries()].sort((a, b) => b[1] - a[1]), unplaceable: [...unplaceable.entries()] };
   }
 
-  // 経路探索に「建てた所を壊さない」「建物の中に勝手に足場を置かない」を教える
+  // 経路探索に「建てた所を壊さない」「建物の中に勝手に足場を置かない」を教える。
+  // ルールは Movements に 1 回だけ足し、中身はいま建てている Builder（mv._builder）を見る
+  // （前は最初の Builder を見続けていたので、同じ起動のまま 2 つ目の建物を建てると、建てたブロックを経路探索が壊せた）
   installPathRules() {
     const mv = this.bot.pathfinder.movements;
-    if (!mv || mv._builderRules) return;
-    mv._builderRules = true;
-    // はしごを登る経路は使わない（建てかけのはしごの上で行き止まりになり、「stuck」を繰り返して動けなくなった）
-    mv.climbables = new Set();
+    if (!mv) return;
+    mv._builder = this;
     if (this.stocked) {
       // 用意してもらった建築素材を、移動の足場に使ってしまわない
       mv.scafoldingBlocks = SCAFFOLD_BLOCKS.filter((n) => !this.needed.has(n))
         .map((n) => this.bot.registry.itemsByName[n]?.id).filter((id) => id !== undefined);
     }
+    if (mv._builderRules) return;
+    mv._builderRules = true;
+    if (process.env.BUILD_DEBUG) {
+      // 経路探索が足場を置けない（place_error）理由を見るため、置けなかったときの理由を出す
+      const orig = this.bot.placeBlock.bind(this.bot);
+      this.bot.placeBlock = async (ref, face) => {
+        try { return await orig(ref, face); } catch (e) { this.log.info(`[置けない] ${ref?.name} ${ref?.position} 面 ${face}: ${e.message}`); throw e; }
+      };
+    }
+    // はしごは経路探索に使わせる（使えないと、はしごのマスを壊して通っていた）。建てかけのはしごの上で
+    // 行き止まりになって「stuck」が続くときは、pathTo が早めにあきらめて、柱を積んで登る方に切り替える
     mv.exclusionAreasBreak.push((block) => {
-      const t = this.targets.get(key(block.position));
-      if (t && matches(t, block, { checkProps: false })) return Infinity; // 建てたブロックは壊さない
+      const b = mv._builder;
+      if (!b) return 0;
+      if (b.protectedKeys.has(key(block.position))) return Infinity;
+      const t = b.targets.get(key(block.position));
+      if (t && matches(t, block, { checkProps: false })) {
+        // 道具が無いと何も落とさないブロック（ツルハシの無いときの石レンガなど）も壊さない
+        const tools = block.harvestTools ? Object.keys(block.harvestTools).map(Number) : null;
+        if (tools && !b.bot.inventory.items().some((i) => tools.includes(i.type))) return Infinity;
+        return escapeCost(t);
+      }
       return 0;
     });
     mv.exclusionAreasPlace.push((block) => {
-      if (!this.inBox(block.position)) return 0;
-      const t = this.targets.get(key(block.position));
-      return t ? 0 : 20; // 空気のはずの所に置くのは、他に道が無いときだけ
+      const b = mv._builder;
+      if (!b || !b.inBox(block.position)) return 0;
+      return b.targets.has(key(block.position)) ? 0 : 20; // 空気のはずの所に置くのは、他に道が無いときだけ
     });
     // 自分の設置以外（経路探索の足場・柱）で置いたものは、最後に片付ける対象として覚える
     this.bot.on('blockPlaced', (_old, nb) => {
-      if (this.selfPlacing || !nb || !this.nearBox(nb.position)) return;
-      const t = this.targets.get(key(nb.position));
-      if (!t || t.name !== nb.name) this.addScaffold(key(nb.position));
+      const b = mv._builder;
+      if (!b || b.selfPlacing || !nb || !b.nearBox(nb.position)) return;
+      const t = b.targets.get(key(nb.position));
+      if (!t || t.name !== nb.name) b.addScaffold(key(nb.position));
     });
   }
 
   async run() {
     const { bot, ctx } = this;
     this.installPathRules();
+    // 経路探索の「その場で跳んで足元に置く」柱上りは、この鯖ではサーバーに断られて（the block is still air）
+    // 失敗を繰り返すことが多かった。建てている間は使わせず、高い所へは climbNear の柱上り（確実に置ける）で登る
+    const mv = bot.pathfinder.movements;
+    const towers = mv?.allow1by1towers;
+    if (mv) mv.allow1by1towers = false;
+    try {
+      return await this.runInner();
+    } finally {
+      if (mv) mv.allow1by1towers = towers;
+    }
+  }
+
+  async runInner() {
+    const { bot, ctx } = this;
     await this.returnToSite();
     const ys = this.size.y;
     for (let y = 0; y < ys; y++) {
       abortable(ctx);
       this.layer = y;
       const wy = this.origin.y + y;
-      const layer = [...this.targets.values()].filter((t) => t.pos.y === wy && !this.done(t));
+      const layer = [...this.targets.values()].filter((t) => t.pos.y === wy && !this.done(t) && !isDoor(t));
       if (this.clear) await this.clearLayer(wy);
       if (layer.length === 0) continue;
       const p = this.progress();
@@ -209,9 +252,24 @@ export class Builder {
       if (this.placed === before) break;
     }
     await this.cleanupScaffolds();
+    await this.placeDoors();
     if (this.stocked) await this.returnLeftovers().catch((e) => { if (e.name === 'AbortError') throw e; this.log.warn(`余りを戻せなかった: ${e.message}`); });
     const p = this.progress();
     return { ...p, missing: [...this.missing.entries()], orientationOff: this.orientationOff };
+  }
+
+  // ドアを置く。建物の中に閉じ込められないよう、ほかを全部建てて足場も片付けてから、なるべく外に立って置く
+  async placeDoors() {
+    const doors = [...this.targets.values()].filter((t) => isDoor(t) && !this.done(t));
+    if (doors.length === 0) return;
+    this.log.info(`最後にドア ${doors.length} 枚を置く`);
+    this.layer = this.size.y - 1;
+    this.preferOutside = true;
+    try {
+      await this.buildLayer(doors);
+    } finally {
+      this.preferOutside = false;
+    }
   }
 
   // 現場から離れていたら（死んで初期スポーンに戻った・素材集めで遠出した）、まず戻る
@@ -253,7 +311,9 @@ export class Builder {
     for (let x = 0; x < this.size.x; x++) {
       for (let z = 0; z < this.size.z; z++) {
         const p = new Vec3(this.origin.x + x, wy, this.origin.z + z);
-        if (this.targets.has(key(p))) continue;
+        const t = this.targets.get(key(p));
+        // ドアのマスは最後まで空けておく（出入り口にする）ので、地形があればどける
+        if (t && !(isDoor(t) && !/_door$/.test(bot.blockAt(p)?.name ?? ''))) continue;
         const b = bot.blockAt(p);
         // canDigBlock は手が届く距離かどうかも見るので使わない（遠くの邪魔なブロックを見落とし、木の葉が残っていた）
         if (b && b.boundingBox === 'block' && !isAirName(b.name) && b.diggable && b.name !== 'bedrock') list.push(p);
@@ -358,7 +418,8 @@ export class Builder {
   async topUp(stacks) {
     const { bot } = this;
     const remain = this.remainingNeed();
-    let spare = Math.max(0, bot.inventory.emptySlotCount() - 8);
+    // 丸ごとのスタックは 1 回に 4 つまで（たくさん持ち歩くと、倒されたときに失う量も増える）
+    let spare = Math.min(4, Math.max(0, bot.inventory.emptySlotCount() - 8));
     for (const item of stacks.keys()) {
       const have = count(bot, item);
       const rest = (remain.get(item) ?? 0) - have;
@@ -464,31 +525,54 @@ export class Builder {
     };
     if (eye().distanceTo(p.offset(0.5, 0.5, 0.5)) <= range && !inside()) return;
     try {
+      if (this.preferOutside) {
+        // ドアは建物の外に立って置く（中から置くと閉じ込められる）。外から届かなければ中からでもよい
+        try {
+          await this.pathTo(p, range, (node) => this.inBox(node));
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+        }
+      }
       await this.pathTo(p, range);
     } catch (e) {
       if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+      // はしごの上の端で止まっている（経路探索は、はしごの上から床へ移る動きができない）なら、跳びながら床へ移る
+      if (p.y - Math.floor(bot.entity.position.y) >= 1 && (await this.stepOffLadder())) {
+        if (eye().distanceTo(p.offset(0.5, 0.5, 0.5)) <= range && !inside()) return;
+        try { await this.pathTo(p, range); return; } catch (e2) {
+          if (e2.name === 'AbortError' || this.ctx.signal?.aborted) throw e2;
+          this.log.warn(`はしごから移ったあとも近づけない（いま ${bot.entity.position.floored()}）: ${e2.message}`);
+        }
+      }
       // 高い所（塔の壁の上の段など）は、近くに仮の柱を積んで、その上から置く
-      if (p.y - bot.entity.position.y >= 2 && (await this.climbNear(p, range))) return;
+      if (p.y - Math.floor(bot.entity.position.y) >= 2 && (await this.climbNear(p, range))) return;
+      // 建物の中の低い所に閉じ込められていたら、頭の上を掘って柱で上がる（掘ったマスはあとで置き直す）
+      if (p.y - Math.floor(bot.entity.position.y) >= 2 && this.inBox(bot.entity.position.floored()) && (await this.escapeUp(p.y))) {
+        await this.pathTo(p, range);
+        return;
+      }
       throw e;
     }
   }
 
-  async pathTo(p, range) {
+  async pathTo(p, range, also = null) {
     const { bot } = this;
-    // 建物の中の低い所（空洞）には立たない（閉じ込められないように）
-    const forbid = (node) => this.inBox(node) && node.y < this.origin.y + this.layer - 1
-      && !this.targets.has(key(new Vec3(node.x, node.y - 1, node.z)));
+    // 建物の中では、いま建てている段より 2 段以上低い所には立たない（はしごや下の階に立って床を張り、
+    // 床の下に閉じ込められていた）。1 段目・2 段目は地面や床の上でよい
+    const forbid = (node) => (this.layer >= 2 && this.inBox(node) && node.y < this.origin.y + this.layer - 1) || !!also?.(node);
     let timer;
     let fail;
     // 近づけなかったときに理由が分かるよう、経路探索の結果を覚えておく。
-    // 経路はあるのに動けない（stuck）が続くときは、25 秒待たずにあきらめる
+    // 経路はあるのに動けない（stuck・足場を置けない・掘れない）が続くときは、25 秒待たずにあきらめる
     const seen = { updates: 0, status: '', len: 0, resets: [] };
     const from = bot.entity.position.floored();
     const why = () => `近づけない（${from} から、経路 ${seen.updates} 回: ${seen.status} 長さ ${seen.len}、やり直し: ${seen.resets.join('/') || 'なし'}）`;
     const onUpdate = (r) => { seen.updates++; seen.status = r.status; seen.len = r.path.length; };
     const onReset = (reason) => {
       if (seen.resets.length < 6) seen.resets.push(reason);
-      if (seen.resets.filter((r) => r === 'stuck').length >= 3) fail?.(new Error(why()));
+      seen.bad = (seen.bad ?? 0) + (/^(stuck|place_error|dig_error|no_scaffolding_blocks)$/.test(reason) ? 1 : 0);
+      if (seen.bad >= 3) fail?.(new Error(why()));
     };
     bot.on('path_update', onUpdate);
     bot.on('path_reset', onReset);
@@ -510,14 +594,97 @@ export class Builder {
     }
   }
 
-  // p の横（2 マス以内）に仮の柱を積み、p と同じ高さに立つ。柱は足場として記録され、最後に片付ける
+  // はしごを登りきった所で、隣の床の上へ移る（上を押しながら床の方へ進む。プレイヤーがはしごから降りるときと同じ）
+  async stepOffLadder() {
+    const { bot } = this;
+    const feet = bot.entity.position.floored();
+    if (!/(ladder|vine)/.test(bot.blockAt(feet)?.name ?? '') && !/(ladder|vine)/.test(bot.blockAt(feet.offset(0, -1, 0))?.name ?? '')) return false;
+    // はしごのまま登って、隣の床（上が 2 マス空いている）の上に出られる所を探す
+    let dest = null;
+    for (let k = 0; k <= 2 && !dest; k++) {
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const floor = feet.offset(dx, k, dz);
+        const b = bot.blockAt(floor);
+        if (!b || b.boundingBox !== 'block' || /(ladder|vine)/.test(b.name)) continue;
+        if (bot.blockAt(floor.offset(0, 1, 0))?.boundingBox !== 'empty' || bot.blockAt(floor.offset(0, 2, 0))?.boundingBox !== 'empty') continue;
+        dest = floor.offset(0, 1, 0);
+        break;
+      }
+    }
+    if (!dest) return false;
+    this.log.info(`はしごの上から (${key(dest)}) へ移る`);
+    await bot.lookAt(dest.offset(0.5, 0.5, 0.5), true);
+    bot.setControlState('jump', true);
+    bot.setControlState('forward', true);
+    try {
+      for (let t = 0; t < 60; t++) {
+        await bot.waitForTicks(1);
+        const f = bot.entity.position.floored();
+        if (f.x === dest.x && f.z === dest.z && bot.entity.position.y >= dest.y - 0.1) break;
+      }
+    } finally {
+      bot.setControlState('jump', false);
+      bot.setControlState('forward', false);
+    }
+    await bot.waitForTicks(4);
+    const f = bot.entity.position.floored();
+    return f.x === dest.x && f.z === dest.z && f.y === dest.y;
+  }
+
+  // 建物の中で上の階の床などに閉じ込められたとき、頭の上のブロックを掘っては柱で 1 段ずつ上がる。
+  // はしごのマスにいるときは、まず隣の床の上へ移る
+  async escapeUp(targetY) {
+    const { bot } = this;
+    const feet = () => bot.entity.position.floored();
+    if (/ladder|vine/.test(bot.blockAt(feet())?.name ?? '')) {
+      // はしごの横の床へ出る。床の上が天井（屋根）で 1 マスしか空いていなければ、天井を 1 つ掘って出られるようにする
+      const f = feet();
+      let moved = false;
+      for (let k = 0; k <= 1 && !moved; k++) {
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const floor = f.offset(dx, k, dz);
+          const fb = bot.blockAt(floor);
+          if (!fb || fb.boundingBox !== 'block' || /(ladder|vine)/.test(fb.name)) continue;
+          if (bot.blockAt(floor.offset(0, 1, 0))?.boundingBox !== 'empty') continue;
+          const ceil = bot.blockAt(floor.offset(0, 2, 0));
+          if (ceil && ceil.boundingBox === 'block') {
+            const t = this.targets.get(key(ceil.position));
+            if (t && FRAGILE.test(t.name)) continue;
+            this.log.info(`はしごの横の天井 (${key(ceil.position)}) を掘って出る（あとで置き直す）`);
+            await equipCheapestTool(bot, ceil).catch(() => {});
+            await this.dig(ceil);
+          }
+          moved = await this.stepOffLadder();
+          break;
+        }
+      }
+    }
+    this.log.info(`建物の中に閉じ込められたので、頭の上を掘って上がる（y=${feet().y} → ${targetY}）`);
+    for (let i = 0; i < 24 && feet().y < targetY; i++) {
+      abortable(this.ctx);
+      for (const up of [feet().offset(0, 2, 0), feet().offset(0, 1, 0)]) {
+        const b = bot.blockAt(up);
+        if (!b || b.boundingBox !== 'block') continue;
+        const t = this.targets.get(key(up));
+        if (t && FRAGILE.test(t.name)) return false;
+        await equipCheapestTool(bot, b).catch(() => {});
+        await this.dig(b);
+      }
+      if (this.spareScaffold() < 1 && this.stocked) await this.supplier.ensureScaffold(8, this.needed).catch(() => {});
+      if ((await pillarUp(this.ctx, 1)) === 0) return false;
+    }
+    return feet().y >= targetY - 1;
+  }
+
+  // p の横（手の届く 4 マス以内）に仮の柱を積み、p と同じ高さに立つ。柱は足場として記録され、最後に片付ける。
+  // 屋根の真ん中のように建物の外から遠い所にも届くよう、4 マス先まで探す（近い柱ほど優先）
   async climbNear(p, range) {
     const { bot } = this;
     const center = p.offset(0.5, 0.5, 0.5);
     const free = (b) => b && b.boundingBox === 'empty' && !/(water|lava|ladder|vine|scaffolding|fire)/.test(b.name);
     const cands = [];
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dz = -4; dz <= 4; dz++) {
         if (dx === 0 && dz === 0) continue;
         const c = new Vec3(p.x + dx, p.y, p.z + dz);
         if (new Vec3(c.x + 0.5, c.y + 1.62, c.z + 0.5).distanceTo(center) > range) continue;
@@ -530,6 +697,8 @@ export class Builder {
           if (b.boundingBox === 'block') { g = y; break; }
         }
         if (g === null) continue;
+        // 柵・塀の上には立てない（経路探索も立てる所と見ない）
+        if (/(_fence|_wall|_gate|_pane|bars)$/.test(bot.blockAt(new Vec3(c.x, g, c.z))?.name ?? '')) continue;
         // 柱を立てるマス・立つマスが、まだ置いていない設計図のマスなら避ける（あとで置けなくなる）
         let blocked = false;
         for (let y = g + 1; y <= c.y + 1 && !blocked; y++) {
@@ -542,11 +711,11 @@ export class Builder {
       }
     }
     cands.sort((a, b) => a.score - b.score);
-    for (const { c, g, h } of cands.slice(0, 4)) {
+    for (const { c, g, h } of cands.slice(0, 3)) {
       abortable(this.ctx);
       if (this.stocked && this.spareScaffold() < h) await this.supplier.ensureScaffold(h + 8, this.needed);
       const base = new Vec3(c.x, g + 1, c.z);
-      this.log.info(`(${key(p)}) に届かないので、(${key(base)}) に ${h} 段の柱を積んで登る`);
+      this.log.info(h > 0 ? `(${key(p)}) に届かないので、(${key(base)}) に ${h} 段の柱を積んで登る` : `(${key(p)}) に届かないので、(${key(base)}) に立って置く`);
       try {
         const f = bot.entity.position.floored();
         if (f.x !== base.x || f.z !== base.z || f.y !== base.y) {
@@ -554,7 +723,7 @@ export class Builder {
           try {
             await Promise.race([
               bot.pathfinder.goto(new goals.GoalBlock(base.x, base.y, base.z)),
-              new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('柱の場所へ行けない')), 20_000); }),
+              new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('柱の場所へ行けない')), 12_000); }),
             ]);
           } finally {
             clearTimeout(timer);
@@ -620,12 +789,17 @@ export class Builder {
     }
   }
 
+  // remainingNeed を 5 秒だけ使い回す（クラフトの判断で何度も呼ぶので）
+  remaining() {
+    if (!this.remainCache || Date.now() - this.remainCache.at > 5000) this.remainCache = { at: Date.now(), need: this.remainingNeed() };
+    return this.remainCache.need;
+  }
+
   // 手持ちのうち、建築に使う分（チェストに残っている分を除く）を差し引いた余り
   spareInv(name) {
     const have = count(this.bot, name);
     if (!this.needed.has(name)) return have;
-    if (!this.remainCache || Date.now() - this.remainCache.at > 5000) this.remainCache = { at: Date.now(), need: this.remainingNeed() };
-    const need = this.remainCache.need.get(name) ?? 0;
+    const need = this.remaining().get(name) ?? 0;
     return have - Math.max(0, need - (this.supplier?.chestCount(name) ?? 0));
   }
 
@@ -673,7 +847,9 @@ export class Builder {
     const p = t.pos;
     // 違うブロックがあればどける（仮の足場・地形・間違えて置いた物）
     const cur = bot.blockAt(p);
-    if (cur && !REPLACEABLE.test(cur.name) && !matches(t, cur, { checkProps: false })) {
+    // 2 枚重ねのハーフブロックで、1 枚目がもう置いてあるなら、掘らずに 2 枚目だけ重ねる
+    const halfDone = t.props?.type === 'double' && cur?.name === t.name;
+    if (cur && !halfDone && !REPLACEABLE.test(cur.name) && !matches(t, cur, { checkProps: false })) {
       await this.reach(p);
       await equipCheapestTool(bot, cur).catch(() => {});
       await this.dig(bot.blockAt(p));
@@ -692,12 +868,12 @@ export class Builder {
         await bot.waitForTicks(2);
       }
     }
-    await this.ensureSupport(p, t);
+    if (!halfDone) await this.ensureSupport(p, t);
     try {
-      await this.placeAt(p, t, it.item);
+      if (!halfDone) await this.placeAt(p, t, it.item);
     } catch (e) {
       // 落ち葉など、上書きできると思っていたものに断られたら、掘ってから置き直す
-      const still = /the block is still (w+)/.exec(e.message)?.[1];
+      const still = /the block is still (\w+)/.exec(e.message)?.[1];
       if (!still || isAirName(still)) throw e;
       const b = bot.blockAt(p);
       await equipCheapestTool(bot, b).catch(() => {});
@@ -751,29 +927,76 @@ export class Builder {
     await sleep(60);
   }
 
-  // 仮の足場を上から順に片付ける
+  // 仮の足場を片付ける。柱ごとにまとめて高い柱から、柱の上に立てたら足元を掘りながら降りる
+  // （上から 1 個ずつ掘っていたら、高い所に取り残されて、降りるために建てた壁を壊していた）
   async cleanupScaffolds() {
     const { bot } = this;
-    const list = [...this.scaffolds].map((k) => { const [x, y, z] = k.split(',').map(Number); return new Vec3(x, y, z); })
-      .filter((p) => { const t = this.targets.get(key(p)); const b = bot.blockAt(p); return b && b.boundingBox === 'block' && !(t && matches(t, b, { checkProps: false })); })
-      .sort((a, b) => b.y - a.y);
-    if (list.length === 0) return;
-    this.log.info(`仮の足場 ${list.length} 個を片付ける`);
-    for (const p of list) {
-      abortable(this.ctx);
-      try {
-        await this.reach(p);
-        const b = bot.blockAt(p);
-        if (b && b.boundingBox === 'block') {
-          await equipCheapestTool(bot, b).catch(() => {});
-          await this.dig(b);
+    for (let pass = 0; pass < 3; pass++) {
+      const list = [...this.scaffolds].map((k) => { const [x, y, z] = k.split(',').map(Number); return new Vec3(x, y, z); })
+        .filter((p) => { const t = this.targets.get(key(p)); const b = bot.blockAt(p); return b && b.boundingBox === 'block' && !(t && matches(t, b, { checkProps: false })); });
+      if (list.length === 0) return;
+      this.log.info(`仮の足場 ${list.length} 個を片付ける`);
+      const before = this.scaffolds.size;
+      const cols = new Map();
+      for (const p of list) {
+        const k = `${p.x},${p.z}`;
+        if (!cols.has(k)) cols.set(k, []);
+        cols.get(k).push(p);
+      }
+      const order = [...cols.values()].map((ps) => ps.sort((a, b) => b.y - a.y)).sort((a, b) => b[0].y - a[0].y);
+      for (const col of order) {
+        abortable(this.ctx);
+        const top = col[0];
+        // 高い柱は、上に立って足元を掘りながら降りる
+        if (col.length >= 3) await this.digDownColumn(top).catch((e) => { if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e; });
+        for (const p of col) {
+          abortable(this.ctx);
+          const b = bot.blockAt(p);
+          if (!b || b.boundingBox !== 'block' || !this.scaffolds.has(key(p))) continue;
+          try {
+            await this.reach(p);
+            await equipCheapestTool(bot, b).catch(() => {});
+            await this.dig(bot.blockAt(p));
+            this.dropScaffold(key(p));
+          } catch (e) {
+            if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+            this.log.warn(`足場 (${key(p)}) を片付けられなかった: ${e.message}`);
+          }
         }
-        this.dropScaffold(key(p));
-      } catch (e) {
-        if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
-        this.log.warn(`足場 (${key(p)}) を片付けられなかった: ${e.message}`);
+      }
+      await pickUpItems(this.ctx, 8).catch(() => {});
+      if (this.scaffolds.size >= before) return;
+    }
+  }
+
+  // 柱 (top から下) の上に立ち、足元の足場を掘っては落ちる、を繰り返して降りる
+  async digDownColumn(top) {
+    const { bot } = this;
+    const stand = top.offset(0, 1, 0);
+    const at = () => bot.entity.position.floored();
+    if (!at().equals(stand)) {
+      let timer;
+      try {
+        await Promise.race([
+          bot.pathfinder.goto(new goals.GoalBlock(stand.x, stand.y, stand.z)),
+          new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('柱の上へ行けない')), 15_000); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        try { bot.pathfinder.setGoal(null); } catch {}
       }
     }
-    await pickUpItems(this.ctx, 8).catch(() => {});
+    if (!at().equals(stand)) return;
+    for (let i = 0; i < 64; i++) {
+      abortable(this.ctx);
+      const below = at().offset(0, -1, 0);
+      const b = bot.blockAt(below);
+      if (!b || b.boundingBox !== 'block' || !this.scaffolds.has(key(below))) break;
+      await equipCheapestTool(bot, b).catch(() => {});
+      const y0 = bot.entity.position.y;
+      await this.dig(b);
+      this.dropScaffold(key(below));
+      for (let t = 0; t < 30 && !(bot.entity.onGround && bot.entity.position.y <= y0 - 0.9); t++) await bot.waitForTicks(1);
+    }
   }
 }

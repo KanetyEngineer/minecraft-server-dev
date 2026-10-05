@@ -65,6 +65,8 @@ export class Supplier {
     this.yRange = yRange;
     this.mode = mode;
     this.chests = new Map(); // "x,y,z" -> { pos, items: Map, free: 空きスロット数, at: 調べた時刻 }
+    // reserve(name): この先の建築でまだ使う数（Builder が付ける）。素材を用意してもらうときは、これを材料にしてクラフトしない
+    this.reserve = null;
     this.failed = new Map(); // アイテム名 -> 失敗した時刻（しばらく同じ方法を試さない）
   }
 
@@ -161,6 +163,18 @@ export class Supplier {
     return count(this.bot, name) + this.chestCount(name);
   }
 
+  // 建築に使う分を除いた余り（建築に使わない物はそのまま）
+  spare(name) {
+    return this.available(name) - (this.reserve?.(name) ?? 0);
+  }
+
+  // 素材を用意してもらうとき、このレシピの材料を使ってよいか（建築に使う素材を、ほかの物を作るのに使わない。
+  // 例: 板材がちょうどの数しか無いのに、はしごの棒を作るのに板材を使っていた）
+  #canUse(r, times = 1) {
+    if (!this.stocked) return true;
+    return r.ingredients.every(([ing, q]) => !(this.reserve?.(ing) > 0) || this.spare(ing) >= q * times);
+  }
+
   // 条件に合うアイテムの中から、チェストにある物を 1 種類選んで n 個まで取る（道具・ベッド・食べ物・足場用）
   async takeAnyFromChests(names, n) {
     for (const name of names) {
@@ -209,8 +223,8 @@ export class Supplier {
     const PICKS = ['stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe', 'golden_pickaxe', 'wooden_pickaxe'];
     const has = () => PICKS.some((n) => count(bot, n) > 0);
     if (has()) return true;
-    if (Date.now() - (this.pickTriedAt ?? 0) < 5 * 60_000) return false;
-    this.pickTriedAt = Date.now();
+    // 用意できなかったときは 5 分あける（チェストを何度も見に行かない）
+    if (Date.now() - (this.pickFailedAt ?? 0) < 5 * 60_000) return false;
     await this.scanChests({ refreshMs: 60_000 }).catch(() => {});
     const got = await this.takeAnyFromChests(PICKS, 1);
     if (got) { this.log.info(`ツルハシが無くなったので、チェストの ${got} を持った`); return true; }
@@ -261,7 +275,10 @@ export class Supplier {
       if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
       this.log.warn(`ツルハシを作れなかった: ${e.message}`);
     }
-    if (!has()) this.ctx.notify?.('ツルハシが無くなりました。チェストに入れてもらえると速く掘れます（それまでは素手で掘ります）');
+    if (!has()) {
+      this.pickFailedAt = Date.now();
+      this.ctx.notify?.('ツルハシが無くなりました。チェストに入れてもらえると速く掘れます（それまでは素手で掘ります）');
+    }
     return has();
   }
 
@@ -274,6 +291,7 @@ export class Supplier {
     await this.takeAnyFromChests(spare, n - have());
     if (have() > 0) return true;
     // チェストにも無ければ、近くの土を掘る（用意してもらうのは建築の素材だけで、足場までは頼まない）
+    this.log.info(`足場にするブロックが無いので、近くの土を ${n} 個掘る`);
     try {
       await this.#mine('dirt', this.naturalSources('dirt'), n);
     } catch (e) {
@@ -322,6 +340,7 @@ export class Supplier {
     if (best > 0.1 && this.stocked) {
       // 用意された物だけで作れるか（板材をチェストの原木から、など）
       for (const r of this.recipes(name)) {
+        if (!this.#canUse(r)) continue;
         let c = 0.3;
         for (const [ing, qty] of r.ingredients) {
           c += (this.estimate(ing, depth + 1, visiting, memo) * qty) / r.resultCount;
@@ -418,6 +437,7 @@ export class Supplier {
       if (huntable(name)) options.push({ kind: 'mob', cost: UNIT_COST.mob });
     }
     const recipes = this.recipes(name)
+      .filter((r) => this.#canUse(r))
       .map((r) => ({ r, cost: r.ingredients.reduce((s, [ing, q]) => s + (this.estimate(ing, 1, new Set([name]), memo) * q) / r.resultCount, 0.3) }))
       .filter((x) => Number.isFinite(x.cost))
       .sort((a, b) => a.cost - b.cost);
@@ -434,6 +454,7 @@ export class Supplier {
         else if (opt.kind === 'smelt') await this.#smelt(name, need(), depth, stack);
         else if (opt.kind === 'concrete') await this.#concrete(name, need(), depth, stack);
         else if (opt.kind === 'mob') await this.#hunt(name, need());
+        else if (opt.kind === 'craft' && this.stocked) await this.#craftStocked(name, n, opt.recipes, depth, stack);
         else if (opt.kind === 'craft') await this.#craft(name, n, opt.recipes, depth, stack);
       } catch (e) {
         if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
@@ -593,6 +614,64 @@ export class Supplier {
     if (count(bot, name) - start <= 0) throw new SkillError(`${name} が手に入らなかった`);
   }
 
+  // 素材を用意してもらうときのクラフト。使うレシピを自分で選び、建築に使う分の素材は材料にしない
+  // （craftItem は持っている物から勝手にレシピを選ぶので、床に使う板材で棒を作ることがあった）
+  async #craftStocked(name, n, recipes, depth, stack) {
+    const { bot, ctx } = this;
+    const id = bot.registry.itemsByName[name].id;
+    const reservedInv = (x) => Math.max(0, (this.reserve?.(x) ?? 0) - this.chestCount(x));
+    const spareInv = (x) => count(bot, x) - reservedInv(x);
+    const ok = (r) => r.delta.filter((d) => d.count < 0).every((d) => spareInv(bot.registry.items[d.id].name) >= -d.count);
+    let lastErr = null;
+    for (const { r } of recipes.slice(0, 4)) {
+      abortable(ctx);
+      const missing = n - count(bot, name);
+      if (missing <= 0) return;
+      const times = Math.ceil(missing / r.resultCount);
+      if (!this.#canUse(r, times)) continue;
+      try {
+        for (const [ing, q] of r.ingredients) {
+          await this.ensure(ing, reservedInv(ing) + q * times, depth + 1, [...stack, name]);
+        }
+        let table = null;
+        if (r.raw.requiresTable) {
+          const tableId = bot.registry.blocksByName.crafting_table.id;
+          if (count(bot, 'crafting_table') === 0 && !bot.findBlock({ matching: tableId, maxDistance: 16 })) {
+            await this.ensure('crafting_table', 1, depth + 1, [...stack, name]);
+          }
+          table = await ensureCraftingTable(ctx);
+        }
+        try {
+          for (let g = 0; g < times * 2 && count(bot, name) < n; g++) {
+            const rr = bot.recipesFor(id, null, 1, table).find(ok);
+            if (!rr) throw new SkillError(`${name} を作る材料が足りない（建築に使う分は使わない）`);
+            try {
+              await bot.craft(rr, 1, table);
+            } catch (e) {
+              // 作業台の窓の同期ずれ（updateSlot が来ない）は、窓を閉じてやり直す
+              if (!/updateSlot|windowOpen/i.test(e.message)) throw e;
+              try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch {}
+              await sleep(1000);
+            }
+          }
+        } finally {
+          // 自分で置いた作業台は持ち帰る
+          if (ctx.state?.placedTable) {
+            const b = bot.blockAt(ctx.state.placedTable);
+            ctx.state.placedTable = null;
+            if (b?.name === 'crafting_table') { await bot.dig(b, true).catch(() => {}); await pickUpItems(ctx, 4).catch(() => {}); }
+          }
+        }
+        if (count(bot, name) >= n) return;
+      } catch (e) {
+        if (e.name === 'AbortError' || ctx.signal?.aborted) throw e;
+        lastErr = e;
+        this.log.warn(`${name} のレシピ（${r.ingredients.map(([i, q]) => `${i}×${q}`).join(' ')}）で作れなかった: ${e.message}`);
+      }
+    }
+    if (count(bot, name) < n) throw lastErr ?? new SkillError(`${name} を作れなかった（材料は建築に使う分しか無い）`);
+  }
+
   async #craft(name, n, recipes, depth, stack) {
     const { bot, ctx } = this;
     let lastErr = null;
@@ -601,6 +680,7 @@ export class Supplier {
       const missing = n - count(bot, name);
       if (missing <= 0) return;
       const times = Math.ceil(missing / r.resultCount);
+      if (!this.#canUse(r, times)) { lastErr = new SkillError(`${name} の材料は建築に使う分しか無い`); continue; }
       try {
         for (const [ing, q] of r.ingredients) {
           await this.ensure(ing, q * times, depth + 1, [...stack, name]);

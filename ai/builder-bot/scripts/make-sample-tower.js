@@ -31,7 +31,12 @@ put(mid, 1, mid, 'lantern', { hanging: 'false', waterlogged: 'false' });
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     const inside = x >= lo && x <= hi && z >= lo && z <= hi;
-    if (inside) { if (!(x === mid - 1 && z === lo + 1)) put(x, 10, z, 'spruce_planks'); continue; }
+    if (inside) {
+      // はしごの上は床に穴を開け、穴の中まではしごを伸ばす（はしごが床の下で終わっていると、上がって出られない）
+      if (x === mid - 1 && z === lo + 1) put(x, 10, z, 'ladder', { facing: 'south', waterlogged: 'false' });
+      else put(x, 10, z, 'spruce_planks');
+      continue;
+    }
     put(x, 10, z, 'spruce_slab', { type: 'bottom', waterlogged: 'false' });
   }
 }

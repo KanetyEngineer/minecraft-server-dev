@@ -79,7 +79,13 @@ export function materialList(registry, blocks) {
 export function matches(target, world, { checkProps = true } = {}) {
   if (!world) return false;
   if (world.name !== target.name && !(ACCEPT[target.name] ?? []).includes(world.name)) return false;
-  if (!checkProps || world.name !== target.name) return true;
+  if (world.name !== target.name) return true;
+  // ハーフブロックの上下・2 枚重ねは形（と使う数）が変わるので、向きを見ないときでも合わせる
+  // （隣に置こうとして下付きの上に重ね、2 枚重ねにしてしまったのを「できている」と数えていた）
+  if (!checkProps) {
+    const want = target.props?.type;
+    return !(want && target.name.endsWith('_slab') && String(world.getProperties?.().type ?? want) !== String(want));
+  }
   const have = world.getProperties?.() ?? {};
   for (const [k, v] of Object.entries(target.props ?? {})) {
     if (IGNORED_PROPS.has(k)) continue;

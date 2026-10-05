@@ -12,7 +12,9 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
     ? (start) => bot.health < 16 && Date.now() - start < 3 * 60_000
     : (start) => !bot.time.isDay && Date.now() - start < 9 * 60_000;
   bot.pathfinder.stop();
-  const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position);
+  // 建築範囲（BuilderBot が ctx.isBuildPos を付ける）のブロックは掘らない（建てた床に穴を開けていた）
+  const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position)
+    && !ctx.isBuildPos?.(b.position);
   // 足元から 4 段下まで固くて液体の無い場所か（木の上や洞窟の天井では掘らない）
   const diggableAt = (feet) => [1, 2, 3].every((d) => solidSafe(bot.blockAt(feet.offset(0, -d, 0))))
     && bot.blockAt(feet.offset(0, -4, 0))?.boundingBox === 'block';

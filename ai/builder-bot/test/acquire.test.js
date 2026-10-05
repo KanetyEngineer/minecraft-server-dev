@@ -53,3 +53,12 @@ test('素材を用意してもらうモードでは、採掘・精錬・狩り�
   assert.equal(s.estimate('glass'), 0.1); // チェストにあれば取る
   assert.equal(s.available('glass'), 10);
 });
+
+test('素材を用意してもらうモードでは、建築に使う分の素材をほかのクラフトの材料にしない', () => {
+  const s = fakeSupplier([{ name: 'oak_planks', count: 4 }]);
+  s.mode = 'stocked';
+  s.reserve = (n) => (n === 'oak_planks' ? 4 : 0); // 板材 4 枚はすべて建築に使う
+  assert.equal(s.estimate('stick'), Infinity);
+  s.reserve = (n) => (n === 'oak_planks' ? 2 : 0); // 2 枚余っている
+  assert.ok(Number.isFinite(s.estimate('stick')));
+});
