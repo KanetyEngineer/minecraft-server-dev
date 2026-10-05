@@ -115,13 +115,27 @@ export class Supplier {
     if (bot.entity.position.offset(0, 1.6, 0).distanceTo(pos.offset(0.5, 0.5, 0.5)) > 4) {
       // 行けないチェストの前で考え続けて止まらないよう、30 秒で打ち切る
       let timer;
+      // 近づけなかったときの理由（経路探索の結果）を残す
+      const seen = { n: 0, status: '', len: 0, resets: [] };
+      const from = bot.entity.position.floored();
+      const onUpdate = (r) => { seen.n++; seen.status = r.status; seen.len = r.path.length; };
+      const onReset = (why) => { if (seen.resets.length < 5) seen.resets.push(why); };
+      bot.on('path_update', onUpdate);
+      bot.on('path_reset', onReset);
       try {
         await Promise.race([
           goNearBlock(this.ctx, block, 2),
-          new Promise((_, rej) => { timer = setTimeout(() => { try { bot.pathfinder.setGoal(null); } catch {} rej(new Error('チェストに近づけない')); }, 30_000); }),
+          new Promise((_, rej) => {
+            timer = setTimeout(() => {
+              try { bot.pathfinder.setGoal(null); } catch {}
+              rej(new Error(`チェストに近づけない（${from} から、経路 ${seen.n} 回: ${seen.status} 長さ ${seen.len}、やり直し: ${seen.resets.join('/') || 'なし'}）`));
+            }, 30_000);
+          }),
         ]);
       } finally {
         clearTimeout(timer);
+        bot.off('path_update', onUpdate);
+        bot.off('path_reset', onReset);
       }
     }
     const win = await bot.openContainer(bot.blockAt(pos));

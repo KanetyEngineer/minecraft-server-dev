@@ -254,6 +254,14 @@ export class Builder {
     await this.cleanupScaffolds();
     await this.placeDoors();
     if (this.stocked) await this.returnLeftovers().catch((e) => { if (e.name === 'AbortError') throw e; this.log.warn(`余りを戻せなかった: ${e.message}`); });
+    // 途中で一度取れなかった（チェストに近づけなかった など）だけで、いまは手持ちとチェストにそろっている素材は「足りない」としない
+    if (this.supplier && this.missing.size) {
+      const remain = this.remainingNeed();
+      for (const item of [...this.missing.keys()]) {
+        const lack = (remain.get(item) ?? 0) - this.supplier.available(item);
+        if (lack <= 0) this.missing.delete(item); else this.missing.set(item, lack);
+      }
+    }
     const p = this.progress();
     return { ...p, missing: [...this.missing.entries()], orientationOff: this.orientationOff };
   }
@@ -548,7 +556,8 @@ export class Builder {
       // 高い所（塔の壁の上の段など）は、近くに仮の柱を積んで、その上から置く
       if (p.y - Math.floor(bot.entity.position.y) >= 2 && (await this.climbNear(p, range))) return;
       // 建物の中の低い所に閉じ込められていたら、頭の上を掘って柱で上がる（掘ったマスはあとで置き直す）
-      if (p.y - Math.floor(bot.entity.position.y) >= 2 && this.inBox(bot.entity.position.floored()) && (await this.escapeUp(p.y))) {
+      if (p.y - Math.floor(bot.entity.position.y) >= 2 && this.inBox(bot.entity.position.floored()) && this.isEnclosed()
+        && (await this.escapeUp(p.y))) {
         await this.pathTo(p, range);
         return;
       }
@@ -629,6 +638,28 @@ export class Builder {
     await bot.waitForTicks(4);
     const f = bot.entity.position.floored();
     return f.x === dest.x && f.z === dest.z && f.y === dest.y;
+  }
+
+  // 建物の外まで歩いて出られないか（経路探索で確かめる）。大きな像の範囲の中にいるだけなら出られるので、掘って上がらない
+  isEnclosed() {
+    const { bot } = this;
+    const mv = bot.pathfinder.movements;
+    if (!mv?.getNeighbors) return false;
+    const self = this;
+    const goal = new (class extends goals.Goal {
+      // 範囲（周り 2 マス込み）の外までの、いちばん近い辺への距離
+      heuristic(n) {
+        const o = self.origin; const s = self.size;
+        return Math.max(0, Math.min(n.x - (o.x - 3), o.x + s.x + 2 - n.x, n.z - (o.z - 3), o.z + s.z + 2 - n.z));
+      }
+      isEnd(n) { return !self.nearBox(n, 2); }
+    })();
+    try {
+      const r = bot.pathfinder.getPathTo(mv, goal, 3000);
+      return r.status === 'noPath';
+    } catch {
+      return false;
+    }
   }
 
   // 建物の中で上の階の床などに閉じ込められたとき、頭の上のブロックを掘っては柱で 1 段ずつ上がる。
