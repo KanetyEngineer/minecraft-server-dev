@@ -122,6 +122,9 @@ export class Supplier {
       const onReset = (why) => { if (seen.resets.length < 5) seen.resets.push(why); };
       bot.on('path_update', onUpdate);
       bot.on('path_reset', onReset);
+      // 建物の中に閉じ込められているなら、ドアや壁を壊してでもチェストへ行く（BuilderBot があとで置き直す）
+      const escape = !!this.ctx.isEnclosed?.();
+      if (escape) this.ctx.allowEscape = true;
       try {
         await Promise.race([
           goNearBlock(this.ctx, block, 2),
@@ -136,6 +139,7 @@ export class Supplier {
         clearTimeout(timer);
         bot.off('path_update', onUpdate);
         bot.off('path_reset', onReset);
+        if (escape) this.ctx.allowEscape = false;
       }
     }
     const win = await bot.openContainer(bot.blockAt(pos));

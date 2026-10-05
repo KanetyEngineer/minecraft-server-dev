@@ -20,8 +20,8 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
 const isDoor = (t) => /_door$/.test(t.name);
 // 掘っても自分自身を落とさない（壊すと素材がなくなる）ブロック
 const FRAGILE = /(glass|ice$|_leaves$|glowstone|sea_lantern|bookshelf|_coral|turtle_egg|beehive|bee_nest)/;
-// 建てたブロックを経路探索が壊すときの手間。ふつうは壊さないが、建物の中に閉じ込められて出られないときだけ、
-// ドア → 壁の順に壊して外へ出る（壊したマスは、あとの見直しで置き直す）
+// 建てたブロックを経路探索が壊すときの手間。ふつうは壊さない（Infinity）。建物の中に閉じ込められて外へ歩いて出られない
+// ときだけ（ctx.allowEscape）、ドア → 壁の順に壊して外へ出る（壊したマスは、あとの見直しで置き直す）
 const escapeCost = (t) => (isDoor(t) ? 30 : FRAGILE.test(t.name) ? Infinity : 90);
 
 // 置く位置の近く（手が届く）で、置く位置そのものとその真下には立たないゴール
@@ -70,6 +70,13 @@ export class Builder {
     this.layer = 0;
     this.selfPlacing = false;
     ctx.isBuildPos = (p) => this.inBox(p);
+    // 建物の真下（と周り 2 マス）。穴ごもりの穴をここに掘ると、朝に建物の床の下から出られなくなった
+    ctx.isUnderBuild = (p) => {
+      const o = this.origin;
+      return p.x >= o.x - 2 && p.z >= o.z - 2 && p.x < o.x + this.size.x + 2 && p.z < o.z + this.size.z + 2
+        && p.y < o.y + this.size.y && p.y >= o.y - 8;
+    };
+    ctx.isEnclosed = () => this.isEnclosed();
     // 素材を用意してもらったときは、柱上り・穴のふた・松明などで建築の素材を使わない
     ctx.bot.keepForBuild = supplier?.stocked ? (name) => this.needed.has(name) : undefined;
     ctx.leaveBuildArea = () => this.leaveArea();
@@ -192,7 +199,7 @@ export class Builder {
         // 道具が無いと何も落とさないブロック（ツルハシの無いときの石レンガなど）も壊さない
         const tools = block.harvestTools ? Object.keys(block.harvestTools).map(Number) : null;
         if (tools && !b.bot.inventory.items().some((i) => tools.includes(i.type))) return Infinity;
-        return escapeCost(t);
+        return b.ctx.allowEscape ? escapeCost(t) : Infinity;
       }
       return 0;
     });
@@ -552,6 +559,14 @@ export class Builder {
           if (e2.name === 'AbortError' || this.ctx.signal?.aborted) throw e2;
           this.log.warn(`はしごから移ったあとも近づけない（いま ${bot.entity.position.floored()}）: ${e2.message}`);
         }
+      }
+      // 建物の中に閉じ込められて外へ歩いて出られないなら、ドアや壁を壊してでも行く（あとで置き直す）
+      if (this.isEnclosed()) {
+        this.log.info('建物の中に閉じ込められたので、ドアか壁を壊して出る（あとで置き直す）');
+        this.ctx.allowEscape = true;
+        try { await this.pathTo(p, range); return; } catch (e2) {
+          if (e2.name === 'AbortError' || this.ctx.signal?.aborted) throw e2;
+        } finally { this.ctx.allowEscape = false; }
       }
       // 高い所（塔の壁の上の段など）は、近くに仮の柱を積んで、その上から置く
       if (p.y - Math.floor(bot.entity.position.y) >= 2 && (await this.climbNear(p, range))) return;
