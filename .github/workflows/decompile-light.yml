@@ -5,22 +5,40 @@ on:
 jobs:
   dump:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ['1.20.1', '1.20.4', '1.21.1', '1.21.11']
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21' }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: current }
-      - name: genSources
-        working-directory: mods/solaria-tweaks
-        run: gradle --no-daemon genSourcesWithVineflower
-      - name: Dump villager sources
+      - name: Project
         run: |
-          SRC=$(find ~/.gradle /home/runner -name 'minecraft-*sources.jar' 2>/dev/null | grep -i 1.21.11 | head -5)
+          mkdir -p /tmp/p/src/main/java && cd /tmp/p
+          cat > settings.gradle <<'X'
+          pluginManagement { repositories { maven { url = 'https://maven.fabricmc.net/' }; gradlePluginPortal() } }
+          rootProject.name = 'dump'
+          X
+          cat > build.gradle <<X
+          plugins { id 'net.fabricmc.fabric-loom-remap' version '1.16-SNAPSHOT' }
+          dependencies {
+            minecraft "com.mojang:minecraft:${{ matrix.mc }}"
+            mappings loom.officialMojangMappings()
+            modImplementation "net.fabricmc:fabric-loader:0.17.2"
+          }
+          X
+      - name: genSources
+        working-directory: /tmp/p
+        run: gradle --no-daemon genSourcesWithVineflower
+      - name: Dump
+        run: |
+          SRC=$(find ~/.gradle /tmp/p -name 'minecraft-*sources.jar' 2>/dev/null | grep -F '${{ matrix.mc }}' | head -5)
+          echo "$SRC"
           mkdir -p /tmp/src && for j in $SRC; do unzip -oq "$j" -d /tmp/src; done
           cd /tmp/src
-          for f in $(find . -name 'AbstractVillager.java' -o -name 'MerchantMenu.java' -o -name 'Merchant.java' -o -name 'ClientSideMerchant.java' -o -name 'MerchantResultSlot.java'); do echo "=================== $f"; cat -n $f; done
-          V=$(find . -name 'Villager.java' | head -1); echo "=================== $V"; cat -n $V
-          echo "=================== Entity remove"; grep -n -E "void remove|setRemoved|onRemoval|unsetRemoved|isAlive|RemovalReason" net/minecraft/world/entity/Entity.java
-          echo "=================== Player containerMenu"; grep -n -B2 -A8 "stillValid" net/minecraft/world/entity/player/Player.java net/minecraft/server/level/ServerPlayer.java
-          echo "=================== ServerGamePacketListenerImpl merchant"; grep -n -B3 -A15 -i "SelectTrade\|MerchantMenu" net/minecraft/server/network/ServerGamePacketListenerImpl.java
+          for f in net/minecraft/server/level/ThreadedLevelLightEngine.java net/minecraft/world/level/lighting/LevelLightEngine.java; do echo "=================== $f"; cat -n $f; done
+          for f in net/minecraft/world/level/lighting/LightEngine.java net/minecraft/world/level/lighting/LayerLightEngine.java net/minecraft/world/level/lighting/LayerLightSectionStorage.java; do [ -f $f ] && { echo "=================== $f (sigs)"; grep -n -E "^\s*(public|protected|private|static).*\(|runLightUpdates|runUpdates|MAX|queue" $f; }; done
+          for f in net/minecraft/server/level/ChunkMap.java net/minecraft/server/level/ServerChunkCache.java net/minecraft/server/level/ChunkHolder.java net/minecraft/server/level/GenerationChunkHolder.java net/minecraft/world/level/chunk/status/ChunkStatusTasks.java net/minecraft/world/level/chunk/ChunkStatus.java; do [ -f $f ] && { echo "=================== $f (light lines)"; grep -n -i -E "light" $f; }; done
+          true
