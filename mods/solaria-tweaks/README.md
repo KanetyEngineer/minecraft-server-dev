@@ -40,7 +40,7 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの補助 MOD。クライアン
 | `/lb server` | サーバー全体の記録（採掘数・プレイ時間・移動距離などの全員の合計と、それぞれの1位）をチャットに表示 |
 | `/lb show server` | サーバー全体の記録をサイドバーに表示（1秒ごとに更新） |
 | `/lb top <項目>` | チャットに全順位 |
-| `/lb default <項目>\|off` | まだ選んでいない人の表示（OP、最初は `mined` 採掘数） |
+| `/lb default <項目>\|off` | まだ選んでいない人の表示（OP、最初は off で何も出さない） |
 | `/lb bot add/remove/list` | ボットとして外す人の管理（OP） |
 
 項目: `mined` 採掘数 / `used` 使用回数 / `crafted` クラフト数 / `kills` モブ討伐 / `deaths` 死亡 / `playtime` プレイ時間 / `walk` 歩いた距離 / `fly` エリトラ / `fish` 釣り / `trades` 取引 / `jumps` / `damage` / `travel` 移動距離（歩き・走り・泳ぎ・乗り物などすべて）/ `bred` 繁殖 / `enchant` エンチャント / `chests` チェストを開けた回数 / `pvp` プレイヤーを倒した数。ほかに `mined:` `used:` `crafted:` `broken:` `picked_up:` `dropped:` `killed:` `killed_by:` `custom:` の後に ID か `all`。

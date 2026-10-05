@@ -25,5 +25,8 @@
   "carpet.rule.voidTrading.name": "voidTrading",
   "carpet.rule.voidTrading.desc": "虚空取引を復活させます。村人がアンロードされたりポータルをくぐったりしても取引画面が閉じません",
   "carpet.rule.voidTrading.extra.0": "アンロード中の取引は村人に保存されないので、取引がロックされず、割引もリセットされません",
-  "carpet.rule.voidTrading.extra.1": "1.20.5 以降のバニラではこの場合に画面が閉じます"
+  "carpet.rule.voidTrading.extra.1": "1.20.5 以降のバニラではこの場合に画面が閉じます",
+  "carpet.rule.lightSuppressionSlowdown.name": "光抑制中の光エンジンの遅さ",
+  "carpet.rule.lightSuppressionSlowdown.desc": "lightSuppression が true のとき、光の計算を何倍遅くするか（1 で遅くしない）",
+  "carpet.rule.lightSuppressionSlowdown.extra.0": "1.14〜1.19 の光エンジンは今より何倍も遅く、昔の光抑制装置はその遅さを前提に作られています。数字を大きくするほど小さな装置でも抑制できます"
 }

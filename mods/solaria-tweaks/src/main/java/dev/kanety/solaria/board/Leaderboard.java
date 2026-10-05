@@ -59,7 +59,9 @@ public final class Leaderboard {
 
     /** Saved to world/solariatweaks/leaderboard.json. */
     private static final class Saved {
-        String defaultCriterion = "mined";
+        /** 2 = the sidebar is off until a player picks something (1.4.0); older files defaulted to "mined". */
+        int version;
+        String defaultCriterion = OFF;
         Map<String, String> choices = new HashMap<>();
         Set<String> bots = new HashSet<>();
         Map<String, String> names = new HashMap<>();
@@ -436,6 +438,11 @@ public final class Leaderboard {
                 if (s.choices == null) s.choices = new HashMap<>();
                 if (s.bots == null) s.bots = new HashSet<>();
                 if (s.names == null) s.names = new HashMap<>();
+                if (s.version < 2) {
+                    // The mining sidebar was shown to everyone by default before; the server has its own one.
+                    if ("mined".equals(s.defaultCriterion)) s.defaultCriterion = OFF;
+                    s.version = 2;
+                }
                 saved = s;
             }
         } catch (Exception e) {

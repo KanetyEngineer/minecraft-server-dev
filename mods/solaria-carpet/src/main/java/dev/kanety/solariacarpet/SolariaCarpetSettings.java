@@ -38,6 +38,10 @@ public final class SolariaCarpetSettings {
             validators = Validators.NonNegativeNumber.class)
     public static int lightSuppressionMaxQueue = 300000;
 
+    @Rule(categories = {SOLARIA, RuleCategory.EXPERIMENTAL}, options = {"1", "5", "10", "20"}, strict = false,
+            validators = Validators.NonNegativeNumber.class)
+    public static int lightSuppressionSlowdown = 10;
+
     @Rule(categories = {SOLARIA, RuleCategory.SURVIVAL, RuleCategory.FEATURE})
     public static boolean voidTrading = false;
 }

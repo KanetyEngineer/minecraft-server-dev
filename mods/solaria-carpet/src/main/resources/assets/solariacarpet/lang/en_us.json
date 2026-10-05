@@ -18,5 +18,8 @@
   "carpet.rule.voidTrading.name": "voidTrading",
   "carpet.rule.voidTrading.desc": "Brings back void trading: the trade screen stays open when the villager is unloaded or goes through a portal",
   "carpet.rule.voidTrading.extra.0": "Trades made while the villager is unloaded are not saved to it, so they do not lock and discounts are not reset",
-  "carpet.rule.voidTrading.extra.1": "Since 1.20.5 vanilla closes the screen in that case"
+  "carpet.rule.voidTrading.extra.1": "Since 1.20.5 vanilla closes the screen in that case",
+  "carpet.rule.lightSuppressionSlowdown.name": "lightSuppressionSlowdown",
+  "carpet.rule.lightSuppressionSlowdown.desc": "While lightSuppression is on, makes light calculations this many times slower (1 = no slowdown)",
+  "carpet.rule.lightSuppressionSlowdown.extra.0": "The 1.14-1.19 light engine was several times slower, and old light suppressors were designed around that. Higher values let smaller contraptions suppress"
 }

@@ -12,6 +12,10 @@ import net.minecraft.server.level.ServerLevel;
  * The budget is counted in real time, not in ticks, so it keeps refilling while the server thread is stuck waiting
  * for a chunk (a bot or a teleport loading a new chunk needs its light done first). While the server thread waits
  * like that, the budget is ten times larger so the wait stays short.
+ *
+ * On top of that the light thread is made as slow as the pre-1.20 engine (lightSuppressionSlowdown): after a batch
+ * that took t, the next one waits (slowdown - 1) * t. Old suppressors relied on how long the propagation itself took
+ * (a push floor or a portal loader makes few but expensive updates), which a task count alone does not capture.
  */
 public final class LightSuppression {
     public static final long WINDOW_NANOS = 50_000_000L;
@@ -37,6 +41,10 @@ public final class LightSuppression {
     public static void exitGetChunk() {
         MinecraftServer s = server;
         if (s != null && s.isSameThread() && waiting > 0) waiting--;
+    }
+
+    public static boolean serverWaiting() {
+        return waiting > 0;
     }
 
     public static int batchesPerWindow() {

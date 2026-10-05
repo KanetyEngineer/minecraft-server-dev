@@ -30,6 +30,8 @@ public abstract class ThreadedLevelLightEngineMixin {
 
     @Unique private long solariacarpet$windowStart;
     @Unique private int solariacarpet$batches;
+    @Unique private long solariacarpet$started;
+    @Unique private long solariacarpet$busyUntil;
 
     @Inject(method = "runUpdate", at = @At("HEAD"), cancellable = true)
     private void solariacarpet$budget(CallbackInfo ci) {
@@ -38,6 +40,10 @@ public abstract class ThreadedLevelLightEngineMixin {
         int cap = SolariaCarpetSettings.lightSuppressionMaxQueue;
         if (cap > 0 && lightTasks.size() >= cap) return;
         long now = System.nanoTime();
+        if (now < solariacarpet$busyUntil && !LightSuppression.serverWaiting()) {
+            ci.cancel();
+            return;
+        }
         if (now - solariacarpet$windowStart >= LightSuppression.WINDOW_NANOS) {
             solariacarpet$windowStart = now;
             solariacarpet$batches = 0;
@@ -47,11 +53,18 @@ public abstract class ThreadedLevelLightEngineMixin {
             return;
         }
         solariacarpet$batches++;
+        solariacarpet$started = now;
     }
 
     /** After the rule is turned off, keep going until a backlog left over from suppression is gone. */
     @Inject(method = "runUpdate", at = @At("TAIL"))
     private void solariacarpet$drain(CallbackInfo ci) {
+        if (SolariaCarpetSettings.lightSuppression && solariacarpet$started != 0) {
+            long now = System.nanoTime();
+            int slowdown = SolariaCarpetSettings.lightSuppressionSlowdown;
+            solariacarpet$busyUntil = slowdown > 1 ? now + (now - solariacarpet$started) * (slowdown - 1) : 0;
+        }
+        solariacarpet$started = 0;
         if (!SolariaCarpetSettings.lightSuppression && lightTasks.size() >= 1000) {
             consecutiveExecutor.schedule(this::runUpdate);
         }
