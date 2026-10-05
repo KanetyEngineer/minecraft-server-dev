@@ -221,10 +221,11 @@ export class Builder {
     const { bot, ctx } = this;
     this.installPathRules();
     // 経路探索の「その場で跳んで足元に置く」柱上りは、この鯖ではサーバーに断られて（the block is still air）
-    // 失敗を繰り返すことが多かった。建てている間は使わせず、高い所へは climbNear の柱上り（確実に置ける）で登る
+    // 失敗を繰り返すことが多かった。素材を用意してもらう建築の間は使わせず、高い所へは climbNear の柱上りで登る
+    // （自分で集めるモードは、採掘の穴から出るのに使うので残す）
     const mv = bot.pathfinder.movements;
     const towers = mv?.allow1by1towers;
-    if (mv) mv.allow1by1towers = false;
+    if (mv && this.stocked) mv.allow1by1towers = false;
     try {
       return await this.runInner();
     } finally {
