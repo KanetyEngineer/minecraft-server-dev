@@ -3,3 +3,6 @@ data*/
 .env
 *.log
 logs*/
+.env.*
+!.env.example
+run-*.out

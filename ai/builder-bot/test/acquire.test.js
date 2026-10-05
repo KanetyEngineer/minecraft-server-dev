@@ -41,3 +41,15 @@ test('手持ちにあれば手間は 0', () => {
   const s = fakeSupplier([{ name: 'oak_planks', count: 10 }]);
   assert.equal(s.estimate('oak_planks'), 0);
 });
+
+test('素材を用意してもらうモードでは、採掘・精錬・狩りをしない', () => {
+  const s = fakeSupplier([{ name: 'oak_log', count: 4 }]);
+  s.mode = 'stocked';
+  assert.equal(s.estimate('cobblestone'), Infinity); // 掘らない
+  assert.equal(s.estimate('glass'), Infinity); // 焼かない
+  assert.equal(s.estimate('white_wool'), Infinity); // 羊を狩らない
+  assert.ok(Number.isFinite(s.estimate('oak_planks'))); // 手持ちの原木から板材は作る
+  s.chests.set('0,0,0', { pos: null, items: new Map([['glass', 10]]), free: 26, at: Date.now() });
+  assert.equal(s.estimate('glass'), 0.1); // チェストにあれば取る
+  assert.equal(s.available('glass'), 10);
+});

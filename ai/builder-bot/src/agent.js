@@ -34,7 +34,7 @@ export class Agent {
   constructor({ bot, cfg }) {
     this.bot = bot;
     this.cfg = cfg;
-    this.ctx = { bot, cfg, log, state: {}, signal: null };
+    this.ctx = { bot, cfg, log, state: {}, signal: null, notify: (msg) => this.sayOnce(msg) };
     this.job = null; // { file, origin }
     this.builder = null;
     this.status = '待機中';
@@ -49,7 +49,9 @@ export class Agent {
   loadJob() {
     try {
       const j = JSON.parse(fs.readFileSync(this.jobFile, 'utf8'));
-      if (j && j.file && j.origin && !j.finished) return { file: j.file, origin: new Vec3(j.origin.x, j.origin.y, j.origin.z) };
+      if (j && j.file && j.origin && !j.finished) {
+        return { file: j.file, origin: { x: j.origin.x, y: j.origin.y, z: j.origin.z }, scaffolds: j.scaffolds ?? [], requestedBy: j.requestedBy };
+      }
     } catch {}
     return null;
   }
@@ -61,6 +63,12 @@ export class Agent {
     } catch (e) {
       log.warn(`仕事の保存に失敗: ${e.message}`);
     }
+  }
+
+  // 足場の記録など、細かく変わるものは 5 秒にまとめて保存する
+  saveJobSoon() {
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => { this.saveTimer = null; if (this.job) this.saveJob({ finished: false }); }, 5000);
   }
 
   resolveSchematic(name) {
@@ -75,6 +83,14 @@ export class Agent {
   say(msg) {
     log.info(`💬 ${msg}`);
     try { this.bot.chat(msg.slice(0, 250)); } catch {}
+  }
+
+  // 同じ知らせは 10 分に 1 回だけチャットに出す（素材待ちで 1 分おきに同じことを言わない）
+  sayOnce(msg) {
+    const now = Date.now();
+    if (this.lastNotice?.msg === msg && now - this.lastNotice.at < 10 * 60_000) { log.info(`（同じ知らせ）${msg}`); return; }
+    this.lastNotice = { msg, at: now };
+    this.say(msg);
   }
 
   onChat(username, message, { console = false } = {}) {
@@ -131,6 +147,8 @@ export class Agent {
     this.job = { file: path.relative(process.cwd(), file), origin: { x: origin.x, y: origin.y, z: origin.z } };
     this.saveJob({ requestedBy: username, finished: false });
     this.builder = null;
+    this.prepared = false;
+    this.stall = null;
     this.abort('新しい建築の指示');
     this.say(`${path.basename(file)} を (${origin.x}, ${origin.y}, ${origin.z}) に建てます`);
   }
@@ -158,6 +176,11 @@ export class Agent {
     // 必要な数の多い順（建築中の Builder には触らない）
     const need = [...materialList(this.bot.registry, s.blocks).need.entries()].sort((a, b) => b[1] - a[1]);
     this.say(`${s.name}（${s.size.x}×${s.size.y}×${s.size.z}）: ${need.slice(0, 12).map(([n, c]) => `${n}×${c}`).join(', ')}${need.length > 12 ? ' ほか' : ''}`);
+    // 建築中の設計図なら、手持ちとチェスト（最後に調べた中身）と比べた不足も伝える
+    if (this.job && this.builder?.supplier && path.resolve(file) === path.resolve(this.resolveSchematic(this.job.file))) {
+      const short = this.builder.shortage();
+      this.say(short.length ? `残りに足りない素材: ${short.slice(0, 12).map(([n, c]) => `${n}×${c}`).join(', ')}` : '残りの素材は手持ちとチェストでそろっています');
+    }
   }
 
   cmdCome(username) {
@@ -305,7 +328,7 @@ export class Agent {
       // 建築は中断の合図と競争させる。途中の処理が応答しないまま固まっても、反射（戦う・逃げる）や次の周回に進める。
       // 固まっていた処理が後で動き出しても、合図が中断のままなので次の確認で止まる（settlePending で決着を待つ）
       const work = (async () => {
-        if (!this.builder) await this.prepare();
+        if (!this.prepared) { await this.prepare(); this.prepared = true; }
         await this.ensureBed();
         this.status = `建築中: ${path.basename(this.job.file)}`;
         return this.builder.run();
@@ -319,12 +342,31 @@ export class Agent {
           this.saveJob({ finished: true, result });
           this.job = null;
           this.builder = null;
-        } else {
-          this.say(`${result.ok}/${result.total} まで建てました。足りない素材: ${miss || '不明'}。チェストに入れてもらえれば続けます`);
+          this.prepared = false;
+        } else if (miss) {
+          this.sayOnce(`${result.ok}/${result.total} まで建てました。足りない素材: ${miss}。チェストに入れてもらえれば続けます`);
           this.status = `素材待ち: ${miss}`;
           this.builder.missing.clear();
           this.builder.supplier.chests.clear();
           await this.waitFor(cfg.retryWaitSec * 1000);
+        } else {
+          // 素材はあるのに置けなかった所（届かない・付ける先が無いなど）。少し待ってやり直す。
+          // 3 回やり直しても 1 個も増えなければ、置けない所として報告して終わる
+          const stall = this.stall && this.stall.ok === result.ok ? this.stall.passes + 1 : 1;
+          this.stall = { ok: result.ok, passes: stall };
+          if (stall >= 3) {
+            this.say(`${result.ok}/${result.total} で建築を終えます。置けなかった所: ${this.builder.unplaced(5).join(', ')}`);
+            this.saveJob({ finished: true, result });
+            this.job = null;
+            this.builder = null;
+            this.prepared = false;
+            this.stall = null;
+          } else {
+            this.sayOnce(`${result.ok}/${result.total} まで建てました。置けなかった ${result.total - result.ok} 個をやり直します`);
+            this.status = `やり直し待ち（残り ${result.total - result.ok}）`;
+            this.builder.supplier.chests.clear();
+            await this.waitFor(15_000);
+          }
         }
         fails = 0;
       } catch (e) {
@@ -367,8 +409,15 @@ export class Agent {
     this.status = '食べ物を集める';
     this.controller = new AbortController();
     const ctx = { ...this.ctx, signal: this.controller.signal };
-    log.info(`お腹が減って（満腹度 ${this.bot.food}）食べ物が無いので、動物を狩る`);
     try {
+      // チェストに食べ物があればそれを持つ
+      const supplier = this.job ? (await this.ensureBuilder().catch(() => null))?.supplier : null;
+      if (supplier) {
+        await supplier.scanChests({ refreshMs: 60_000 }).catch(() => {});
+        const got = await supplier.takeAnyFromChests([...FOOD].filter((n) => supplier.chestCount(n) > 0), 16);
+        if (got) { log.info(`チェストの ${got} を持った`); return; }
+      }
+      log.info(`お腹が減って（満腹度 ${this.bot.food}）食べ物が無いので、動物を狩る`);
       log.info(await gatherFood(ctx, { amount: 8 }));
     } catch (e) {
       if (e.name !== 'AbortError') log.warn(`食べ物を集められなかった: ${e.message}`);
@@ -407,7 +456,13 @@ export class Agent {
     // 羊を探して現場から遠くまで歩き回らないよう、3 分で打ち切る（建築ごと中断し、30 分間はベッドを探さない）
     const timer = setTimeout(() => this.abort('ベッドの用意に時間がかかるので後回しにする'), 3 * 60_000);
     try {
-      await this.builder.supplier.ensure('white_bed', 1).catch((e) => {
+      const { supplier } = this.builder;
+      if (supplier.stocked) {
+        await supplier.scanChests({ refreshMs: 60_000 }).catch(() => {});
+        const beds = bot.registry.itemsArray.map((i) => i.name).filter((n) => n.endsWith('_bed'));
+        if (await supplier.takeAnyFromChests(beds, 1)) return;
+      }
+      await supplier.ensure('white_bed', 1).catch((e) => {
         if (e.name === 'AbortError') throw e;
         log.warn(`ベッドを用意できなかった: ${e.message}`);
       });
@@ -416,27 +471,72 @@ export class Agent {
     }
   }
 
+  // 素材を用意してもらう建築の準備: チェストを調べ、道具を持ち、足りない素材を最初に伝える
+  async prepareStocked() {
+    const { bot } = this;
+    const { supplier } = this.builder;
+    await supplier.scanChests().catch((e) => log.warn(`チェストを調べられなかった: ${e.message}`));
+    log.info(`素材のチェスト ${supplier.chests.size} 個を見つけた`);
+    // 道具はチェストにあれば持つ（無くても素手で建てられる。どける地形が硬いと遅いだけ）
+    const TIERS = ['netherite', 'diamond', 'iron', 'stone', 'golden', 'wooden'];
+    for (const kind of ['pickaxe', 'axe', 'shovel', 'sword']) {
+      if (bot.inventory.items().some((i) => i.name.endsWith(`_${kind}`))) continue;
+      const got = await supplier.takeAnyFromChests(TIERS.map((t) => `${t}_${kind}`), 1);
+      if (got) log.info(`チェストの ${got} を持った`);
+    }
+    const short = this.builder.shortage();
+    if (supplier.unreadable > 0) {
+      // 開けられなかったチェストの中身は分からないので、「足りない」とは言わない
+      this.say(`チェスト ${supplier.unreadable} 個にまだ近づけないので、素材の確認は建てながらします`);
+    } else if (short.length) {
+      const list = short.map(([n, c]) => `${n}×${c}`);
+      this.say(`素材が足りません: ${list.slice(0, 10).join(', ')}${list.length > 10 ? ` ほか ${list.length - 10} 種類` : ''}。ある分から建て始めます`);
+    } else {
+      const p = this.builder.progress();
+      this.say(`素材はそろっています（残り ${p.total - p.ok} ブロック）。建て始めます`);
+    }
+  }
+
   async waitFor(ms) {
     const until = Date.now() + ms;
     while (Date.now() < until && !this.stopped && !this.threat && this.job) await sleep(500);
   }
 
-  async prepare() {
-    const { bot, cfg } = this;
+  // 設計図を読み、Builder と Supplier を作る（移動はしない）。食べ物・ベッドをチェストから取るのにも使う
+  async ensureBuilder() {
+    if (this.builder) return this.builder;
+    const { cfg } = this;
     const file = this.resolveSchematic(this.job.file);
     const schematic = await parseLitematic(fs.readFileSync(file));
     const origin = new Vec3(this.job.origin.x, this.job.origin.y, this.job.origin.z);
     const center = origin.offset(schematic.size.x / 2, 0, schematic.size.z / 2);
-    const supplier = new Supplier(this.ctx, { home: center, chestRadius: cfg.chestRadius + Math.max(schematic.size.x, schematic.size.z) / 2 });
-    this.builder = new Builder(this.ctx, { schematic, origin, supplier, clear: cfg.clearArea });
+    const supplier = new Supplier(this.ctx, {
+      home: center, chestRadius: cfg.chestRadius + Math.max(schematic.size.x, schematic.size.z) / 2, mode: cfg.supplyMode,
+      yRange: [origin.y - 6, origin.y + schematic.size.y + 6],
+    });
+    this.builder = new Builder(this.ctx, {
+      schematic, origin, supplier, clear: cfg.clearArea, scaffolds: this.job.scaffolds ?? [],
+      onScaffolds: (list) => { if (this.job) { this.job.scaffolds = list; this.saveJobSoon(); } },
+    });
     const { need, unplaceable } = this.builder.materialSummary();
     log.info(`設計図 ${schematic.name}: ${schematic.size.x}×${schematic.size.y}×${schematic.size.z}、${schematic.blocks.length} ブロック`);
     log.info(`必要な素材: ${need.map(([n, c]) => `${n}×${c}`).join(', ')}`);
     if (unplaceable.length) log.warn(`置かないブロック: ${unplaceable.map(([n, c]) => `${n}×${c}`).join(', ')}`);
+    return this.builder;
+  }
+
+  async prepare() {
+    const { bot, cfg } = this;
+    const { supplier } = await this.ensureBuilder();
+    const center = supplier.home;
     // 建築現場へ向かう
     if (bot.entity.position.distanceTo(center) > 48) {
       log.info('建築現場へ移動する');
       await bot.pathfinder.goto(new goals.GoalNearXZ(center.x, center.z, 8)).catch(() => {});
+    }
+    if (supplier.stocked) {
+      await this.prepareStocked();
+      return;
     }
     // 道具が無ければ最初に作っておく（普通のプレイヤーの最初の流れ）
     if (cfg.prepareTools && !findItem(bot, 'stone_pickaxe') && !findItem(bot, 'iron_pickaxe') && !findItem(bot, 'diamond_pickaxe')) {

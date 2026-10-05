@@ -41,7 +41,7 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
   const feet = bot.entity.position.floored();
   const cover = feet.offset(0, 2, 0);
   if (bot.blockAt(cover)?.boundingBox !== 'block') {
-    const findCoverItem = () => cheapBlock(bot) ?? bot.inventory.items().find((i) => i.name.endsWith('_log')); // 丸石は最後（cheapBlock の順）
+    const findCoverItem = () => cheapBlock(bot) ?? bot.inventory.items().find((i) => i.name.endsWith('_log') && !bot.keepForBuild?.(i.name)); // 丸石は最後（cheapBlock の順）
     let item = findCoverItem();
     // ふたにするブロックが無ければ、穴の壁（頭の高さ）を 1 つ掘って手に入れる
     if (!item) {

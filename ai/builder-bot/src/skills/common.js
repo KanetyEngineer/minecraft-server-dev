@@ -867,8 +867,9 @@ export { goals, LOGS, Vec3 };
 
 // 足場・壁・ふたに使うブロックは、使い道の少ないものから先に使う（丸石は道具やかまど、ゲートに要るので最後）
 const PILLAR_BLOCKS = ['dirt', 'coarse_dirt', 'netherrack', 'andesite', 'diorite', 'granite', 'tuff', 'stone', 'cobbled_deepslate', 'cobblestone'];
+// bot.keepForBuild（建築に使う素材を用意してもらったとき BuilderBot が付ける）が true を返す物は使わない
 export function cheapBlock(bot) {
-  const items = bot.inventory.items();
+  const items = bot.inventory.items().filter((i) => !bot.keepForBuild?.(i.name));
   for (const n of PILLAR_BLOCKS) { const it = items.find((i) => i.name === n); if (it) return it; }
   return items.find((i) => isPlanks(i.name)) ?? null;
 }
@@ -1031,8 +1032,10 @@ export async function lightIfDark(ctx) {
   const feet = bot.entity.position.floored();
   const here = bot.blockAt(feet);
   if (!here || here.skyLight > 7 || here.light >= 8) return false;
+  if (bot.keepForBuild?.('torch')) return false; // 建物に付ける松明は使わない
   if (!findItem(bot, 'torch')) {
-    if (count(bot, 'coal') + count(bot, 'charcoal') < 1) return false;
+    // 用意してもらった素材（板材など）で松明を作らない
+    if (bot.keepForBuild || count(bot, 'coal') + count(bot, 'charcoal') < 1) return false;
     try {
       if (count(bot, 'stick') < 1) await craftItem(ctx, 'stick', 4);
       await craftItem(ctx, 'torch', 4);

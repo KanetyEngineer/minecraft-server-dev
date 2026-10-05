@@ -3,8 +3,9 @@
 // 毎回いまの世界の状態を見て「設計図どおりか」を確かめるので、中断・再起動しても続きから建てられる。
 import pathfinderPkg from 'mineflayer-pathfinder';
 import { Vec3 } from 'vec3';
-import { SkillError, abortable, equipCheapestTool, pickUpItems, cheapBlock, travelTo } from '../skills/common.js';
+import { SkillError, abortable, equipCheapestTool, pickUpItems, cheapBlock, travelTo, pillarUp, ensurePickaxe } from '../skills/common.js';
 import { count } from '../util/items.js';
+import { SCAFFOLD_BLOCKS } from './acquire.js';
 import { sleep } from '../body/humanize.js';
 import { itemFor, matches, isAirName, isSecondaryHalf, placementHint, materialList, DIRS, yawFor } from './blocks.js';
 
@@ -36,7 +37,8 @@ class GoalPlaceNear extends goals.Goal {
 
 export class Builder {
   // schematic: parseLitematic の結果、origin: 設計図の最小角を置く世界座標
-  constructor(ctx, { schematic, origin, supplier, clear = true }) {
+  // scaffolds / onScaffolds: 仮の足場の位置を仕事のファイルに残し、再起動しても片付けられるようにする
+  constructor(ctx, { schematic, origin, supplier, clear = true, scaffolds = [], onScaffolds = null }) {
     this.ctx = ctx;
     this.schematic = schematic;
     this.origin = origin;
@@ -48,13 +50,20 @@ export class Builder {
       this.targets.set(key(pos), { pos, name: b.name, props: b.props });
     }
     this.size = schematic.size;
-    this.scaffolds = new Set(); // 建てるために置いた仮の足場（最後に片付ける）
+    // 設計図に使うアイテム（足場に借りたり、捨てたりしない）
+    this.needed = new Set();
+    for (const t of this.targets.values()) { const it = itemFor(ctx.bot.registry, t); if (it) this.needed.add(it.item); }
+    this.scaffolds = new Set(scaffolds); // 建てるために置いた仮の足場 "x,y,z"（最後に片付ける）
+    this.onScaffolds = onScaffolds;
+    this.deferred = new Map(); // 付ける先がまだ無くて後回しにしたマス "x,y,z" -> pos
     this.missing = new Map(); // 手に入らなかったアイテム -> 個数
     this.orientationOff = 0;
     this.placed = 0;
     this.layer = 0;
     this.selfPlacing = false;
     ctx.isBuildPos = (p) => this.inBox(p);
+    // 素材を用意してもらったときは、柱上り・穴のふた・松明などで建築の素材を使わない
+    ctx.bot.keepForBuild = supplier?.stocked ? (name) => this.needed.has(name) : undefined;
     ctx.leaveBuildArea = () => this.leaveArea();
   }
 
@@ -91,6 +100,52 @@ export class Builder {
     return { total, ok };
   }
 
+  get stocked() { return !!this.supplier?.stocked; }
+
+  addScaffold(k) {
+    if (this.scaffolds.has(k)) return;
+    this.scaffolds.add(k);
+    this.onScaffolds?.([...this.scaffolds]);
+  }
+
+  dropScaffold(k) {
+    if (this.scaffolds.delete(k)) this.onScaffolds?.([...this.scaffolds]);
+  }
+
+  // まだ置いていないマスに要るアイテムと個数
+  remainingNeed() {
+    const need = new Map();
+    for (const t of this.targets.values()) {
+      if (this.done(t)) continue;
+      const it = itemFor(this.bot.registry, t);
+      need.set(it.item, (need.get(it.item) ?? 0) + it.count);
+    }
+    return need;
+  }
+
+  // まだ置けていないマス（最大 limit 個）
+  unplaced(limit = 5) {
+    const out = [];
+    for (const t of this.targets.values()) {
+      if (out.length >= limit) break;
+      if (!this.done(t)) out.push(`${t.name}(${key(t.pos)})`);
+    }
+    return out;
+  }
+
+  // 手持ち＋チェストと比べて足りないもの（作れる物は材料があれば足りる扱い）
+  shortage() {
+    const out = [];
+    for (const [item, n] of this.remainingNeed()) {
+      const have = this.supplier ? this.supplier.available(item) : count(this.bot, item);
+      if (have >= n) continue;
+      // 1 個も無くても、チェストの材料から作れるなら足りる扱い（原木 → 板材 など。数までは見積もらない）
+      if (have === 0 && this.supplier && Number.isFinite(this.supplier.estimate(item))) continue;
+      out.push([item, n - have]);
+    }
+    return out.sort((a, b) => b[1] - a[1]);
+  }
+
   materialSummary() {
     const { need, unplaceable } = materialList(this.bot.registry, this.schematic.blocks);
     return { need: [...need.entries()].sort((a, b) => b[1] - a[1]), unplaceable: [...unplaceable.entries()] };
@@ -101,6 +156,13 @@ export class Builder {
     const mv = this.bot.pathfinder.movements;
     if (!mv || mv._builderRules) return;
     mv._builderRules = true;
+    // はしごを登る経路は使わない（建てかけのはしごの上で行き止まりになり、「stuck」を繰り返して動けなくなった）
+    mv.climbables = new Set();
+    if (this.stocked) {
+      // 用意してもらった建築素材を、移動の足場に使ってしまわない
+      mv.scafoldingBlocks = SCAFFOLD_BLOCKS.filter((n) => !this.needed.has(n))
+        .map((n) => this.bot.registry.itemsByName[n]?.id).filter((id) => id !== undefined);
+    }
     mv.exclusionAreasBreak.push((block) => {
       const t = this.targets.get(key(block.position));
       if (t && matches(t, block, { checkProps: false })) return Infinity; // 建てたブロックは壊さない
@@ -115,7 +177,7 @@ export class Builder {
     this.bot.on('blockPlaced', (_old, nb) => {
       if (this.selfPlacing || !nb || !this.nearBox(nb.position)) return;
       const t = this.targets.get(key(nb.position));
-      if (!t || t.name !== nb.name) this.scaffolds.add(key(nb.position));
+      if (!t || t.name !== nb.name) this.addScaffold(key(nb.position));
     });
   }
 
@@ -135,7 +197,19 @@ export class Builder {
       this.log.info(`段 ${y + 1}/${ys}（y=${wy}）: ${layer.length} 個を置く（全体 ${p.ok}/${p.total}）`);
       await this.buildLayer(layer);
     }
+    // 後回しにしたもの（上の段ができてから付ける上付きハーフブロック・壁の松明など）を置く
+    for (let sweep = 0; sweep < 3 && this.deferred.size > 0; sweep++) {
+      const list = [...this.deferred.values()].filter((p) => !this.done(this.targets.get(key(p))));
+      this.deferred.clear();
+      if (list.length === 0) break;
+      this.log.info(`後回しにした ${list.length} 個を置く`);
+      this.layer = this.size.y - 1;
+      const before = this.placed;
+      await this.buildLayer(list.map((p) => this.targets.get(key(p))));
+      if (this.placed === before) break;
+    }
     await this.cleanupScaffolds();
+    if (this.stocked) await this.returnLeftovers().catch((e) => { if (e.name === 'AbortError') throw e; this.log.warn(`余りを戻せなかった: ${e.message}`); });
     const p = this.progress();
     return { ...p, missing: [...this.missing.entries()], orientationOff: this.orientationOff };
   }
@@ -181,7 +255,8 @@ export class Builder {
         const p = new Vec3(this.origin.x + x, wy, this.origin.z + z);
         if (this.targets.has(key(p))) continue;
         const b = bot.blockAt(p);
-        if (b && b.boundingBox === 'block' && !isAirName(b.name) && bot.canDigBlock(b) && b.name !== 'bedrock') list.push(p);
+        // canDigBlock は手が届く距離かどうかも見るので使わない（遠くの邪魔なブロックを見落とし、木の葉が残っていた）
+        if (b && b.boundingBox === 'block' && !isAirName(b.name) && b.diggable && b.name !== 'bedrock') list.push(p);
       }
     }
     if (list.length === 0) return;
@@ -191,8 +266,8 @@ export class Builder {
       if (!b || b.boundingBox !== 'block') return;
       await this.reach(p);
       await equipCheapestTool(bot, b).catch(() => {});
-      await bot.dig(bot.blockAt(p), true).catch((e) => this.log.warn(`どけられなかった (${key(p)}): ${e.message}`));
-      this.scaffolds.delete(key(p));
+      await this.dig(bot.blockAt(p)).catch((e) => { if (e.name === 'AbortError') throw e; this.log.warn(`どけられなかった (${key(p)}): ${e.message}`); });
+      this.dropScaffold(key(p));
     });
     await pickUpItems(ctx, 6).catch(() => {});
   }
@@ -230,6 +305,10 @@ export class Builder {
     const usable = new Set();
     await this.tidyInventory(stacks);
     if (this.supplier) await this.supplier.scanChests().catch((e) => this.log.warn(`チェストを調べられなかった: ${e.message}`));
+    // 素材が足りなければ、少し前に調べたチェストも見直す（建築中に足してもらった分に気づく）
+    if (this.supplier && [...stacks.entries()].some(([item, n]) => this.supplier.available(item) < n)) {
+      await this.supplier.scanChests({ refreshMs: this.stocked ? 60_000 : 300_000 }).catch((e) => this.log.warn(`チェストを調べられなかった: ${e.message}`));
+    }
     // ある素材を作るときに、同じ段で使う別の素材（板材を作ると原木が減る など）を使ってしまうことがあるので、
     // そろうまで最大 3 周数え直す
     const failed = new Set();
@@ -247,7 +326,8 @@ export class Builder {
           failed.add(item);
           this.missing.set(item, Math.max(this.missing.get(item) ?? 0, lack - this.supplier.chestCount(item)));
           if (this.supplier.chestCount(item) > 0) await this.supplier.takeFromChests(item, lack).catch(() => {});
-          this.log.warn(`${item} ×${lack} は自分で集めるには多すぎる（手間 ${Math.round(effort)}）。チェストに入れてください`);
+          if (this.stocked) this.log.warn(`${item} が手持ちとチェストに ${n - count(bot, item)} 個足りない。チェストに入れてください`);
+          else this.log.warn(`${item} ×${lack} は自分で集めるには多すぎる（手間 ${Math.round(effort)}）。チェストに入れてください`);
           continue;
         }
         try {
@@ -262,16 +342,49 @@ export class Builder {
         }
       }
     }
+    if (this.stocked) {
+      await this.topUp(stacks).catch((e) => { if (e.name === 'AbortError') throw e; });
+      // 2 段目から上は、登ったり下に支えを作ったりする足場のブロックを持っておく（建築の素材は足場に使わないので）
+      if (this.layer >= 1 && this.spareScaffold() < 16) {
+        await this.supplier.ensureScaffold(32, this.needed).catch((e) => { if (e.name === 'AbortError') throw e; });
+      }
+    }
     for (const item of stacks.keys()) if (count(bot, item) > 0) usable.add(item);
     return usable;
+  }
+
+  // 素材を用意してもらったときは、チェストとの往復を減らすため、この先の段で使う分も持っていく。
+  // まずスタックの端数を埋め（場所を取らない）、持ち物に余裕があれば丸ごとのスタックも足す（8 枠は空けておく）
+  async topUp(stacks) {
+    const { bot } = this;
+    const remain = this.remainingNeed();
+    let spare = Math.max(0, bot.inventory.emptySlotCount() - 8);
+    for (const item of stacks.keys()) {
+      const have = count(bot, item);
+      const rest = (remain.get(item) ?? 0) - have;
+      if (rest <= 0 || this.supplier.chestCount(item) <= 0) continue;
+      const size = bot.registry.itemsByName[item]?.stackSize ?? 64;
+      const partial = (size - (have % size)) % size;
+      const more = Math.min(spare, Math.ceil(Math.max(0, rest - partial) / size));
+      spare -= more;
+      const want = Math.min(rest, partial + more * size, this.supplier.chestCount(item));
+      if (want > 0) await this.supplier.takeFromChests(item, want);
+    }
   }
 
   // 持ち物がいっぱいなら、建築に使わない物（余った土・石・苗木など）を捨てる
   async tidyInventory(stacks) {
     const { bot } = this;
     if (bot.inventory.emptySlotCount() >= 6) return;
-    const needed = new Set([...stacks.keys()]);
-    for (const t of this.targets.values()) { const it = itemFor(bot.registry, t); if (it) needed.add(it.item); }
+    const needed = new Set([...stacks.keys(), ...this.needed]);
+    // 用意された素材のうち、いまの分で使わない物はチェストへ戻して場所を空ける（捨てない）
+    if (this.stocked && this.supplier) {
+      for (const it of bot.inventory.items()) {
+        if (bot.inventory.emptySlotCount() >= 8) break;
+        if (!this.needed.has(it.name) || stacks.has(it.name)) continue;
+        await this.supplier.depositToChests(it.name, count(bot, it.name));
+      }
+    }
     const keep = /(_pickaxe|_axe|_shovel|_sword|_hoe|shears|crafting_table|furnace|_log|_planks|stick|coal|charcoal|torch|bucket|helmet|chestplate|leggings|boots|shield)$/;
     const scaffoldKeep = { dirt: 64, cobblestone: 64 };
     for (const it of bot.inventory.items()) {
@@ -299,19 +412,50 @@ export class Builder {
         if (s < bestScore) { bestScore = s; best = p; }
       }
       left.delete(key(best));
+      const t0 = Date.now();
       try {
         await fn(best);
+        if (process.env.BUILD_DEBUG && Date.now() - t0 > 2000) this.log.info(`[遅い] (${key(best)}) ${Date.now() - t0}ms ${this.lastStep ?? ''}`);
         fails = 0;
       } catch (e) {
         if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+        if (e.deferred) { this.deferred.set(key(best), best); continue; }
         this.log.warn(`(${key(best)}) で失敗: ${e.message}`);
         if (++fails >= 12) throw new SkillError('失敗が続いたので、この段をいったん中断する');
       }
     }
   }
 
-  // 置く位置に手が届くところまで行く
+  // 掘る。終わらないまま待ち続けないよう 20 秒で打ち切る（試験で、掘る途中のまま 8 分止まり、
+  // 落ち葉の苗木を拾い続けて「動きが無い」の見張りにも引っかからなかった）
+  async dig(block) {
+    const { bot } = this;
+    if (!block || isAirName(block.name)) return;
+    // ツルハシで掘るブロック（石など）なのにツルハシが無ければ、先に用意する（使い潰したあと素手で掘ると 10 倍以上遅い）
+    if (/pickaxe/.test(block.material ?? '') && !bot.inventory.items().some((i) => i.name.endsWith('_pickaxe'))) {
+      if (this.stocked) await this.supplier.ensurePickaxeStocked((n) => this.spareInv(n));
+      else await ensurePickaxe(this.ctx).catch(() => {});
+      await equipCheapestTool(bot, block).catch(() => {});
+    }
+    let timer;
+    try {
+      await Promise.race([
+        bot.dig(block, true),
+        new Promise((_, rej) => { timer = setTimeout(() => { try { bot.stopDigging(); } catch {} rej(new SkillError(`${block.name} を掘り終わらない`)); }, 20_000); }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // 置く位置に手が届くところまで行く。経路探索で行けなければ、近くに柱を積んで登る
   async reach(p, range = 4.2) {
+    const { bot } = this;
+    const t0 = Date.now();
+    try { await this.reachInner(p, range); } finally { this.lastStep = `reach ${Date.now() - t0}ms`; }
+  }
+
+  async reachInner(p, range) {
     const { bot } = this;
     const eye = () => bot.entity.position.offset(0, 1.62, 0);
     const inside = () => {
@@ -319,18 +463,114 @@ export class Builder {
       return f.x === p.x && f.z === p.z && (f.y === p.y || f.y === p.y - 1);
     };
     if (eye().distanceTo(p.offset(0.5, 0.5, 0.5)) <= range && !inside()) return;
+    try {
+      await this.pathTo(p, range);
+    } catch (e) {
+      if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+      // 高い所（塔の壁の上の段など）は、近くに仮の柱を積んで、その上から置く
+      if (p.y - bot.entity.position.y >= 2 && (await this.climbNear(p, range))) return;
+      throw e;
+    }
+  }
+
+  async pathTo(p, range) {
+    const { bot } = this;
     // 建物の中の低い所（空洞）には立たない（閉じ込められないように）
     const forbid = (node) => this.inBox(node) && node.y < this.origin.y + this.layer - 1
       && !this.targets.has(key(new Vec3(node.x, node.y - 1, node.z)));
     let timer;
+    let fail;
+    // 近づけなかったときに理由が分かるよう、経路探索の結果を覚えておく。
+    // 経路はあるのに動けない（stuck）が続くときは、25 秒待たずにあきらめる
+    const seen = { updates: 0, status: '', len: 0, resets: [] };
+    const from = bot.entity.position.floored();
+    const why = () => `近づけない（${from} から、経路 ${seen.updates} 回: ${seen.status} 長さ ${seen.len}、やり直し: ${seen.resets.join('/') || 'なし'}）`;
+    const onUpdate = (r) => { seen.updates++; seen.status = r.status; seen.len = r.path.length; };
+    const onReset = (reason) => {
+      if (seen.resets.length < 6) seen.resets.push(reason);
+      if (seen.resets.filter((r) => r === 'stuck').length >= 3) fail?.(new Error(why()));
+    };
+    bot.on('path_update', onUpdate);
+    bot.on('path_reset', onReset);
     try {
       await Promise.race([
         bot.pathfinder.goto(new GoalPlaceNear(p, range, forbid)),
-        new Promise((_, rej) => { timer = setTimeout(() => { try { bot.pathfinder.setGoal(null); } catch {} rej(new Error('近づけない')); }, 25_000); }),
+        new Promise((_, rej) => {
+          fail = rej;
+          timer = setTimeout(() => rej(new Error(why())), 25_000);
+        }),
       ]);
+    } catch (e) {
+      try { bot.pathfinder.setGoal(null); } catch {}
+      throw e;
     } finally {
       clearTimeout(timer);
+      bot.off('path_update', onUpdate);
+      bot.off('path_reset', onReset);
     }
+  }
+
+  // p の横（2 マス以内）に仮の柱を積み、p と同じ高さに立つ。柱は足場として記録され、最後に片付ける
+  async climbNear(p, range) {
+    const { bot } = this;
+    const center = p.offset(0.5, 0.5, 0.5);
+    const free = (b) => b && b.boundingBox === 'empty' && !/(water|lava|ladder|vine|scaffolding|fire)/.test(b.name);
+    const cands = [];
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        const c = new Vec3(p.x + dx, p.y, p.z + dz);
+        if (new Vec3(c.x + 0.5, c.y + 1.62, c.z + 0.5).distanceTo(center) > range) continue;
+        if (!free(bot.blockAt(c)) || !free(bot.blockAt(c.offset(0, 1, 0))) || !free(bot.blockAt(c.offset(0, 2, 0)))) continue;
+        // 柱の土台（真下でいちばん上の固いブロック）
+        let g = null;
+        for (let y = c.y - 1; y >= c.y - 24; y--) {
+          const b = bot.blockAt(new Vec3(c.x, y, c.z));
+          if (!b || /(water|lava)/.test(b.name)) break;
+          if (b.boundingBox === 'block') { g = y; break; }
+        }
+        if (g === null) continue;
+        // 柱を立てるマス・立つマスが、まだ置いていない設計図のマスなら避ける（あとで置けなくなる）
+        let blocked = false;
+        for (let y = g + 1; y <= c.y + 1 && !blocked; y++) {
+          const t = this.targets.get(key(new Vec3(c.x, y, c.z)));
+          if (t && !this.done(t)) blocked = true;
+        }
+        if (blocked) continue;
+        const h = c.y - 1 - g;
+        cands.push({ c, g, h, score: h * 2 + (this.inBox(c) ? 4 : 0) + Math.hypot(dx, dz) + bot.entity.position.distanceTo(c) / 4 });
+      }
+    }
+    cands.sort((a, b) => a.score - b.score);
+    for (const { c, g, h } of cands.slice(0, 4)) {
+      abortable(this.ctx);
+      if (this.stocked && this.spareScaffold() < h) await this.supplier.ensureScaffold(h + 8, this.needed);
+      const base = new Vec3(c.x, g + 1, c.z);
+      this.log.info(`(${key(p)}) に届かないので、(${key(base)}) に ${h} 段の柱を積んで登る`);
+      try {
+        const f = bot.entity.position.floored();
+        if (f.x !== base.x || f.z !== base.z || f.y !== base.y) {
+          let timer;
+          try {
+            await Promise.race([
+              bot.pathfinder.goto(new goals.GoalBlock(base.x, base.y, base.z)),
+              new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('柱の場所へ行けない')), 20_000); }),
+            ]);
+          } finally {
+            clearTimeout(timer);
+            try { bot.pathfinder.setGoal(null); } catch {}
+          }
+        }
+        await pillarUp(this.ctx, h);
+        await bot.waitForTicks(4);
+        if (bot.entity.position.offset(0, 1.62, 0).distanceTo(center) <= range) return true;
+        this.log.warn(`柱で登りきれなかった（いま ${bot.entity.position.floored()}）`);
+      } catch (e) {
+        if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+        this.log.warn(`柱を積めなかった: ${e.message}`);
+      }
+    }
+    return false;
   }
 
   // 参照にできる隣のブロック（固くて、クリックしても開かないもの）と、その面を探す
@@ -353,6 +593,15 @@ export class Builder {
   async ensureSupport(p, t) {
     const { bot } = this;
     if (this.findReference(p, t)) return;
+    // 壁に付ける松明・上付きハーフブロックなど、下の面には付けられないものは、下に足場を積んでも置けない。
+    // 付ける先のブロック（同じ段の壁や上の段）ができてから置くので、いまは後回しにする
+    const hint = t ? placementHint(t) : {};
+    const faces = hint.faces ?? FACE_ORDER;
+    if (!faces.includes('up') || hint.half === 'top') {
+      const e = new SkillError('付ける先のブロックがまだ無いので後回し');
+      e.deferred = true;
+      throw e;
+    }
     const column = [];
     let q = p.offset(0, -1, 0);
     for (let i = 0; i < 64; i++, q = q.offset(0, -1, 0)) {
@@ -364,17 +613,57 @@ export class Builder {
     this.log.info(`(${key(p)}) の下に支えが無いので、仮の足場を ${column.length} 段積む`);
     for (const c of column.reverse()) {
       abortable(this.ctx);
-      const item = cheapBlock(bot) ?? (await this.scaffoldItem());
+      const item = this.pickScaffold() ?? (await this.scaffoldItem());
       if (!item) throw new SkillError('足場にするブロックが無い');
       await this.placeAt(c, { name: item.name, props: {} }, item.name);
-      this.scaffolds.add(key(c));
+      this.addScaffold(key(c));
     }
+  }
+
+  // 手持ちのうち、建築に使う分（チェストに残っている分を除く）を差し引いた余り
+  spareInv(name) {
+    const have = count(this.bot, name);
+    if (!this.needed.has(name)) return have;
+    if (!this.remainCache || Date.now() - this.remainCache.at > 5000) this.remainCache = { at: Date.now(), need: this.remainingNeed() };
+    const need = this.remainCache.need.get(name) ?? 0;
+    return have - Math.max(0, need - (this.supplier?.chestCount(name) ?? 0));
+  }
+
+  spareScaffold() {
+    return SCAFFOLD_BLOCKS.reduce((s, n) => s + (this.needed.has(n) ? 0 : count(this.bot, n)), 0);
+  }
+
+  // 足場にする手持ちのブロック。素材を用意してもらったときは、建築に使う物を避ける
+  pickScaffold() {
+    if (!this.stocked) return cheapBlock(this.bot);
+    const items = this.bot.inventory.items();
+    for (const n of SCAFFOLD_BLOCKS) {
+      if (this.needed.has(n)) continue;
+      const it = items.find((i) => i.name === n);
+      if (it) return it;
+    }
+    return null;
   }
 
   async scaffoldItem() {
     if (!this.supplier) return null;
+    if (this.stocked) {
+      await this.supplier.ensureScaffold(16, this.needed);
+      return this.pickScaffold() ?? cheapBlock(this.bot);
+    }
     await this.supplier.ensure('dirt', 32).catch(() => this.supplier.ensure('cobblestone', 32));
     return cheapBlock(this.bot);
+  }
+
+  // 建て終わったら、余った素材と足場のブロックをチェストへ戻す
+  async returnLeftovers() {
+    const { bot } = this;
+    await this.supplier.scanChests().catch(() => {});
+    const names = new Set(bot.inventory.items().map((i) => i.name)
+      .filter((n) => this.needed.has(n) || SCAFFOLD_BLOCKS.includes(n)));
+    if (names.size === 0) return;
+    this.log.info(`余った素材をチェストに戻す: ${[...names].map((n) => `${n}×${count(bot, n)}`).join(', ')}`);
+    for (const n of names) await this.supplier.depositToChests(n, count(bot, n));
   }
 
   async placeTarget(t) {
@@ -387,9 +676,21 @@ export class Builder {
     if (cur && !REPLACEABLE.test(cur.name) && !matches(t, cur, { checkProps: false })) {
       await this.reach(p);
       await equipCheapestTool(bot, cur).catch(() => {});
-      await bot.dig(bot.blockAt(p), true);
-      this.scaffolds.delete(key(p));
+      await this.dig(bot.blockAt(p));
+      this.dropScaffold(key(p));
       await bot.waitForTicks(2);
+    }
+    // ドアなど 2 マスの高さのものは、上のマスも空いていないと置けない（上の段の地形がまだ残っていることがある）
+    if (t.props?.half === 'lower') {
+      const up = p.offset(0, 1, 0);
+      const ub = bot.blockAt(up);
+      if (ub && !REPLACEABLE.test(ub.name) && ub.boundingBox === 'block') {
+        await this.reach(up);
+        await equipCheapestTool(bot, ub).catch(() => {});
+        await this.dig(bot.blockAt(up));
+        this.dropScaffold(key(up));
+        await bot.waitForTicks(2);
+      }
     }
     await this.ensureSupport(p, t);
     try {
@@ -400,7 +701,7 @@ export class Builder {
       if (!still || isAirName(still)) throw e;
       const b = bot.blockAt(p);
       await equipCheapestTool(bot, b).catch(() => {});
-      await bot.dig(b, true);
+      await this.dig(b);
       await bot.waitForTicks(2);
       await this.placeAt(p, t, it.item);
     }
@@ -465,9 +766,9 @@ export class Builder {
         const b = bot.blockAt(p);
         if (b && b.boundingBox === 'block') {
           await equipCheapestTool(bot, b).catch(() => {});
-          await bot.dig(b, true);
+          await this.dig(b);
         }
-        this.scaffolds.delete(key(p));
+        this.dropScaffold(key(p));
       } catch (e) {
         if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
         this.log.warn(`足場 (${key(p)}) を片付けられなかった: ${e.message}`);
