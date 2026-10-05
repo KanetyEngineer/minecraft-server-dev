@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TikTok Defense overlay</title>
+<style>
+  html, body { margin:0; background:transparent; overflow:hidden; font-family:"Yu Gothic UI","Meiryo",sans-serif; }
+  #hud { position:absolute; top:18px; right:18px; width:300px; background:rgba(10,12,18,.72); border:2px solid rgba(37,244,238,.6);
+    border-radius:12px; padding:10px 14px; color:#fff; text-shadow:0 1px 2px #000; display:none; }
+  #hud h1 { margin:0 0 6px; font-size:18px; color:#fe2c55; letter-spacing:1px; }
+  #hud h1 span { color:#25f4ee; }
+  .r { display:flex; justify-content:space-between; font-size:16px; margin:3px 0; }
+  .r b { color:#fde047; }
+  .bar { height:10px; border-radius:5px; background:rgba(255,255,255,.15); overflow:hidden; margin:2px 0 6px; }
+  .bar i { display:block; height:100%; transition:width .4s; }
+  #feed { position:absolute; left:18px; bottom:18px; display:flex; flex-direction:column; gap:8px; }
+  .item { display:flex; align-items:center; gap:10px; background:rgba(10,12,18,.75); border-radius:12px; padding:8px 14px 8px 8px;
+    color:#fff; font-size:20px; text-shadow:0 1px 2px #000; animation:in .35s ease-out; border-left:6px solid #fe2c55; }
+  .item.help { border-left-color:#25f4ee; }
+  .item img { width:44px; height:44px; border-radius:50%; object-fit:cover; background:#334155; }
+  .item .n { color:#fde047; font-weight:700; }
+  .item .a { font-weight:700; color:#fda4af; }
+  .item.help .a { color:#99f6e4; }
+  .item.out { animation:out .5s ease-in forwards; }
+  @keyframes in { from { transform:translateX(-40px); opacity:0; } to { transform:none; opacity:1; } }
+  @keyframes out { to { transform:translateX(-40px); opacity:0; } }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>TikTok <span>Defense</span> <small id="fld" style="font-size:13px;color:#fde047"></small></h1>
+  <div class="r" id="vsrow" style="display:none"><span style="color:#f0abfc">⚔ 対戦中</span><b id="vs"></b></div>
+  <div class="r"><span>残り時間</span><b id="left">-</b></div>
+  <div class="r"><span>撃破数</span><b id="kills">-</b></div>
+  <div class="r"><span>敵の数</span><b id="enemies">-</b></div>
+  <div class="r"><span id="gname">関門</span><b id="gate">-</b></div>
+  <div class="bar"><i id="gatebar" style="background:#facc15"></i></div>
+  <div class="r"><span>コア</span><b id="core">-</b></div>
+  <div class="bar"><i id="corebar" style="background:#ef4444"></i></div>
+</div>
+<div id="feed"></div>
+<script>
+let since = 0;
+const FIELD = Math.max(1, Number(new URLSearchParams(location.search).get('field')) || 1);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+function show(it) {
+  const d = document.createElement('div');
+  d.className = 'item ' + (it.kind === 'help' ? 'help' : '');
+  d.innerHTML = `${it.avatar ? `<img src="${esc(it.avatar)}" referrerpolicy="no-referrer">` : ''}<div><span class="n">${esc(it.name)}</span> の ${esc(it.gift)}<br>→ <span class="a">${esc(it.action)}</span></div>`;
+  const feed = document.getElementById('feed');
+  feed.append(d);
+  while (feed.children.length > 5) feed.firstChild.remove();
+  setTimeout(() => d.classList.add('out'), 6500);
+  setTimeout(() => d.remove(), 7100);
+}
+async function poll() {
+  try {
+    const r = await (await fetch('api/overlay?field=' + FIELD + '&since=' + since)).json();
+    if (since === 0) since = r.latest; else { r.items.forEach(show); since = r.latest; }
+    const g = r.game;
+    document.getElementById('fld').textContent = `フィールド${r.field}${r.streamer ? ' ' + r.streamer : ''}`;
+    const v = r.versus?.cur;
+    document.getElementById('vsrow').style.display = g && g.vs && v ? 'flex' : 'none';
+    if (v) document.getElementById('vs').textContent = `F${v.a} vs F${v.b}`;
+    const hud = document.getElementById('hud');
+    hud.style.display = g && g.state === 1 ? 'block' : 'none';
+    if (g) {
+      document.getElementById('left').textContent = g.time > 0 ? mmss(Math.max(0, g.left)) : '∞';
+      document.getElementById('kills').textContent = g.kills ?? 0;
+      document.getElementById('enemies').textContent = g.enemies ?? 0;
+      document.getElementById('gname').textContent = g.front > 0 ? `第${g.front}関門` : '最終防衛線';
+      document.getElementById('gate').textContent = g.front > 0 ? `${g.gateHp}/${g.gateMax}` : '-';
+      document.getElementById('gatebar').style.width = (g.front > 0 ? Math.max(0, 100 * g.gateHp / g.gateMax) : 0) + '%';
+      document.getElementById('core').textContent = `${g.core ?? 0}/${g.coreMax ?? 0}`;
+      document.getElementById('corebar').style.width = Math.max(0, 100 * (g.core ?? 0) / (g.coreMax || 1)) + '%';
+    }
+  } catch {}
+}
+setInterval(poll, 1000);
+poll();
+</script>
+</body>
+</html>

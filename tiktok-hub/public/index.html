@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SharyTech TikTok Hub</title>
+<style>
+  :root { --bg:#0f1117; --card:#181b24; --line:#2c3242; --text:#e9edf5; --muted:#98a2b8; --accent:#fe2c55; --accent2:#25f4ee; --ok:#22c55e; --bad:#ef4444; --warn:#eab308; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Yu Gothic UI","Meiryo",sans-serif; font-size:14px; display:flex; flex-direction:column; }
+  header { padding:10px 18px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  h1 { margin:0; font-size:18px; letter-spacing:.02em; }
+  h1 b { color:var(--accent); } h1 i { color:var(--accent2); font-style:normal; }
+  .pill { padding:3px 10px; border-radius:999px; background:var(--card); border:1px solid var(--line); font-size:13px; white-space:nowrap; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--muted); vertical-align:middle; }
+  .ok .dot, .dot.ok { background:var(--ok); } .bad .dot, .dot.bad { background:var(--bad); } .warn .dot, .dot.warn { background:var(--warn); }
+  nav { display:flex; gap:4px; padding:8px 18px 0; border-bottom:1px solid var(--line); overflow-x:auto; flex:none; }
+  nav a { padding:8px 14px; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; color:var(--muted); text-decoration:none; white-space:nowrap; }
+  nav a.on { color:var(--text); background:var(--card); border-color:var(--line); }
+  main { flex:1; min-height:0; position:relative; }
+  .page { display:none; padding:14px 18px 40px; overflow:auto; height:100%; }
+  .page.on { display:block; }
+  .page.frame { padding:0; overflow:hidden; }
+  .page.frame iframe { width:100%; height:100%; border:0; display:block; background:#14111c; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  h2 { font-size:15px; margin:0 0 6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .help { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:14px; }
+  @media (max-width: 520px) { .grid { grid-template-columns:1fr; } }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:6px; border-bottom:1px solid #262b39; text-align:left; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  button { background:#232838; color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent2); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  button.small { padding:3px 8px; font-size:12px; }
+  button.del { color:#fca5a5; }
+  input, select { background:#0b0d12; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; width:100%; }
+  input[type=checkbox] { width:auto; }
+  code { background:#0b0d12; border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:12px; word-break:break-all; }
+  .muted { color:var(--muted); }
+  .msg { font-size:13px; margin-left:8px; } .msg.ok { color:#86efac; } .msg.bad { color:#fca5a5; }
+  #log { max-height:40vh; overflow:auto; font-size:13px; }
+  .l { padding:3px 0; border-bottom:1px dashed #262b39; display:flex; gap:8px; }
+  .l .t { color:var(--muted); flex:none; }
+  .k-error { color:#fca5a5; } .k-warn { color:#fde68a; }
+  .st { font-size:12px; }
+  .row { display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; }
+  .row > label { flex:1 1 150px; font-size:12px; color:var(--muted); }
+  .row > label > input, .row > label > select { margin-top:3px; }
+  .copy { cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>SharyTech</b> <i>TikTok</i> Hub</h1>
+  <span id="pills"></span>
+</header>
+<nav id="nav"></nav>
+<main id="main">
+  <div class="page" id="p-home">
+    <div class="grid" id="games"></div>
+    <section>
+      <h2>ハブのログ</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+
+  <div class="page" id="p-streamers">
+    <section>
+      <h2>配信者を追加</h2>
+      <p class="help">1人 = TikTok の ID ＋ Minecraft の名前。ゲームと番号（フィールド／アリーナ）を選ぶと、その配信のギフト・フォロー・シェア・いいね・コメントは<b>そのゲームのその番号だけ</b>に届き、ゲームごとのギフト設定で演出に変わります。何人でも同時につなげます。</p>
+      <div class="row">
+        <label>TikTok の ID（@ の後ろ・URL でも可）<input id="n-tiktok" placeholder="例: my_account"></label>
+        <label>Minecraft の名前<input id="n-mc" placeholder="例: Steve"></label>
+        <label>ゲーム<select id="n-game"></select></label>
+        <label style="flex:0 0 120px">番号<select id="n-field"></select></label>
+        <label>メモ<input id="n-note" placeholder="（任意）"></label>
+        <button class="primary" onclick="addStreamer()">追加</button>
+      </div>
+      <span class="msg" id="n-msg"></span>
+    </section>
+    <section>
+      <h2>配信者 <button class="small" onclick="loadStreamers()">再読み込み</button><span class="msg" id="s-msg"></span></h2>
+      <p class="help">ゲームを変えるとその場で切り替わります（TikTok はつないだまま）。同じ番号に別の人を入れると、前の人は「割り当てなし」になります。各ゲームのパネルの「配信者」「TikTok の ID」欄で変えても、ここに反映されます。</p>
+      <table>
+        <thead><tr><th>TikTok</th><th>Minecraft</th><th>ゲーム</th><th style="width:110px">番号</th><th style="width:60px">オン</th><th>状態</th><th>OBS</th><th style="width:210px"></th></tr></thead>
+        <tbody id="streamers"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div class="page" id="p-settings">
+    <section>
+      <h2>TikTok 接続</h2>
+      <label class="muted" style="font-size:12px">Euler Stream API キー（空でOK。接続が不安定なときだけ。全部の配信者に使います）</label>
+      <div class="row"><label style="flex:1 1 300px"><input id="sign" type="password" autocomplete="off"></label><button onclick="saveSign()">保存</button><span class="msg" id="sign-msg"></span></div>
+    </section>
+    <section>
+      <h2>使うゲーム</h2>
+      <p class="help">使わないゲームを外すと、そのサーバーへの接続や旧アドレスの受け付けをしません（ハブの再起動で反映）。</p>
+      <div id="enabled" style="display:flex;gap:14px;flex-wrap:wrap"></div>
+      <div style="margin-top:8px"><button onclick="saveEnabled()">保存</button><span class="msg" id="en-msg"></span></div>
+    </section>
+    <section>
+      <h2>前のアプリのアドレス（互換）</h2>
+      <p class="help">前は1ゲームに1つずつアプリがありました。OBS のソースやサーバーのリソースパックの URL がそのまま使えるよう、このハブは前のポートでも同じパネル・オーバーレイ・リソースパックを出します。前のアプリが動いていてポートが使われているときは、30秒ごとに取り直します。</p>
+      <table><thead><tr><th>ゲーム</th><th>前のアドレス</th><th>状態</th><th>このハブでのアドレス</th></tr></thead><tbody id="legacy"></tbody></table>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+let S = null;           // last /api/status
+let tab = null;
+const frames = {};
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HL-Panel': '1' }, body: JSON.stringify(body) });
+  return r.json().catch(() => ({ ok: false, message: 'エラー' }));
+}
+
+const TT = { connected: ['ok', '接続中'], connecting: ['warn', '接続中…'], offline: ['warn', '配信していない'], error: ['bad', 'エラー'], off: ['', '切断'], idle: ['', '割り当てなし'], disabled: ['', 'オフ'], none: ['', 'TikTok なし'] };
+const ttPill = (st, detail) => { const [c, t] = TT[st] ?? ['', st]; return `<span class="st" title="${esc(detail)}"><span class="dot ${c}"></span>${esc(t)}</span>`; };
+
+// ------------------------------------------------------------------ tabs
+function buildNav() {
+  const items = [['home', '概要'], ['streamers', '配信者'], ...S.games.map((g) => ['g-' + g.id, `${g.icon} ${g.short}`]), ['settings', '設定']];
+  $('nav').innerHTML = items.map(([id, label]) => `<a href="#${id}" data-t="${id}">${esc(label)}</a>`).join('');
+  for (const g of S.games) {
+    const div = document.createElement('div');
+    div.className = 'page frame';
+    div.id = 'p-g-' + g.id;
+    $('main').append(div);
+  }
+}
+function show() {
+  const want = (location.hash || '#home').slice(1);
+  tab = document.getElementById('p-' + want) ? want : 'home';
+  document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.dataset.t === tab));
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('on', p.id === 'p-' + tab));
+  if (tab.startsWith('g-') && !frames[tab]) {
+    const f = document.createElement('iframe');
+    f.src = '/g/' + tab.slice(2) + '/';
+    $('p-' + tab).append(f);
+    frames[tab] = f;
+  }
+  if (tab === 'streamers') loadStreamers();
+}
+window.addEventListener('hashchange', show);
+
+// ------------------------------------------------------------------ home
+function fieldOptions(gameId, sel) {
+  const g = S.games.find((x) => x.id === gameId);
+  if (!g) return '<option value="0">-</option>';
+  return g.fields.map((f) => `<option value="${f.n}" ${f.n === Number(sel) ? 'selected' : ''}>${esc(g.fieldWord)}${f.n}</option>`).join('');
+}
+function gameOptions(sel) {
+  return '<option value="">（割り当てなし）</option>' + S.games.map((g) => `<option value="${g.id}" ${g.id === sel ? 'selected' : ''}>${esc(g.icon + ' ' + g.short)}</option>`).join('');
+}
+
+function renderHome() {
+  $('pills').innerHTML = S.games.map((g) => `<span class="pill ${g.rcon === 'connected' ? 'ok' : 'bad'}" title="${esc(g.rconDetail)}"><span class="dot"></span>${esc(g.icon + ' ' + g.short)}</span>`).join(' ')
+    + ` <span class="pill">TikTok 接続 <b>${S.streamers.filter((s) => s.status === 'connected').length}</b> / ${S.streamers.filter((s) => s.tiktok && s.assigned && s.enabled !== false).length}</span>`;
+  $('games').innerHTML = S.games.map((g) => `
+    <section>
+      <h2>${esc(g.icon)} ${esc(g.title)} <a href="#g-${g.id}" style="color:var(--accent2);font-size:12px">パネルを開く</a></h2>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">
+        <span class="dot ${g.rcon === 'connected' ? 'ok' : 'bad'}"></span>サーバー（RCON ${g.rconPort}）: ${g.rcon === 'connected' ? 'つながっています' : esc('つながっていません ' + (g.rconDetail || ''))}
+        ${g.legacy ? ` ・ 旧アドレス :${g.legacy.port} ${g.legacy.bound ? '✓' : '× ' + esc(g.legacy.error)}` : ''}
+      </div>
+      <table><thead><tr><th>${esc(g.fieldWord)}</th><th>状態</th><th>配信者</th><th>TikTok</th><th>キュー</th><th>OBS</th></tr></thead><tbody>
+      ${g.fields.map((f) => `<tr>
+        <td>${f.n}${f.label ? ` <span class="muted">${esc(f.label)}</span>` : ''}</td>
+        <td>${esc(f.state ?? '-')}${f.people ? ` <span class="muted">${f.people}人</span>` : ''}</td>
+        <td>${f.streamer ? esc([f.streamer.tiktok && '@' + f.streamer.tiktok, f.streamer.mc].filter(Boolean).join(' / ')) : '<span class="muted">-</span>'}</td>
+        <td>${f.streamer ? ttPill(f.streamer.status, '') : ''}</td>
+        <td>${f.queue ?? 0}</td>
+        <td style="white-space:nowrap"><a href="${esc(f.overlay)}" target="_blank" style="color:var(--accent2)" title="${esc(f.overlay)}">開く</a> <button class="small" title="${esc(f.overlay)}" onclick="copyText(this, '${esc(f.overlay)}')">URLコピー</button></td>
+      </tr>`).join('')}
+      </tbody></table>
+    </section>`).join('');
+  $('log').innerHTML = S.log.map((l) => `<div class="l k-${l.kind}"><span class="t">${l.t}</span><span>${esc(l.text)}</span></div>`).join('');
+  $('legacy').innerHTML = S.games.map((g) => `<tr><td>${esc(g.icon + ' ' + g.title)}</td>
+    <td>${g.legacy ? `<code>http://127.0.0.1:${g.legacy.port}/</code>` : '-'}</td>
+    <td>${g.legacy ? (g.legacy.bound ? '<span class="dot ok"></span>このハブが受け付け中' : `<span class="dot warn"></span>${esc(g.legacy.error || '準備中')}`) : ''}</td>
+    <td><code>http://127.0.0.1:${S.hubPort}/g/${g.id}/</code></td></tr>`).join('');
+  $('sign').placeholder = S.signApiKey ? '（設定済み。変えるときだけ入力）' : '';
+  // status column of the streamer table (the rest is only redrawn on purpose, so typing is not lost)
+  for (const s of S.streamers) {
+    const cell = document.querySelector(`[data-st="${s.id}"]`);
+    if (cell) cell.innerHTML = ttPill(s.status, s.detail) + (s.detail ? `<div class="muted" style="font-size:11px">${esc(s.detail)}</div>` : '');
+  }
+}
+
+function copyText(btn, text) {
+  navigator.clipboard?.writeText(text);
+  btn.textContent = 'コピーしました';
+  setTimeout(() => { btn.textContent = 'URLコピー'; }, 1200);
+}
+function copy(el) {
+  navigator.clipboard?.writeText(el.textContent);
+  el.style.borderColor = 'var(--ok)';
+  setTimeout(() => { el.style.borderColor = ''; }, 800);
+}
+
+// ------------------------------------------------------------------ streamers
+async function loadStreamers() {
+  const d = await (await fetch('/api/streamers')).json();
+  $('streamers').innerHTML = d.streamers.map((s) => `<tr data-id="${s.id}">
+    <td><input class="s-tiktok" value="${esc(s.tiktok)}" placeholder="（なし）"></td>
+    <td><input class="s-mc" value="${esc(s.mc)}" placeholder="（なし）"></td>
+    <td><select class="s-game" onchange="this.closest('tr').querySelector('.s-field').innerHTML = fieldOptions(this.value, 1)">${gameOptions(s.game)}</select></td>
+    <td><select class="s-field">${fieldOptions(s.game, s.field)}</select></td>
+    <td><input type="checkbox" class="s-on" ${s.enabled !== false ? 'checked' : ''} title="オフにすると TikTok に接続しません"></td>
+    <td data-st="${s.id}">${ttPill(s.status, s.detail)}</td>
+    <td>${s.overlay ? `<code class="copy" title="クリックでコピー" onclick="copy(this)">${esc(s.overlay)}</code>` : ''}</td>
+    <td><button class="small primary" onclick="saveRow(this)">保存</button>
+      ${s.tiktok ? `<button class="small" onclick="op('${s.id}','connect')">接続</button><button class="small" onclick="op('${s.id}','disconnect')">切断</button>` : ''}
+      ${s.assigned ? `<button class="small" title="この配信からギフトが来たときと同じ流れで、1コインのテストギフトを送ります" onclick="op('${s.id}','test')">テスト</button>` : ''}
+      <button class="small del" onclick="if(confirm('この配信者を消しますか？'))op('${s.id}','delete')">削除</button></td>
+  </tr>`).join('') || '<tr><td colspan="8" class="muted">まだいません。上の「配信者を追加」から入れてください。</td></tr>';
+}
+
+function msg(id, r) {
+  $(id).className = 'msg ' + (r.ok ? 'ok' : 'bad');
+  $(id).textContent = r.ok ? '保存しました' : (r.message || 'エラー');
+  setTimeout(() => { if ($(id).textContent) $(id).textContent = ''; }, 5000);
+}
+
+async function addStreamer() {
+  const r = await post('/api/streamers', { streamer: { tiktok: $('n-tiktok').value, mc: $('n-mc').value, game: $('n-game').value, field: Number($('n-field').value), note: $('n-note').value } });
+  msg('n-msg', r);
+  if (r.ok) { $('n-tiktok').value = ''; $('n-mc').value = ''; $('n-note').value = ''; loadStreamers(); refresh(); }
+}
+async function saveRow(btn) {
+  const tr = btn.closest('tr');
+  const r = await post('/api/streamers', { id: tr.dataset.id, streamer: {
+    tiktok: tr.querySelector('.s-tiktok').value, mc: tr.querySelector('.s-mc').value,
+    game: tr.querySelector('.s-game').value, field: Number(tr.querySelector('.s-field').value), enabled: tr.querySelector('.s-on').checked,
+  } });
+  msg('s-msg', r);
+  if (r.ok) { loadStreamers(); refresh(); reloadFrames(); }
+}
+async function op(id, what) {
+  const r = await post('/api/streamers', { id, op: what });
+  if (!r.ok) msg('s-msg', r);
+  else if (what === 'test') { $('s-msg').className = 'msg ok'; $('s-msg').textContent = 'テストギフトを送りました（ゲームのパネルのログで確認）'; }
+  loadStreamers(); refresh(); if (what === 'delete') reloadFrames();
+}
+// the game panels show the per-field streamers in their settings: reload them after a change
+function reloadFrames() {
+  for (const [k, f] of Object.entries(frames)) if (k !== 'g-' + tab) { f.remove(); delete frames[k]; }
+}
+
+function renderEnabled() {
+  $('enabled').innerHTML = S.allGames.map((g) => `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" value="${g.id}" ${g.on ? 'checked' : ''}>${esc(g.icon + ' ' + g.title)}${g.on !== g.running ? ' <span class="muted">（再起動待ち）</span>' : ''}</label>`).join('');
+}
+async function saveEnabled() {
+  const ids = [...document.querySelectorAll('#enabled input:checked')].map((i) => i.value);
+  const r = await post('/api/settings', { enabledGames: ids });
+  $('en-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('en-msg').textContent = r.message || '';
+  await refresh(); renderEnabled();
+}
+async function saveSign() {
+  if (!$('sign').value && S.signApiKey && !confirm('API キーを消しますか？')) return;
+  const r = await post('/api/settings', { signApiKey: $('sign').value });
+  $('sign-msg').className = 'msg ok'; $('sign-msg').textContent = r.ok ? '保存しました' : 'エラー';
+  $('sign').value = '';
+  refresh();
+}
+
+// ------------------------------------------------------------------ main
+async function refresh() {
+  try { S = await (await fetch('/api/status')).json(); } catch { return; }
+  renderHome();
+}
+(async () => {
+  await refresh();
+  if (!S) return;
+  buildNav();
+  $('n-game').innerHTML = gameOptions('');
+  $('n-game').onchange = () => { $('n-field').innerHTML = fieldOptions($('n-game').value, 1); };
+  $('n-field').innerHTML = fieldOptions('', 0);
+  renderEnabled();
+  if (!location.hash && S.primaryGame && S.games.some((g) => g.id === S.primaryGame)) location.hash = '#g-' + S.primaryGame;
+  show();
+  setInterval(refresh, 2000);
+})();
+</script>
+</body>
+</html>

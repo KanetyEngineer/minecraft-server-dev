@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Clash Royale MC LIVE オーバーレイ</title>
+<style>
+  html, body { margin:0; background:transparent; overflow:hidden; font-family:"Yu Gothic UI","Meiryo",sans-serif; }
+  /* newest card at the top; older ones are pushed down */
+  #stack { position:absolute; left:24px; top:24px; display:flex; flex-direction:column; gap:0; max-width:min(720px, 90vw); }
+  .wrap { overflow:hidden; max-height:0; transition:max-height .35s ease, margin .35s ease; }
+  .wrap.in { max-height:140px; margin-bottom:10px; }
+  .wrap.out { max-height:0; margin-bottom:0; }
+  .card { display:flex; align-items:center; gap:14px; padding:12px 20px; border-radius:14px; background:rgba(20,10,30,.82);
+          border:2px solid #38bdf8; color:#fff; font-size:28px; font-weight:700; text-shadow:0 2px 4px #000;
+          opacity:0; transform:translateX(-30px); transition:opacity .35s, transform .35s; }
+  .wrap.in .card { opacity:1; transform:none; }
+  .wrap.out .card { opacity:0; transform:translateX(-30px); }
+  .card img { width:56px; height:56px; border-radius:50%; border:2px solid #fde047; flex:none; object-fit:cover; }
+  .name { color:#fde047; } .act { color:#fbbf24; } .gift { color:#e9d5ff; font-size:20px; display:block; }
+</style>
+</head>
+<body>
+<div id="stack"></div>
+<script>
+const SHOW_MS = 8000;   // each card disappears this long after it arrived
+const MAX = 5;          // more than this: the oldest goes right away
+const stack = document.getElementById('stack');
+// ?arena=N: only the triggers of that arena (one OBS source per streamer); without it every arena is shown
+const ARENA = Number(new URLSearchParams(location.search).get('arena') || new URLSearchParams(location.search).get('field')) || 0;
+let since = null;
+
+function removeCard(w) {
+  if (w.classList.contains('out')) return;
+  clearTimeout(w.timer);
+  w.classList.remove('in');
+  w.classList.add('out');
+  setTimeout(() => w.remove(), 400);
+}
+
+function addCard(it) {
+  const w = document.createElement('div');
+  w.className = 'wrap';
+  const card = document.createElement('div');
+  card.className = 'card';
+  if (it.avatar) {
+    const img = document.createElement('img');
+    img.src = it.avatar;
+    img.onerror = () => img.remove();
+    card.append(img);
+  }
+  const text = document.createElement('div');
+  const gift = document.createElement('span'); gift.className = 'gift'; gift.textContent = '🎃 ' + it.gift + (!ARENA && it.arena ? `（アリーナ${it.arena}）` : '');
+  const name = document.createElement('span'); name.className = 'name'; name.textContent = it.name;
+  const act = document.createElement('span'); act.className = 'act'; act.textContent = it.action;
+  text.append(gift, name, ' → ', act);
+  card.append(text);
+  w.append(card);
+  stack.prepend(w);
+  void w.offsetHeight; // apply the start state first so the slide-in animates
+  w.classList.add('in');
+  w.timer = setTimeout(() => removeCard(w), SHOW_MS);
+  const live = [...stack.children].filter((x) => !x.classList.contains('out'));
+  live.slice(MAX).forEach(removeCard); // newest first, so everything after the 5th is the oldest
+}
+
+async function poll() {
+  try {
+    const d = await (await fetch('api/overlay?since=' + (since ?? 0) + (ARENA ? '&arena=' + ARENA : ''), { cache: 'no-store' })).json();
+    // first poll, or the app was restarted: start from now, don't replay older triggers
+    if (since === null || d.latest < since) { since = d.latest; return; }
+    for (const it of d.items) addCard(it);
+    since = d.latest;
+  } catch {}
+}
+setInterval(poll, 500);
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,374 @@
+{
+ "pointblank:aa12": {
+  "label": "AA12",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 32,
+  "type": "gun"
+ },
+ "pointblank:ak12": {
+  "label": "AK-12",
+  "ammo": "pointblank:ammo545",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:ak47": {
+  "label": "AK-47",
+  "ammo": "pointblank:ammo762",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:ak74": {
+  "label": "AK-74",
+  "ammo": "pointblank:ammo545",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:an94": {
+  "label": "AN-94",
+  "ammo": "pointblank:ammo545",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:ar57": {
+  "label": "AR-57",
+  "ammo": "pointblank:ammo57",
+  "mag": 50,
+  "type": "gun"
+ },
+ "pointblank:at4": {
+  "label": "AT4",
+  "ammo": "pointblank:at4_rocket",
+  "mag": 1,
+  "type": "gun"
+ },
+ "pointblank:aug": {
+  "label": "AUG",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:aughbar": {
+  "label": "AUG HBAR",
+  "ammo": "pointblank:ammo556",
+  "mag": 60,
+  "type": "gun"
+ },
+ "pointblank:ballista": {
+  "label": "Ballista",
+  "ammo": "pointblank:ammo338lapua",
+  "mag": 10,
+  "type": "gun"
+ },
+ "pointblank:c14": {
+  "label": "C14",
+  "ammo": "pointblank:ammo338lapua",
+  "mag": 5,
+  "type": "gun"
+ },
+ "pointblank:citoricxs": {
+  "label": "Citori CXS",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 2,
+  "type": "gun"
+ },
+ "pointblank:deserteagle": {
+  "label": "デザートイーグル",
+  "ammo": "pointblank:ammo50ae",
+  "mag": 8,
+  "type": "gun"
+ },
+ "pointblank:g3": {
+  "label": "G3",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 20,
+  "type": "gun"
+ },
+ "pointblank:g36c": {
+  "label": "G36C",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:g36k": {
+  "label": "G36K",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:g41": {
+  "label": "G41",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:glock17": {
+  "label": "グロック-17",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 17,
+  "type": "gun"
+ },
+ "pointblank:glock18": {
+  "label": "グロック-18",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 20,
+  "type": "gun"
+ },
+ "pointblank:gm6lynx": {
+  "label": "GM6 Lynx",
+  "ammo": "pointblank:ammo50bmg",
+  "mag": 5,
+  "type": "gun"
+ },
+ "pointblank:grenade": {
+  "label": "Frag Grenade",
+  "ammo": null,
+  "mag": 1,
+  "type": "throwable"
+ },
+ "pointblank:hk416": {
+  "label": "HK416",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:hs12": {
+  "label": "HS-12",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 2,
+  "type": "gun"
+ },
+ "pointblank:javelin": {
+  "label": "FGM-148 ジャベリン",
+  "ammo": "pointblank:javelin_rocket",
+  "mag": 1,
+  "type": "gun"
+ },
+ "pointblank:l96a1": {
+  "label": "L96A1",
+  "ammo": "pointblank:ammo338lapua",
+  "mag": 5,
+  "type": "gun"
+ },
+ "pointblank:lamg": {
+  "label": "LAMG",
+  "ammo": "pointblank:ammo556",
+  "mag": 100,
+  "type": "gun"
+ },
+ "pointblank:m1014": {
+  "label": "M1014",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 8,
+  "type": "gun"
+ },
+ "pointblank:m134minigun": {
+  "label": "M134 ミニガン",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 200,
+  "type": "gun"
+ },
+ "pointblank:m16a1": {
+  "label": "M16A1",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:m1911a1": {
+  "label": "M1911A1",
+  "ammo": "pointblank:ammo45acp",
+  "mag": 7,
+  "type": "gun"
+ },
+ "pointblank:m249": {
+  "label": "M249",
+  "ammo": "pointblank:ammo556",
+  "mag": 100,
+  "type": "gun"
+ },
+ "pointblank:m32mgl": {
+  "label": "ミルコール MGL",
+  "ammo": "pointblank:grenade40mm",
+  "mag": 6,
+  "type": "gun"
+ },
+ "pointblank:m4a1": {
+  "label": "M4A1",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:m4a1mod1": {
+  "label": "M4A1 MOD I",
+  "ammo": "pointblank:ammo556",
+  "mag": 25,
+  "type": "gun"
+ },
+ "pointblank:m4sopmodii": {
+  "label": "M4 SOPMOD II",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:m590": {
+  "label": "M590",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 7,
+  "type": "gun"
+ },
+ "pointblank:m870": {
+  "label": "M870",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 6,
+  "type": "gun"
+ },
+ "pointblank:m9": {
+  "label": "M9",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 15,
+  "type": "gun"
+ },
+ "pointblank:m950": {
+  "label": "M950",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 50,
+  "type": "gun"
+ },
+ "pointblank:mk14ebr": {
+  "label": "Mk14 EBR",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 20,
+  "type": "gun"
+ },
+ "pointblank:mk23": {
+  "label": "mk23",
+  "ammo": "pointblank:ammo45acp",
+  "mag": 12,
+  "type": "gun"
+ },
+ "pointblank:mk48": {
+  "label": "Mk48",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 100,
+  "type": "gun"
+ },
+ "pointblank:mp5": {
+  "label": "MP5",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:mp7": {
+  "label": "MP7",
+  "ammo": "pointblank:ammo46",
+  "mag": 40,
+  "type": "gun"
+ },
+ "pointblank:p30l": {
+  "label": "P30L",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 15,
+  "type": "gun"
+ },
+ "pointblank:p90": {
+  "label": "P90",
+  "ammo": "pointblank:ammo57",
+  "mag": 50,
+  "type": "gun"
+ },
+ "pointblank:rhino": {
+  "label": "サイ",
+  "ammo": "pointblank:ammo357",
+  "mag": 6,
+  "type": "gun"
+ },
+ "pointblank:ro635": {
+  "label": "RO635",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 32,
+  "type": "gun"
+ },
+ "pointblank:scarl": {
+  "label": "スカーL タクティカル",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:sl8": {
+  "label": "SL8",
+  "ammo": "pointblank:ammo556",
+  "mag": 20,
+  "type": "gun"
+ },
+ "pointblank:smaw": {
+  "label": "Mk-153 SMAW",
+  "ammo": "pointblank:smaw_rocket",
+  "mag": 1,
+  "type": "gun"
+ },
+ "pointblank:spas12": {
+  "label": "SPAS-12",
+  "ammo": "pointblank:ammo12gauge",
+  "mag": 9,
+  "type": "gun"
+ },
+ "pointblank:star15": {
+  "label": "ST AR-15",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:tmp": {
+  "label": "TMP",
+  "ammo": "pointblank:ammo9mm",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:tti_viper": {
+  "label": "TTI Viper",
+  "ammo": "pointblank:ammo45acp",
+  "mag": 21,
+  "type": "gun"
+ },
+ "pointblank:uar10": {
+  "label": "UAR-10",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 20,
+  "type": "gun"
+ },
+ "pointblank:ump45": {
+  "label": "UMP-45 タクティカル",
+  "ammo": "pointblank:ammo45acp",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:vector": {
+  "label": "Vector",
+  "ammo": "pointblank:ammo45acp",
+  "mag": 25,
+  "type": "gun"
+ },
+ "pointblank:wa2000": {
+  "label": "WA2000",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 6,
+  "type": "gun"
+ },
+ "pointblank:xm29": {
+  "label": "XM29",
+  "ammo": "pointblank:ammo556",
+  "mag": 30,
+  "type": "gun"
+ },
+ "pointblank:xm3": {
+  "label": "XM3",
+  "ammo": "pointblank:ammo762x51",
+  "mag": 5,
+  "type": "gun"
+ },
+ "pointblank:xm7": {
+  "label": "XM7",
+  "ammo": "pointblank:ammo68",
+  "mag": 20,
+  "type": "gun"
+ }
+}
