@@ -123,7 +123,7 @@ ACTION_META = {
     "kamehameha": ("かめはめ波（上3段を吹き飛ばす）", "server", False),
     "ao": ("術式順転「蒼」（足元3×3を6段・引きずり込む）", "random", False),
     "amaterasu": ("天照（黒い炎が2段焼く）", "server", False),
-    "hekireki": ("霹靂一閃（雷の一閃で2段）", "server", False),
+    "hekireki": ("霹靂一閃（落雷の一閃で2段）", "server", False),
     "murasaki": ("虚式「茈」（上8段を消し飛ばす）", "server", False),
     "fukuma": ("領域展開「伏魔御廚子」（斬撃で穴だらけ）", "server", False),
     "bijudama": ("尾獣玉（大爆発で6段）", "server", False),
@@ -286,15 +286,8 @@ effect give @s minecraft:levitation 1 24 true
 {marker("amaterasu", 121)}
 """,
         "hekireki": f"""
-{title("雷の呼吸 壱ノ型「霹靂一閃」", "yellow")}
-execute positioned {ox - 7} 121 {oz - 1} facing {ox + 12} 121 {oz + 2} run scoreboard players set #steps um.tmp 40
-execute positioned {ox - 7} 121 {oz - 1} facing {ox + 12} 121 {oz + 2} run function {NS}:fx/beam/bolt
-execute positioned {ox + 12} 121 {oz + 2} facing {ox - 7} 121 {oz + 5} run scoreboard players set #steps um.tmp 40
-execute positioned {ox + 12} 121 {oz + 2} facing {ox - 7} 121 {oz + 5} run function {NS}:fx/beam/bolt
-particle minecraft:flash{{color:[1.0,0.95,0.4,1.0]}} {CX} 118 {CZ} 0 0 0 0 1 force
-playsound minecraft:item.trident.thunder master @a {CX} 115 {CZ} 1.2 1.3
-playsound minecraft:entity.player.attack.sweep master @a {CX} 115 {CZ} 1 0.7
-{carve_all(2)}
+{title("雷の呼吸 壱ノ型", "yellow", "霹靂一閃", "gold")}
+{fx("hekireki")}
 """,
         # ---------------- 99+ coins
         "murasaki": f"""
@@ -427,6 +420,46 @@ execute if score @s um.t matches 34 run playsound minecraft:entity.dragon_fireba
 execute if score @s um.t matches 34 run effect give @a[{IN_PIT}] minecraft:levitation 1 10 true
 execute if score @s um.t matches 34 run {rep('execute if score @s um.t matches 34 run ', carve_all(6))}
 execute if score @s um.t matches 42.. run kill @s
+""",
+        # a real lightning_bolt strikes the pit surface; its fire is cleared every tick and the field's players get
+        # fire resistance (they already have resistance 4), so nothing burns and nobody is hurt. Bolts are only
+        # heard/seen within view distance, and fields are 600 blocks apart, so other fields are untouched.
+        "hekireki": f"""
+execute if score @s um.t matches 1 run title {PL} actionbar {j(txt("雷の呼吸…", "yellow", True))}
+execute if score @s um.t matches 12 run title {PL} actionbar {j(txt("雷の呼吸 壱ノ型…", "yellow", True))}
+execute if score @s um.t matches 25 run title {PL} actionbar {j(txt("霹靂一閃ーーッ！！", "gold", True))}
+execute if score @s um.t matches 1 run playsound minecraft:entity.lightning_bolt.thunder master @a ~ ~ ~ 0.5 1.6
+execute if score @s um.t matches 1 run effect give {PL} minecraft:darkness 2 0 true
+execute if score @s um.t matches 8 run playsound minecraft:block.beacon.power_select master @a ~ ~ ~ 1 2
+execute if score @s um.t matches 16 run playsound minecraft:item.trident.riptide_1 master @a ~ ~ ~ 1 2
+execute if score @s um.t matches 1..24 run particle minecraft:electric_spark ~ ~ ~ 0.5 0.9 0.5 0.4 12 force
+execute if score @s um.t matches 1..24 run {sphere((1.0, 0.9, 0.2), 1.4, 0.4, 4)}
+execute if score @s um.t matches 12..24 run {sphere((1.0, 1.0, 0.7), 2.0, 0.7, 4)}
+execute if score @s um.t matches 18..24 run particle minecraft:end_rod ~ ~ ~ 0.4 0.6 0.4 0.08 3 force
+execute if score @s um.t matches 24 as {PL} run effect give @s minecraft:fire_resistance 12 0 true
+execute if score @s um.t matches 24 run function {FN}/surface
+execute if score @s um.t matches 24 run scoreboard players add #surf um.tmp 1
+execute if score @s um.t matches 24 store result storage {NS}:bolt y int 1 run scoreboard players get #surf um.tmp
+execute if score @s um.t matches 24..80 run fill {X0 - 2} {Y0} {Z0 - 2} {X1 + 2} 124 {Z1 + 2} minecraft:air replace #minecraft:fire
+execute if score @s um.t matches 25 run scoreboard players set #steps um.tmp 50
+execute if score @s um.t matches 25 facing {CX} 116 {CZ} run function {NS}:fx/beam/bolt
+execute if score @s um.t matches 25 run particle minecraft:flash{{color:[1.0,0.95,0.4,1.0]}} {CX} 118 {CZ} 0 0 0 0 1 force
+execute if score @s um.t matches 25 run playsound minecraft:item.trident.thunder master @a {CX} 115 {CZ} 2 1.2
+execute if score @s um.t matches 25 run playsound minecraft:entity.player.attack.sweep master @a {CX} 115 {CZ} 1.5 0.6
+execute if score @s um.t matches 25 run function {FN}/fx/bolt/c with storage {NS}:bolt
+execute if score @s um.t matches 27 run {rep('execute if score @s um.t matches 27 run ', carve_all(2))}
+execute if score @s um.t matches 27 run playsound minecraft:entity.generic.explode master @a {CX} 112 {CZ} 1.5 1.4
+execute if score @s um.t matches 28 run function {FN}/surface
+execute if score @s um.t matches 28 run scoreboard players add #surf um.tmp 1
+execute if score @s um.t matches 28 store result storage {NS}:bolt y int 1 run scoreboard players get #surf um.tmp
+execute if score @s um.t matches 29 run function {FN}/fx/bolt/a with storage {NS}:bolt
+execute if score @s um.t matches 31 run function {FN}/fx/bolt/b with storage {NS}:bolt
+execute if score @s um.t matches 33 run function {FN}/fx/bolt/d with storage {NS}:bolt
+execute if score @s um.t matches 35 run function {FN}/fx/bolt/e with storage {NS}:bolt
+execute if score @s um.t matches 26..60 run particle minecraft:electric_spark {CX} 117 {CZ} 1.6 3 1.6 0.6 10 force
+execute if score @s um.t matches 26..40 run particle minecraft:end_rod {CX} 116 {CZ} 1.6 3 1.6 0.1 4 force
+execute if score @s um.t matches 81 run kill @e[type=item,x={X0 - 2},y={Y0},z={Z0 - 2},dx={X1 - X0 + 4},dy={124 - Y0},dz={Z1 - Z0 + 4}]
+execute if score @s um.t matches 82.. run kill @s
 """,
         "murasaki": f"""
 execute if score @s um.t matches 1 run playsound minecraft:entity.illusioner.cast_spell master @a ~ ~ ~ 2 0.6
@@ -895,6 +928,15 @@ execute unless score #built {ST} matches {LAYOUT} run schedule function {FN}/bui
     for i, (x, y, z) in enumerate(CASTERS, 1):
         caster_lines.append(f"execute if score #r um.tmp matches {i} run summon minecraft:marker {x + 0.5} {y} {z + 0.5} {{Tags:[\"um.spot\"]}}")
     f(f"{FN}/fx/caster_spot", "\n".join(caster_lines))
+    # hekireki bolts (macro y = the air block just above the pit surface)
+    for key, (bx, bz) in {"c": (PX, PZ), "a": (X0 + 0.5, Z0 + 0.5), "b": (X1 + 0.5, Z1 + 0.5),
+                          "d": (X1 + 0.5, Z0 + 0.5), "e": (X0 + 0.5, Z1 + 0.5)}.items():
+        f(f"{FN}/fx/bolt/{key}", f"""
+$summon minecraft:lightning_bolt {bx} $(y) {bz}
+$particle minecraft:electric_spark {bx} $(y).5 {bz} 0.6 0.6 0.6 0.8 80 force
+$particle minecraft:flash{{color:[1.0,0.95,0.5,1.0]}} {bx} $(y).5 {bz} 0 0 0 0 1 force
+$particle minecraft:explosion {bx} $(y).5 {bz} 0.5 0.3 0.5 0 3 force
+""")
     f(f"{FN}/fx/black_flame", f"""
 $particle minecraft:dust{{color:[0.05,0.0,0.06],scale:3.0}} {CX} $(y).8 {CZ} 2 0.5 2 0 25 force
 $particle minecraft:soul_fire_flame {CX} $(y).8 {CZ} 2 0.4 2 0.02 6 force

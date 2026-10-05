@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Rcon } from '../tiktok-live/src/rcon.js';
+import { Rcon } from '../../tiktok-hub/src/core/rcon.js';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const props = fs.readFileSync(path.join(root, process.env.RCON_DIR || 'server', 'server.properties'), 'utf8');
 const get = (k) => (props.match(new RegExp(`^${k.replace('.', '\.')}=(.*)$`, 'm')) ?? [])[1]?.trim();
