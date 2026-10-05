@@ -63,6 +63,9 @@
   .kind { font-size:11px; padding:1px 6px; border-radius:4px; margin-left:4px; }
   .kind.enemy { background:#4c0f1c; color:#fda4af; } .kind.help { background:#063b3d; color:#99f6e4; }
   .fsel { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+  .pcard { background:#0b0e14; border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-top:10px; }
+  .pcard h3 { font-size:13px; margin:0 0 6px; color:var(--muted); }
+  .psum { font-size:12px; color:var(--muted); }
   .fsel button.on { background:var(--cyan); color:#05252a; border-color:var(--cyan); font-weight:700; }
   .fcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; margin-bottom:14px; }
   .fcard { background:var(--card); border:1px solid var(--line); border-left:5px solid var(--fc,#888); border-radius:9px; padding:8px 10px; cursor:pointer; }
@@ -95,7 +98,7 @@
   <button class="tab" data-p="events">フォロー・いいね・コメント</button>
   <button class="tab" data-p="game">ゲーム・フィールド</button>
   <button class="tab" data-p="mobs">敵MOB</button>
-  <button class="tab" data-p="weapons">武器</button>
+  <button class="tab" data-p="weapons">装備・武器</button>
   <button class="tab" data-p="adv">詳細</button>
 </div>
 
@@ -120,7 +123,7 @@
           <button class="primary" onclick="game('start')">▶ ゲーム開始（このフィールド）</button>
           <button onclick="game('stop')">■ 停止</button>
           <button onclick="game('clear')">敵を全部消す</button>
-          <button onclick="game('loadout')">初期装備を配り直す</button>
+          <button onclick="game('loadout')">装備を配り直す</button>
           <button onclick="assign()" title="接続設定タブの「マイクラの名前」の人をこのフィールドに入れる">配信者をこのフィールドに入れる</button>
           <button onclick="if(confirm('このフィールドを作り直します。ゲーム中なら止まります。よろしいですか？'))game('build')">このフィールドを作り直す</button>
         </div>
@@ -128,6 +131,12 @@
           <button onclick="if(confirm('待機所と、使う数のフィールドを全部作り直します。ゲーム中のものは止まります。よろしいですか？'))game('build','all')">全フィールドと待機所を作り直す</button>
           <button onclick="game('build','lobby')">待機所だけ作り直す</button>
         </div>
+        <div class="row" style="margin-top:8px">
+          <div class="tight" style="min-width:200px"><label class="f">このフィールドの装備セット（「装備・武器」タブで作る）</label><select id="g-preset"></select></div>
+          <button onclick="setPreset(false)" style="align-self:flex-end">変える</button>
+          <button class="cyan" onclick="setPreset(true)" style="align-self:flex-end">変えて今すぐ配る</button>
+        </div>
+        <p class="psum" id="g-presetsum"></p>
         <div class="msg" id="game-msg"></div>
         <p class="help" style="margin-top:8px">フィールドは同時にいくつでも動かせます。ギフトの効果はそのフィールドがゲーム中のときだけ、そのフィールドだけに起きます。プレイヤーは待機所の看板や <code>/trigger td.menu</code> で自分でフィールドを選んで「スタート」もできます。</p>
       </section>
@@ -303,21 +312,31 @@
 
 <!-- ============================================================ weapons -->
 <div class="page" id="p-weapons">
+  <section>
+    <h2>フィールドごとの装備セット</h2>
+    <p class="help">ゲーム開始・途中参加・「装備を配り直す」のときに、そのフィールドで戦う人に配るセットです（持ち物は入れ替わります）。配信者はフィールドに割り当てるので、配信者ごとに変えたいときはその人のフィールドのセットを選んでください。下の「保存」で反映、ゲーム中の人には「装備を配り直す」で届きます。</p>
+    <table><thead><tr><th style="width:60px">フィールド</th><th style="width:140px">配信者</th><th style="width:200px">装備セット</th><th>中身</th></tr></thead><tbody id="fpresets"></tbody></table>
+  </section>
   <div class="cols">
     <section>
-      <h2>初期装備（ゲーム開始時に配る）</h2>
-      <p class="help">最大9個。弾は「マガジン数」ぶん付きます。</p>
-      <div class="chips" id="loadout"></div>
-      <div class="grid2" style="margin-top:10px">
-        <div><label class="f">手りゅう弾の数</label><input id="w-grenades" type="number" min="0" max="64"></div>
-        <div><label class="f">弾のマガジン数</label><input id="w-ammoMags" type="number" min="1" max="64"></div>
+      <h2>装備セットを作る・直す</h2>
+      <p class="help">銃（最大9個、弾はマガジン数ぶん付く）・手りゅう弾・防具・そのほかのアイテム・ずっと続く効果をまとめて1セットにします。セットは何個でも作れて（最大20）、保存すると次回も残ります。</p>
+      <div class="row">
+        <select id="ps-sel" onchange="editPreset(this.value)"></select>
+        <button class="small" onclick="newPreset()">＋ 新しいセット</button>
+        <button class="small" onclick="copyPreset()">複製</button>
+        <button class="small del" onclick="delPreset()">削除</button>
       </div>
-      <label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="w-inf"> 弾を無限にする（ゲーム中、8秒ごとに減った弾を補充）</label>
+      <div id="ps-edit"></div>
     </section>
     <section>
       <h2>「武器支給」ギフトで届く武器</h2>
       <p class="help">チェックしたうちからランダムに1つ、全員に配ります。</p>
       <div class="chips" id="giftpool"></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="f">ギフトで届く弾のマガジン数</label><input id="w-ammoMags" type="number" min="1" max="64"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="w-inf"> 弾を無限にする（ゲーム中、8秒ごとに減った弾を補充）</label>
     </section>
   </div>
 </div>
@@ -349,11 +368,13 @@
   <span class="msg" id="save-msg"></span>
 </div>
 <datalist id="giftNames"></datalist>
+<datalist id="itemIds"></datalist>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 let ACTIONS = {}, MOBS = {}, WEAPONS = {}, CFG = null, COLORS = [], MAXF = 8;
+let LO = null, PRESETS = [], FIELD_PRESETS = [], editing = null;   // 装備セット (edited here, sent with 保存)
 let sel = Number(localStorage.getItem('td.field')) || 1;   // the field the controls act on
 let lastState = null;
 const CSS = { red:'#ef4444', blue:'#3b82f6', green:'#22c55e', yellow:'#eab308', aqua:'#22d3ee', light_purple:'#e879f9', gold:'#f59e0b', dark_aqua:'#0e9f9f' };
@@ -442,10 +463,15 @@ function render(s) {
     return `<div class="fcard ${f.n === sel ? 'on' : ''}" style="--fc:${CSS[f.color]}" onclick="setField(${f.n})">
       <h3><span>フィールド${f.n}</span>${st}</h3>
       <div class="s">${g.state === 1 ? `残り <b>${g.time > 0 ? mmss(g.left) : '∞'}</b> 撃破 <b>${g.kills}</b> 敵 <b>${g.enemies}</b><br>関門 <b>${g.front > 0 ? '第' + g.front + ' ' + g.gateHp : '最終'}</b> コア <b>${g.core}/${g.coreMax}</b><br>` : g.state === 2 ? `前回: <b>${g.result === 1 ? '防衛成功' : 'コア陥落'}</b> 撃破 <b>${g.kills}</b> 生存 <b>${g.elapsed}秒</b><br>` : ''}
-      人: <b>${esc(who)}</b><br>配信: <b>${esc(f.mcName || '-')}</b>${f.username ? ' @' + esc(f.username) : ''} <span class="${ttClass(f.tiktok)}">${f.username ? esc(TT[f.tiktok] ?? f.tiktok) : ''}</span>${f.queue ? `<br>キュー <b>${f.queue}</b>` : ''}</div></div>`;
+      人: <b>${esc(who)}</b><br>装備: <b>${esc(f.preset?.name ?? '-')}</b><br>配信: <b>${esc(f.mcName || '-')}</b>${f.username ? ' @' + esc(f.username) : ''} <span class="${ttClass(f.tiktok)}">${f.username ? esc(TT[f.tiktok] ?? f.tiktok) : ''}</span>${f.queue ? `<br>キュー <b>${f.queue}</b>` : ''}</div></div>`;
   }).join('');
   const f = s.fields[sel - 1];
   const g = f?.game;
+  if (LO && f?.preset && document.activeElement !== $('g-preset') && $('g-preset').dataset.f !== sel + ':' + f.preset.id) {
+    $('g-preset').value = f.preset.id; $('g-preset').dataset.f = sel + ':' + f.preset.id;
+    const p = CFG.weapons.presets.find((x) => x.id === f.preset.id);
+    $('g-presetsum').textContent = p ? '中身: ' + presetSummary(p) : '';
+  }
   $('g-title').textContent = `フィールド ${sel}`;
   $('g-title').style.color = CSS[f?.color] ?? '';
   $('g-who').textContent = `いる人: ${f.players.join(', ') || 'なし'}${f.watchers.length ? '／観戦: ' + f.watchers.join(', ') : ''}　配信者: ${f.mcName || '-'}${f.username ? ' @' + f.username + '（' + (TT[f.tiktok] ?? f.tiktok) + (f.tiktokDetail ? ' / ' + f.tiktokDetail : '') + '）' : ''}`;
@@ -509,6 +535,120 @@ function weaponChips(id, cls, selected) {
     .map(([wid, w]) => `<label><input type="checkbox" class="${cls}" value="${wid}" ${selected.includes(wid) ? 'checked' : ''}>${esc(w.label)}</label>`).join('');
 }
 
+// ---------------------------------------------------------------- 装備セット
+function presetSummary(p) {
+  const parts = [];
+  if (p.guns.length) parts.push(p.guns.map((w) => WEAPONS[w]?.label ?? w).join('・'));
+  if (p.grenades) parts.push('手りゅう弾×' + p.grenades);
+  const mats = [...new Set(LO.armorSlots.map(([k]) => p.armor[k]).filter(Boolean))];
+  if (mats.length) parts.push('防具: ' + mats.map((m) => LO.armorMaterials[m]).join('・') + (p.protection ? ' 軽減' + p.protection : '') + (p.unbreakable ? ' 壊れない' : ''));
+  if (p.items.length) parts.push(p.items.map((it) => (LO.items[it.id] ?? it.id.replace('minecraft:', '')) + '×' + it.count + (it.slot ? '（' + LO.itemSlots[it.slot] + '）' : '')).join('・'));
+  if (p.effects.length) parts.push(p.effects.map((e) => LO.effects[e.id] + (e.amp ? ' ' + (e.amp + 1) : '')).join('・'));
+  return parts.join(' / ') || '何も持たない';
+}
+const presetOptions = (list, cur) => list.map((p) => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+const P = () => PRESETS.find((x) => x.id === editing);
+function renderPresets() {
+  if (!PRESETS.some((p) => p.id === editing)) editing = PRESETS[0]?.id;
+  $('ps-sel').innerHTML = presetOptions(PRESETS, editing);
+  // the live tab picks among the saved sets only
+  $('g-preset').innerHTML = presetOptions(CFG.weapons.presets, CFG.weapons.fieldPresets[sel - 1]);
+  const names = CFG.fields.list;
+  $('fpresets').innerHTML = Array.from({ length: CFG.fields.count }, (_, i) => {
+    const p = PRESETS.find((x) => x.id === FIELD_PRESETS[i]) ?? PRESETS[0];
+    return `<tr><td><b style="color:${CSS[COLORS[i]]}">F${i + 1}</b></td><td>${esc(names[i]?.mcName || (names[i]?.tiktokUsername ? '@' + names[i].tiktokUsername : '-'))}</td>
+      <td><select onchange="FIELD_PRESETS[${i}]=this.value;renderFieldTable()">${presetOptions(PRESETS, p.id)}</select></td><td class="psum">${esc(presetSummary(p))}</td></tr>`;
+  }).join('');
+  renderEditor();
+}
+function renderFieldTable() {
+  document.querySelectorAll('#fpresets tr').forEach((tr, i) => {
+    const p = PRESETS.find((x) => x.id === FIELD_PRESETS[i]) ?? PRESETS[0];
+    tr.querySelector('.psum').textContent = presetSummary(p);
+  });
+}
+function renderEditor() {
+  const p = P();
+  if (!p) { $('ps-edit').innerHTML = ''; return; }
+  const guns = Object.entries(WEAPONS).filter(([, w]) => w.type === 'gun')
+    .map(([wid, w]) => `<label><input type="checkbox" ${p.guns.includes(wid) ? 'checked' : ''} onchange="togGun('${wid}',this)">${esc(w.label)}</label>`).join('');
+  const opts = (obj, cur) => Object.entries(obj).map(([k, l]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const lv = (cur, none) => [0, 1, 2, 3, 4].map((a) => `<option value="${a}" ${a === cur ? 'selected' : ''}>${none && !a ? 'なし' : 'レベル ' + (none ? a : a + 1)}</option>`).join('');
+  const armor = LO.armorSlots.map(([k, l]) => `<div><label class="f">${l}</label><select onchange="P().armor.${k}=this.value;changed()">${opts(LO.armorMaterials, p.armor[k])}</select></div>`).join('');
+  const items = p.items.map((it, i) => `<tr>
+      <td style="min-width:150px"><input list="itemIds" value="${esc(it.id)}" placeholder="minecraft:golden_apple" onchange="P().items[${i}].id=this.value.trim();changed()"></td>
+      <td style="width:76px"><input type="number" min="1" max="256" value="${it.count}" onchange="P().items[${i}].count=Number(this.value);changed()"></td>
+      <td><input value="${esc(it.ench)}" placeholder="例: sharpness:5" onchange="P().items[${i}].ench=this.value.trim();changed()"></td>
+      <td style="width:110px"><select onchange="P().items[${i}].slot=this.value;changed()">${opts(LO.itemSlots, it.slot)}</select></td>
+      <td><button class="small del" onclick="P().items.splice(${i},1);changed(true)">×</button></td></tr>`).join('');
+  const effs = p.effects.map((e, i) => `<tr>
+      <td><select onchange="P().effects[${i}].id=this.value;changed()">${opts(LO.effects, e.id)}</select></td>
+      <td style="width:110px"><select onchange="P().effects[${i}].amp=Number(this.value);changed()">${lv(e.amp, false)}</select></td>
+      <td><button class="small del" onclick="P().effects.splice(${i},1);changed(true)">×</button></td></tr>`).join('');
+  $('ps-edit').innerHTML = `
+    <div class="grid2" style="margin-top:6px">
+      <div><label class="f">セットの名前</label><input value="${esc(p.name)}" maxlength="24" onchange="P().name=this.value.trim()||'セット';renderPresets()"></div>
+      <div><label class="f">手りゅう弾の数</label><input type="number" min="0" max="64" value="${p.grenades}" onchange="P().grenades=Number(this.value);changed()"></div>
+      <div><label class="f">弾のマガジン数（銃1丁あたり）</label><input type="number" min="1" max="64" value="${p.ammoMags}" onchange="P().ammoMags=Number(this.value);changed()"></div>
+    </div>
+    <div class="pcard"><h3>銃（${p.guns.length}/9）</h3><div class="chips">${guns}</div></div>
+    <div class="pcard"><h3>防具（はじめから着ている）</h3><div class="grid2">${armor}
+      <div><label class="f">ダメージ軽減のエンチャント</label><select onchange="P().protection=Number(this.value);changed()">${lv(p.protection, true)}</select></div></div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" ${p.unbreakable ? 'checked' : ''} onchange="P().unbreakable=this.checked;changed()"> 防具が壊れない</label></div>
+    <div class="pcard"><h3>そのほかのアイテム（最大${LO.maxItems}個）</h3>
+      ${p.items.length ? `<table><thead><tr><th>アイテム</th><th>数</th><th>エンチャント</th><th>場所</th><th></th></tr></thead><tbody>${items}</tbody></table>` : '<p class="help">なし</p>'}
+      <button class="small" onclick="if(P().items.length<LO.maxItems){P().items.push({id:'minecraft:golden_apple',count:1,ench:'',slot:''});changed(true)}">＋ アイテムを足す</button>
+      <p class="help" style="margin-top:6px">候補から選ぶか、アイテムの ID を直接入れます（例: minecraft:ender_pearl）。エンチャントは「sharpness:5,unbreaking:3」の形。</p></div>
+    <div class="pcard"><h3>ずっと続く効果（最大${LO.maxEffects}個）</h3>
+      ${p.effects.length ? `<table><tbody>${effs}</tbody></table>` : '<p class="help">なし</p>'}
+      <button class="small" onclick="if(P().effects.length<LO.maxEffects){P().effects.push({id:'speed',amp:0});changed(true)}">＋ 効果を足す</button></div>
+    <p class="psum" id="ps-sum" style="margin-top:8px">中身: ${esc(presetSummary(p))}</p>`;
+}
+function changed(redraw) {
+  if (redraw) renderEditor();
+  else { const e = $('ps-sum'); if (e) e.textContent = '中身: ' + presetSummary(P()); }
+  renderFieldTable();
+}
+function togGun(wid, box) {
+  const p = P();
+  if (box.checked) {
+    if (p.guns.length >= 9) { box.checked = false; alert('銃は9個までです'); return; }
+    p.guns.push(wid);
+  } else p.guns = p.guns.filter((w) => w !== wid);
+  changed(true);
+}
+function editPreset(id) { editing = id; renderEditor(); }
+function uniqueId(base) { let i = 1, id = base; while (PRESETS.some((p) => p.id === id)) id = base + '-' + (++i); return id; }
+function newPreset() {
+  if (PRESETS.length >= LO.maxPresets) return alert(`セットは ${LO.maxPresets} 個までです`);
+  const p = { id: uniqueId('set' + (PRESETS.length + 1)), name: '新しいセット', guns: [], grenades: 0, ammoMags: 8,
+    armor: { head: '', chest: '', legs: '', feet: '' }, protection: 0, unbreakable: false, items: [], effects: [] };
+  PRESETS.push(p); editing = p.id; renderPresets();
+}
+function copyPreset() {
+  const src = P();
+  if (!src) return;
+  if (PRESETS.length >= LO.maxPresets) return alert(`セットは ${LO.maxPresets} 個までです`);
+  const p = { ...structuredClone(src), id: uniqueId(src.id + '-copy'), name: (src.name + ' のコピー').slice(0, 24) };
+  PRESETS.push(p); editing = p.id; renderPresets();
+}
+function delPreset() {
+  if (PRESETS.length <= 1) return alert('セットは1つ以上必要です');
+  const p = P();
+  if (!p || !confirm(`「${p.name}」を消します（保存で確定）。このセットを使っているフィールドは最初のセットになります。`)) return;
+  PRESETS = PRESETS.filter((x) => x.id !== p.id);
+  FIELD_PRESETS = FIELD_PRESETS.map((id) => (id === p.id ? PRESETS[0].id : id));
+  editing = PRESETS[0].id; renderPresets();
+}
+async function setPreset(give) {
+  const r = await post('api/loadout', { field: sel, preset: $('g-preset').value, give });
+  $('game-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad'); $('game-msg').textContent = r.message ?? '';
+  if (r.ok) {
+    CFG.weapons.fieldPresets[sel - 1] = $('g-preset').value; FIELD_PRESETS[sel - 1] = $('g-preset').value;
+    $('g-preset').dataset.f = ''; renderPresets();
+  }
+}
+
 async function loadConfig() {
   const d = await (await fetch('api/config')).json();
   ACTIONS = d.actions; MOBS = d.mobs; WEAPONS = d.weapons; CFG = d.config;
@@ -541,9 +681,11 @@ async function loadConfig() {
     ['hp', 'speed', 'scale', 'dmg', 'atk'].map((k) => `<td><input class="mob" data-m="${m}" data-k="${k}" type="number" step="${k === 'speed' || k === 'scale' ? '0.01' : '1'}" value="${c.mobs[m][k]}"></td>`).join('') + '</tr>').join('');
   $('counts').innerHTML = Object.entries(ACTIONS).map(([id, a]) =>
     `<div><label class="f">${esc(a.label)}${kindTag(a)}</label><input class="cnt" data-a="${id}" type="number" min="1" max="50" value="${c.actionCounts[id] ?? 1}"></div>`).join('');
-  weaponChips('loadout', 'w-lo', c.weapons.loadout);
+  LO = d.loadoutInfo; PRESETS = structuredClone(c.weapons.presets); FIELD_PRESETS = [...c.weapons.fieldPresets];
+  $('itemIds').innerHTML = Object.entries(LO.items).map(([id, l]) => `<option value="${id}">${esc(l)}</option>`).join('');
+  renderPresets(); $('g-preset').dataset.f = '';
   weaponChips('giftpool', 'w-gp', c.weapons.giftPool);
-  $('w-grenades').value = c.weapons.grenades; $('w-ammoMags').value = c.weapons.ammoMags; $('w-inf').checked = c.weapons.infiniteAmmo;
+  $('w-ammoMags').value = c.weapons.ammoMags; $('w-inf').checked = c.weapons.infiniteAmmo;
   $('cfgfile').textContent = d.configFile;
   $('giftNames').innerHTML = d.recentGifts.map((g) => `<option value="${esc(g.name)}">${g.coins}コイン</option>`).join('')
     + ['Rose', 'TikTok', 'GG', 'Finger Heart', 'Doughnut', 'Heart Me', 'Ice Cream Cone', 'Perfume', 'Hand Hearts', 'Galaxy', 'Lion', 'Universe']
@@ -599,9 +741,9 @@ function collect() {
     cooldownSec, fallbackAction: $('c-fallback').value,
     actionCounts, game: gameCfg, mobs, field,
     weapons: {
-      loadout: [...document.querySelectorAll('.w-lo:checked')].map((i) => i.value),
       giftPool: [...document.querySelectorAll('.w-gp:checked')].map((i) => i.value),
-      grenades: Number($('w-grenades').value), ammoMags: Number($('w-ammoMags').value), infiniteAmmo: $('w-inf').checked,
+      ammoMags: Number($('w-ammoMags').value), infiniteAmmo: $('w-inf').checked,
+      presets: PRESETS, fieldPresets: FIELD_PRESETS,
     },
   };
 }

@@ -11,6 +11,7 @@ import { rconTest } from '../../core/rcon-test.js';
 import { json, readBody, clean, pick, actionsForGift, readJson } from '../../core/util.js';
 import { arenaCommands, lobbyCommands, fieldShape, FIELD_COLORS } from './arena.js';
 import { validateConfig, setupServer, GAME_LIMITS } from './config.js';
+import { presetEntries, presetSummary, ARMOR_MATERIALS, ARMOR_SLOTS, EFFECTS, ITEM_SLOTS, ITEM_SUGGESTIONS, MAX_ITEMS, MAX_EFFECTS, MAX_PRESETS } from './loadout.js';
 
 export const meta = {
   id: 'defense', title: 'TikTok Defense（銃MOD ディフェンス）', short: 'ディフェンス', icon: '🔫', fieldWord: 'フィールド',
@@ -173,12 +174,33 @@ export function createGame(ctx) {
     await rcon.command(`function td:f${n}/weapon {id:"${w}",ammo:"${ammo}",n:${cnt},label:"${clean(info.label, 40)}"}`);
   }
 
-  function loadoutSnbt() {
-    const order = [...config.weapons.loadout].sort((a, b) => (WEAPONS[b].mag ?? 0) - (WEAPONS[a].mag ?? 0));
-    const guns = order.map((w) => `{id:"${w}",count:1}`);
-    const ammo = config.weapons.loadout.filter((w) => WEAPONS[w].ammo).map((w) => `{id:"${WEAPONS[w].ammo}",count:${ammoCount(w)}}`);
-    const nades = config.weapons.grenades > 0 ? [`{id:"pointblank:grenade",count:${config.weapons.grenades}}`] : [];
-    return `[${[...guns, ...nades, ...ammo].join(',')}]`;
+  const presetOf = (n) => {
+    const ps = config.weapons.presets;
+    return ps.find((p) => p.id === config.weapons.fieldPresets[n - 1]) ?? ps[0];
+  };
+
+  // writes the field's set to storage td:cfg lo.f<n> (built in pieces: one RCON command must stay short).
+  // pushedLoadout remembers what the server has, so starting a game does not resend everything.
+  let pushedLoadout = {};
+  async function pushLoadout(key, entries) {
+    const snbt = `[${entries.join(',')}]`;
+    if (pushedLoadout[key] === snbt) return;
+    await rcon.command('data modify storage td:tmp lob set value []');
+    let chunk = [];
+    const flush = async () => {
+      if (!chunk.length) return;
+      await rcon.command(`data modify storage td:tmp lop set value [${chunk.join(',')}]`);
+      await rcon.command('data modify storage td:tmp lob append from storage td:tmp lop[]');
+      chunk = [];
+    };
+    for (const e of entries) {
+      if (chunk.join(',').length + e.length > 900) await flush();
+      chunk.push(e);
+    }
+    await flush();
+    const out = await rcon.command(`data modify storage td:cfg ${key} set from storage td:tmp lob`);
+    if (/Unknown|Incorrect|Expected|Invalid/i.test(out)) throw new Error(`装備セットを送れませんでした: ${out}`);
+    pushedLoadout[key] = snbt;
   }
 
   const streamerLabel = (n) => {
@@ -194,7 +216,8 @@ export function createGame(ctx) {
       `${m}:{hp:${s.hp},speed:${s.speed},scale:${s.scale},dmg:${s.dmg},atk:${s.atk}}`).join(',');
     await rcon.command(`data modify storage td:cfg mobs set value {${mobs}}`);
     await rcon.command(`data modify storage td:cfg game set value {r:${g.spread},avatar:${g.avatarScale}f}`);
-    await rcon.command(`data modify storage td:cfg loadout set value ${loadoutSnbt()}`);
+    for (let n = 1; n <= config.fields.count; n++) await pushLoadout(`lo.f${n}`, presetEntries(presetOf(n), WEAPONS));
+    await pushLoadout('loadout', presetEntries(presetOf(1), WEAPONS));
     for (let n = 1; n <= MAXF; n++) {
       const label = n <= config.fields.count ? streamerLabel(n) : '';
       if (label) {
@@ -205,6 +228,20 @@ export function createGame(ctx) {
         await rcon.command(`scoreboard players set #rsv td.f${n} 0`);
       }
     }
+  }
+
+  // asks the server whether every item of the sets can be given (unknown ids / enchantments are skipped by the game)
+  async function checkPresetItems() {
+    if (state.rcon !== 'connected') return [];
+    const bad = [];
+    for (const p of config.weapons.presets) {
+      for (const it of p.items) {
+        const ench = it.ench ? `[enchantments={${it.ench}}]` : '';
+        const out = await rcon.command(`give @a[name=td_check_only] ${it.id}${ench} 1`);
+        if (!/No player was found/i.test(out)) bad.push(`「${p.name}」の ${it.id}${it.ench ? `（${it.ench}）` : ''}`);
+      }
+    }
+    return bad;
   }
 
   let building = false;
@@ -249,7 +286,7 @@ export function createGame(ctx) {
   async function topUpAmmo() {
     if (!config.weapons.infiniteAmmo || state.rcon !== 'connected') return;
     const types = new Set();
-    for (const w of [...config.weapons.loadout, ...config.weapons.giftPool]) if (WEAPONS[w].ammo) types.add(WEAPONS[w].ammo);
+    for (const w of [...config.weapons.presets.flatMap((p) => p.guns), ...config.weapons.giftPool]) if (WEAPONS[w].ammo) types.add(WEAPONS[w].ammo);
     for (const n of fieldIds()) {
       if (F[n].game?.state !== 1) continue;
       const sel = `@a[scores={td.fld=${n}},gamemode=!spectator]`;
@@ -430,6 +467,7 @@ export function createGame(ctx) {
       if (state.rcon !== 'connected') {
         state.rcon = 'connected';
         state.rconDetail = '';
+        pushedLoadout = {};
         await pushGameSettings().catch((e) => log('warn', `設定を送れませんでした: ${e.message}`));
       }
     } catch (err) {
@@ -478,7 +516,7 @@ export function createGame(ctx) {
     start: ['start', 'ゲームを開始しました'],
     stop: ['stop', 'ゲームを止めました'],
     clear: ['clear', '敵を全部消しました'],
-    loadout: ['loadout', '初期装備を配り直しました'],
+    loadout: ['loadout', '装備を配り直しました'],
   };
 
   function stateJson() {
@@ -488,7 +526,7 @@ export function createGame(ctx) {
       return {
         n, color: FIELD_COLORS[n - 1], game: f.game, tiktok: f.tiktok, tiktokDetail: f.tiktokDetail,
         username: s.tiktokUsername, mcName: s.mcName, queue: f.queue.length, coins: f.coins, totalLikes: f.totalLikes,
-        players: f.players, watchers: f.watchers,
+        players: f.players, watchers: f.watchers, preset: { id: presetOf(n).id, name: presetOf(n).name },
       };
     });
     const f1 = fields[0];
@@ -513,7 +551,12 @@ export function createGame(ctx) {
       });
     }
     if (req.method === 'GET' && p === '/api/config') {
-      return json(res, { config: { ...config, signApiKey: ctx.signApiKey() }, actions: ACTIONS, mobs: META.mobs, weapons: WEAPONS, maxFields: MAXF, colors: FIELD_COLORS, recentGifts: [...recentGifts.values()], configFile: ctx.configFile() });
+      const loadoutInfo = {
+        armorMaterials: ARMOR_MATERIALS, armorSlots: ARMOR_SLOTS.map(([k, , , label]) => [k, label]), effects: EFFECTS,
+        itemSlots: ITEM_SLOTS, items: ITEM_SUGGESTIONS, maxItems: MAX_ITEMS, maxEffects: MAX_EFFECTS, maxPresets: MAX_PRESETS,
+        summaries: Object.fromEntries(config.weapons.presets.map((p) => [p.id, presetSummary(p, WEAPONS)])),
+      };
+      return json(res, { config: { ...config, signApiKey: ctx.signApiKey() }, loadoutInfo, actions: ACTIONS, mobs: META.mobs, weapons: WEAPONS, maxFields: MAXF, colors: FIELD_COLORS, recentGifts: [...recentGifts.values()], configFile: ctx.configFile() });
     }
     if (req.method === 'POST' && p === '/api/config') {
       try {
@@ -521,6 +564,8 @@ export function createGame(ctx) {
         const { fieldChanged } = await store(next, true);
         log('info', '設定を保存しました');
         const notes = ['保存して反映しました。'];
+        const bad = await checkPresetItems().catch(() => []);
+        if (bad.length) notes.push(`ただし、サーバーが受け付けないアイテムがあります（配られません）: ${bad.join('、')}`);
         if (fieldChanged) notes.push('フィールドの形・数・間隔は「全フィールドと待機所を作り直す」を押すと変わります。');
         return json(res, { ok: true, message: notes.join('') });
       } catch (err) {
@@ -552,12 +597,36 @@ export function createGame(ctx) {
         if (!g) return json(res, { ok: false, message: 'unknown command' }, 400);
         const n = fieldNum(b.field);
         if (b.cmd === 'start') { F[n].queue.length = 0; await pushGameSettings(); }
+        if (b.cmd === 'loadout') await pushGameSettings();
         const out = await rcon.command(`function td:f${n}/${g[0]}`);
         if (/Unknown|Incorrect/i.test(out)) throw new Error(out);
         if (b.cmd === 'start' || b.cmd === 'stop') F[n].queue.length = 0;
         log('info', g[1], n);
         await readGame().catch(() => {});
         return json(res, { ok: true, message: `フィールド${n}: ${g[1]}` });
+      } catch (err) {
+        return json(res, { ok: false, message: err.message }, 500);
+      }
+    }
+    if (req.method === 'POST' && p === '/api/loadout') {
+      // pick the field's 装備セット (and give it right away when asked)
+      const b = await readBody(req);
+      const n = fieldNum(b.field);
+      const preset = config.weapons.presets.find((x) => x.id === b.preset);
+      if (!preset) return json(res, { ok: false, message: 'その装備セットはありません' }, 400);
+      try {
+        const fieldPresets = [...config.weapons.fieldPresets];
+        fieldPresets[n - 1] = preset.id;
+        await store(validateConfig({ ...config, weapons: { ...config.weapons, fieldPresets } }, META, WEAPONS), false);
+        log('info', `装備セットを「${preset.name}」にしました`, n);
+        let note = '';
+        if (b.give) {
+          if (state.rcon !== 'connected') throw new Error('サーバーにつながっていません');
+          await pushGameSettings();
+          await rcon.command(`function td:f${n}/loadout`);
+          note = '（フィールドにいる人に配り直しました）';
+        }
+        return json(res, { ok: true, message: `フィールド${n} の装備セット: ${preset.name}${note}` });
       } catch (err) {
         return json(res, { ok: false, message: err.message }, 500);
       }

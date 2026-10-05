@@ -371,11 +371,10 @@ scoreboard players operation @e[tag=td.core,tag=@@FT] td.hp = #coreHp td.cfg
 execute as @e[tag=td.gate,tag=@@FT] run function td:gate/reset
 function td:f@@N/gate/front
 gamemode adventure @a[scores={td.fld=@@N},gamemode=!spectator,gamemode=!creative]
-effect clear @@FP
+execute as @@FP run function td:loadout_self
 effect give @@FP minecraft:instant_health 1 5 true
 effect give @@FP minecraft:saturation 5 5 true
 function td:f@@N/gate/moveplayers
-execute as @@FP run function td:loadout_self
 function td:f@@N/hud
 title @@FA subtitle {text:"関門を守り抜け！",color:"yellow"}
 title @@FA title {text:"防衛開始",color:"gold",bold:true}
@@ -711,18 +710,28 @@ damage @s 200 minecraft:explosion
 """)
 
     # ------------------------------------------------------------- loadout (run as the player)
+    # each field can have its own set (storage td:cfg lo.fN, written by the app); td:cfg loadout is the fallback.
+    # entries: {id,count} = give, {id,count,slot} = put in that slot (armor.head, weapon.offhand ...),
+    # {eff,amp} = endless effect
     F["loadout_self"] = fn(f"""
 clear @s
+effect clear @s
 data modify storage td:tmp list set from storage td:cfg loadout
+""" + "".join(f"execute if score @s td.fld matches {n} if data storage td:cfg lo.f{n} run data modify storage td:tmp list set from storage td:cfg lo.f{n}\n"
+              for n in range(1, MAX_FIELDS + 1)) + f"""
 function {NS}:loadout_loop
 """)
     F["loadout_loop"] = fn(f"""
 execute unless data storage td:tmp list[0] run return 0
-function {NS}:give with storage td:tmp list[0]
+execute if data storage td:tmp list[0].eff run function {NS}:give_eff with storage td:tmp list[0]
+execute unless data storage td:tmp list[0].eff if data storage td:tmp list[0].slot run function {NS}:give_slot with storage td:tmp list[0]
+execute unless data storage td:tmp list[0].eff unless data storage td:tmp list[0].slot run function {NS}:give with storage td:tmp list[0]
 data remove storage td:tmp list[0]
 function {NS}:loadout_loop
 """)
     F["give"] = "$give @s $(id) $(count)\n"
+    F["give_slot"] = "$item replace entity @s $(slot) with $(id) $(count)\n"
+    F["give_eff"] = "$effect give @s $(eff) infinite $(amp) true\n"
 
     # ------------------------------------------------------------- players: waiting area, menu
     F["p/first"] = fn(f"""

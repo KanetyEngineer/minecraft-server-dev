@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { validateLoadouts } from './loadout.js';
 
 
 const int = (v, min, max, def) => {
@@ -126,6 +127,7 @@ export function validateConfig(input, meta, weapons) {
   const isWeapon = (w) => typeof w === 'string' && Object.hasOwn(weapons, w);
   out.weapons.loadout = [...new Set((c.weapons?.loadout ?? []).filter(isWeapon))].slice(0, 9);
   out.weapons.giftPool = [...new Set((c.weapons?.giftPool ?? []).filter(isWeapon))];
+  validateLoadouts(c, out, weapons, maxF); // 装備セット and which one each field uses
   return out;
 }
 
