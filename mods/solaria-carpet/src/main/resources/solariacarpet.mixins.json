@@ -9,7 +9,11 @@
     "ProjectileUtilMixin",
     "ThrowableProjectileMixin",
     "ServerChunkCacheMixin",
-    "ThreadedLevelLightEngineMixin"
+    "ThreadedLevelLightEngineMixin",
+    "AbstractVillagerMixin",
+    "AbstractVillagerAccessor"
   ],
-  "injectors": { "defaultRequire": 1 }
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

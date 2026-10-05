@@ -21,5 +21,9 @@
   "carpet.rule.lightSuppressionTasksPerTick.extra.0": "小さいほど光抑制装置を作りやすく、大きいほど普段の明るさの反映が速くなります",
   "carpet.rule.lightSuppressionMaxQueue.name": "光抑制の処理待ちの上限",
   "carpet.rule.lightSuppressionMaxQueue.desc": "lightSuppression 中に溜まる光の更新の上限（0 で無制限）",
-  "carpet.rule.lightSuppressionMaxQueue.extra.0": "上限を超えた分は全力で処理します。新しいチャンクの読み込みは処理待ちが片付くまで待つので、上限が大きいほどサーバーが長く止まります（目安: 30万で約8秒）"
+  "carpet.rule.lightSuppressionMaxQueue.extra.0": "上限を超えた分は全力で処理します。新しいチャンクの読み込みは処理待ちが片付くまで待つので、上限が大きいほどサーバーが長く止まります（目安: 30万で約8秒）",
+  "carpet.rule.voidTrading.name": "voidTrading",
+  "carpet.rule.voidTrading.desc": "虚空取引を復活させます。村人がアンロードされたりポータルをくぐったりしても取引画面が閉じません",
+  "carpet.rule.voidTrading.extra.0": "アンロード中の取引は村人に保存されないので、取引がロックされず、割引もリセットされません",
+  "carpet.rule.voidTrading.extra.1": "1.20.5 以降のバニラではこの場合に画面が閉じます"
 }

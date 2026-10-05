@@ -14,5 +14,9 @@
   "carpet.rule.lightSuppressionTasksPerTick.extra.0": "Lower makes suppressors easier to build, higher keeps normal lighting faster",
   "carpet.rule.lightSuppressionMaxQueue.name": "Light suppression queue cap",
   "carpet.rule.lightSuppressionMaxQueue.desc": "Maximum light tasks queued while lightSuppression is on (0 = no cap)",
-  "carpet.rule.lightSuppressionMaxQueue.extra.0": "Above the cap the queue is processed at full speed. Loading a new chunk waits for the queue, so a higher cap means longer server freezes (about 8 s at 300000)"
+  "carpet.rule.lightSuppressionMaxQueue.extra.0": "Above the cap the queue is processed at full speed. Loading a new chunk waits for the queue, so a higher cap means longer server freezes (about 8 s at 300000)",
+  "carpet.rule.voidTrading.name": "voidTrading",
+  "carpet.rule.voidTrading.desc": "Brings back void trading: the trade screen stays open when the villager is unloaded or goes through a portal",
+  "carpet.rule.voidTrading.extra.0": "Trades made while the villager is unloaded are not saved to it, so they do not lock and discounts are not reset",
+  "carpet.rule.voidTrading.extra.1": "Since 1.20.5 vanilla closes the screen in that case"
 }

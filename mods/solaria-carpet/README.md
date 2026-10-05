@@ -15,6 +15,7 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの Carpet 拡張。サーバ�
 | `lightSuppression` | false | 昔の光抑制装置が使えるようにする（1 tick に処理する光の更新に上限を設ける） |
 | `lightSuppressionTasksPerTick` | 2000 | 光抑制中に 1 tick で処理する光の更新の数（1000 単位で切り上げ） |
 | `lightSuppressionMaxQueue` | 300000 | 光抑制中に溜まる処理待ちの上限（超えた分は全力で処理、0 で無制限） |
+| `voidTrading` | false | 虚空取引の復活。村人がアンロードされたりポータルをくぐったりしても取引画面が閉じない |
 
 ```
 /carpet potionDupe true
@@ -29,6 +30,9 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの Carpet 拡張。サーバ�
 古い光エンジンをそのまま再現したものではないので、装置によっては挙動が違うことがある。
 
 Potion Dupe Restore とは同時に入れられない（同じ処理を書き換えるため）。
+
+### 虚空取引について
+1.20.5 以降のバニラでは、取引中の村人がアンロードされたりポータルで別のディメンションへ移ったりすると取引画面が閉じる。`voidTrading` を true にすると、その場合も画面が開いたままになり、昔のように世界から消えた村人と取引を続けられる。この間の取引は村人に保存されないので、取引はロックされず、割引（治療・村の英雄）もリセットされない。村人が倒されたときや消されたときは今までどおり閉じる。
 
 ## ビルド
 GitHub Actions（`.github/workflows/solaria-carpet.yml`）でビルドする。
