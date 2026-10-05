@@ -8,7 +8,7 @@ routes = [{ pattern = "pass.sharytech.com", custom_domain = true }]
 # 初回だけ: npx wrangler kv namespace create PASS を実行して出てきた id をここに書く
 [[kv_namespaces]]
 binding = "PASS"
-id = "REPLACE_WITH_KV_ID"
+id = "ab8d813bdc74433eb23443621b44c127"
 
 [vars]
 PRODUCT_NAME = "SharyTech Games 参加券"
