@@ -1,0 +1,82 @@
+{
+  "presets": {
+    "1": {
+      "name": "標準",
+      "size": "5×5×20",
+      "total": 500
+    },
+    "2": {
+      "name": "ミニ",
+      "size": "4×4×12",
+      "total": 192
+    }
+  },
+  "fields": [
+    {
+      "n": 1,
+      "preset": 1,
+      "x": 0,
+      "z": 0,
+      "w": 5,
+      "presetName": "標準",
+      "size": "5×5×20",
+      "total": 500,
+      "color": "aqua"
+    },
+    {
+      "n": 2,
+      "preset": 1,
+      "x": 600,
+      "z": 0,
+      "w": 5,
+      "presetName": "標準",
+      "size": "5×5×20",
+      "total": 500,
+      "color": "green"
+    },
+    {
+      "n": 3,
+      "preset": 1,
+      "x": 1200,
+      "z": 0,
+      "w": 5,
+      "presetName": "標準",
+      "size": "5×5×20",
+      "total": 500,
+      "color": "yellow"
+    },
+    {
+      "n": 4,
+      "preset": 1,
+      "x": 1800,
+      "z": 0,
+      "w": 5,
+      "presetName": "標準",
+      "size": "5×5×20",
+      "total": 500,
+      "color": "light_purple"
+    },
+    {
+      "n": 5,
+      "preset": 2,
+      "x": 2400,
+      "z": 0,
+      "w": 4,
+      "presetName": "ミニ",
+      "size": "4×4×12",
+      "total": 192,
+      "color": "gold"
+    },
+    {
+      "n": 6,
+      "preset": 2,
+      "x": 3000,
+      "z": 0,
+      "w": 4,
+      "presetName": "ミニ",
+      "size": "4×4×12",
+      "total": 192,
+      "color": "red"
+    }
+  ]
+}
