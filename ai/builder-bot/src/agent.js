@@ -281,6 +281,22 @@ export class Agent {
     }, 5000);
   }
 
+  // 見張り: 体の動き（物理演算）が止まったら接続し直す。足元のチャンクの情報が消えるなどで mineflayer の物理演算が
+  // 止まると、経路探索も何もしなくなり、試験では 10 分以上その場で止まり続けた（寝ている間・死んでいる間は除く）
+  watchPhysics() {
+    const { bot } = this;
+    this.lastTick = Date.now();
+    bot.on('physicsTick', () => { this.lastTick = Date.now(); });
+    this.physicsTimer = setInterval(() => {
+      if (!bot.entity || this.stopped || bot.isSleeping || bot.isAlive === false) { this.lastTick = Date.now(); return; }
+      if (Date.now() - this.lastTick < 20_000) return;
+      const loaded = bot.blockAt(bot.entity.position) ? 'ある' : '無い';
+      log.warn(`体の動き（物理演算）が 20 秒止まっている（足元のチャンクの情報が${loaded}）。接続し直す`);
+      this.lastTick = Date.now();
+      try { bot.quit('物理演算が止まったので接続し直す'); } catch {}
+    }, 5000);
+  }
+
   // ---------- メインループ ----------
 
   stop() {
@@ -288,6 +304,7 @@ export class Agent {
     clearInterval(this.threatTimer);
     clearInterval(this.controlTimer);
     clearInterval(this.stuckTimer);
+    clearInterval(this.physicsTimer);
     this.abort('終了');
   }
 
@@ -297,6 +314,7 @@ export class Agent {
     this.watchControlFile();
     this.watchDeath();
     this.watchStuck();
+    this.watchPhysics();
     this.job = this.loadJob();
     if (!this.job && cfg.buildFile && cfg.buildOrigin) {
       if (cfg.buildOrigin === 'here') for (let i = 0; i < 40 && !bot.entity.onGround; i++) await sleep(250); // 着地を待つ
