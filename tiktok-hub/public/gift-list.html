@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ギフト一覧（OBS）</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  canvas { display: block; }
+  #err { color: #fff; font: 14px sans-serif; text-shadow: 0 0 3px #000; padding: 8px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="err"></div>
+<script>
+// OBS browser source: the gift → action list of one streamer as a transparent picture.
+//   /gift-list?game=<game>&field=<番号>   (or &streamer=<id>)
+// options: w=幅(560) size=文字(22) bg=0（背景なし・文字のふちどりだけ） tiers=0 other=0 title=見出し accent=色(fe2c55)
+// It re-reads the list every few seconds, so changes in the hub show up without touching OBS.
+const q = new URLSearchParams(location.search);
+const opt = {
+  w: Math.max(240, Math.min(2000, Number(q.get('w')) || 560)),
+  size: Math.max(10, Math.min(80, Number(q.get('size')) || 22)),
+  bg: q.get('bg') !== '0',
+  tiers: q.get('tiers') !== '0',
+  other: q.get('other') !== '0',
+  gifts: q.get('gifts') !== '0',
+  title: q.get('title'),
+  accent: '#' + String(q.get('accent') || 'fe2c55').replace(/[^0-9a-f]/gi, '').slice(0, 6),
+};
+const FONT = '"Yu Gothic UI","Meiryo","Hiragino Sans",sans-serif';
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+
+// gift names in the rules -> one entry per gift (TikTok sends English or Japanese names, the rules list both)
+// d.gifts: rule name -> TikTok's gift { id (picture), name, coins }
+function giftGroups(d) {
+  const byName = d.rules.giftRules?.byName ?? {};
+  const known = d.known ?? [];
+  const groups = new Map(); // action -> { keys, names, coins, imgs }
+  for (const [name, action] of Object.entries(byName)) {
+    const cat = d.gifts?.[name];
+    const k = known.find((x) => x.ja === name || x.en === name || (cat && x.en.toLowerCase() === cat.name.toLowerCase()));
+    const key = cat?.id ?? k?.en ?? name;
+    const grp = groups.get(action) ?? { action, keys: [], names: [], coins: [], imgs: [] };
+    if (!grp.keys.includes(key)) {
+      grp.keys.push(key);
+      grp.names.push(k?.ja ?? cat?.name ?? name);
+      grp.coins.push(cat?.coins ?? k?.coins ?? null);
+      if (cat?.id) grp.imgs.push(cat.id);
+    }
+    groups.set(action, grp);
+  }
+  // one row per gift, cheapest first; gifts that do the same thing share a row
+  const rows = [...groups.values()].map((grp) => ({
+    left: grp.names.join('・'),
+    coin: grp.coins.length === 1 && grp.coins[0] ? grp.coins[0] : null,
+    sort: Math.min(...grp.coins.map((c) => c ?? 1e9)),
+    right: d.actions[grp.action] ?? grp.action,
+    imgs: grp.imgs.slice(0, 3),
+  }));
+  return rows.sort((a, b) => a.sort - b.sort);
+}
+
+// gift pictures, loaded once through the hub (same origin, so the canvas can still be saved as a PNG)
+const pics = new Map(); // id -> Image (or null when it could not be loaded)
+function loadPics(d) {
+  const ids = Object.values(d.gifts ?? {}).map((x) => x.id).filter((id) => !pics.has(id));
+  return Promise.all(ids.map((id) => new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => { pics.set(id, im); resolve(); };
+    im.onerror = () => { pics.set(id, null); resolve(); };
+    im.src = '/gift-img/' + id;
+  })));
+}
+
+function tierRows(d) {
+  const tiers = [...(d.rules.giftRules?.tiers ?? [])].sort((a, b) => a.minCoins - b.minCoins);
+  return tiers.map((t, i) => {
+    const next = tiers[i + 1];
+    const range = next ? (next.minCoins - 1 > t.minCoins ? `${t.minCoins}〜${next.minCoins - 1}` : `${t.minCoins}`) : `${t.minCoins}〜`;
+    const labels = t.actions.map((a) => d.actions[a] ?? a);
+    const right = t.pick === 'all' ? labels.join(' ＋ ') : labels.join(' / ') + (labels.length > 1 ? ' のどれか' : '');
+    return { left: `${range} コイン`, right };
+  });
+}
+
+function otherRows(d) {
+  const r = d.rules;
+  const act = (a) => d.actions[a] ?? a;
+  const out = [];
+  if (r.follow) out.push({ left: 'フォロー', right: act(r.follow) });
+  if (r.share) out.push({ left: 'シェア', right: act(r.share) });
+  if (r.subscribe) out.push({ left: 'サブスク', right: act(r.subscribe) });
+  if (r.likes?.every && r.likes.action) out.push({ left: `いいね ${r.likes.every.toLocaleString()} ごと`, right: act(r.likes.action) });
+  return out;
+}
+
+function sections(d) {
+  const out = [];
+  const gifts = giftGroups(d);
+  const rep = d.rules.giftRules?.repeatSmallUpTo ?? 1;
+  if (opt.gifts && gifts.length) out.push({ head: '🎁 ギフト', rows: gifts, note: rep > 1 ? `連続で贈ると最大 ${rep} 回まで` : '' });
+  if (opt.tiers) {
+    const t = tierRows(d);
+    if (t.length) out.push({ head: gifts.length ? '💰 そのほかのギフト（コインの合計）' : '💰 ギフト（コインの合計）', rows: t });
+  }
+  if (opt.other) {
+    const o = otherRows(d);
+    if (o.length) out.push({ head: '✨ そのほか', rows: o });
+  }
+  return out;
+}
+
+// wraps text to a width (Japanese has no spaces, so by character)
+function wrap(text, width) {
+  const lines = [];
+  let cur = '';
+  for (const ch of String(text)) {
+    if (cur && g.measureText(cur + ch).width > width + 1) { lines.push(cur); cur = ch.trim() ? ch : ''; } else cur += ch;
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
+const font = (px, w = 700) => `${w} ${px}px ${FONT}`;
+
+function text(s, x, y, px, color, w = 700) {
+  g.font = font(px, w);
+  g.lineJoin = 'round';
+  g.lineWidth = Math.max(3, px / 5);
+  g.strokeStyle = 'rgba(0,0,0,0.85)';
+  g.strokeText(s, x, y);
+  g.fillStyle = color;
+  g.fillText(s, x, y);
+}
+
+function roundRect(x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+
+function draw(d) {
+  const S = opt.size;
+  const W = opt.w;
+  const pad = Math.round(S * 0.8);
+  const lh = Math.round(S * 1.35);
+  const title = opt.title ?? `${d.game.icon} ${d.game.short}　ギフト一覧`;
+  const secs = sections(d);
+  // layout pass: measure the left column and wrap the right one
+  g.font = font(S);
+  // every coin badge is as wide as the widest one, so the gift names line up
+  g.font = font(Math.round(S * 0.75));
+  const badgeW = Math.max(0, ...secs.flatMap((s) => s.rows.map((r) => (r.coin ? g.measureText(`${r.coin}`).width + S * 1.2 : 0))));
+  g.font = font(S);
+  const coinW = (c) => (c ? badgeW + S * 0.4 : 0);
+  // gift pictures in front of the names (as many slots as the row with the most gifts)
+  const pic = Math.round(S * 1.9);
+  const picsIn = (r) => (r.imgs ?? []).filter((id) => pics.get(id));
+  const picSlots = Math.max(0, ...secs.flatMap((s) => s.rows.map((r) => picsIn(r).length)));
+  const picW = (r) => (r.imgs ? picSlots * (pic + S * 0.25) : 0);
+  const preW = (r) => coinW(r.coin) + picW(r);
+  const arrowW = S * 1.8;
+  for (const s of secs) {
+    s.leftW = Math.min(Math.max(0, ...s.rows.map((r) => g.measureText(r.left).width + preW(r))), (W - pad * 2) * 0.55);
+  }
+  let h = pad + Math.round(S * 1.5) + Math.round(S * 0.4);
+  for (const s of secs) {
+    h += Math.round(S * 1.25) + Math.round(S * 0.2);
+    const leftW = s.leftW;
+    for (const r of s.rows) {
+      g.font = font(S);
+      r.lines = wrap(r.right, W - pad * 2 - leftW - arrowW);
+      r.leftLines = wrap(r.left, leftW - preW(r));
+      r.h = Math.max(Math.max(r.lines.length, r.leftLines.length) * lh, picsIn(r).length ? pic + S * 0.2 : 0);
+      h += r.h + Math.round(S * 0.25);
+    }
+    if (s.note) h += Math.round(S * 1.05);
+    h += Math.round(S * 0.35);
+  }
+  h += pad - Math.round(S * 0.35);
+  cv.width = W; cv.height = Math.ceil(h);
+  cv.style.width = W + 'px'; cv.style.height = Math.ceil(h) + 'px';
+  g.clearRect(0, 0, W, h);
+  g.textBaseline = 'middle';
+  if (opt.bg) {
+    roundRect(1.5, 1.5, W - 3, h - 3, S * 0.7);
+    g.fillStyle = 'rgba(12,14,24,0.78)';
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = opt.accent;
+    g.stroke();
+  }
+  let y = pad + S * 0.75;
+  text(title, pad, y, Math.round(S * 1.2), '#ffffff', 800);
+  y += Math.round(S * 0.75) + Math.round(S * 0.4);
+  g.fillStyle = opt.accent;
+  g.fillRect(pad, y - S * 0.2, W - pad * 2, Math.max(2, S / 10));
+  for (const s of secs) {
+    y += Math.round(S * 0.2) + S * 0.62;
+    text(s.head, pad, y, Math.round(S * 0.9), '#25f4ee', 800);
+    const leftW = s.leftW;
+    y += S * 0.63;
+    for (const r of s.rows) {
+      const mid = (n) => y + (r.h - n * lh) / 2 + lh / 2;
+      let yy = mid(r.leftLines.length);
+      let x = pad;
+      if (r.imgs) {
+        picsIn(r).forEach((id, i) => {
+          const im = pics.get(id);
+          const sc = Math.min(pic / im.naturalWidth, pic / im.naturalHeight);
+          const w = im.naturalWidth * sc;
+          const hh = im.naturalHeight * sc;
+          g.drawImage(im, x + i * (pic + S * 0.25) + (pic - w) / 2, y + (r.h - hh) / 2, w, hh);
+        });
+        x += picW(r);
+      }
+      if (r.coin) {
+        // coin badge
+        g.font = font(Math.round(S * 0.75));
+        const cw = badgeW;
+        roundRect(x, yy - S * 0.55, cw, S * 1.1, S * 0.55);
+        g.fillStyle = '#facc15';
+        g.fill();
+        g.fillStyle = '#3b2600';
+        g.fillText(`${r.coin}`, x + S * 0.6, yy + 1);
+        g.beginPath(); g.arc(x + S * 0.33, yy, S * 0.18, 0, Math.PI * 2); g.fillStyle = '#b45309'; g.fill();
+        x += cw + S * 0.4;
+      }
+      r.leftLines.forEach((ln, i) => text(ln, x, yy + i * lh, S, '#ffffff'));
+      const ry = mid(r.lines.length);
+      text('→', pad + leftW + S * 0.35, y + r.h / 2, S, opt.accent, 800);
+      r.lines.forEach((ln, i) => text(ln, pad + leftW + arrowW, ry + i * lh, S, '#fde68a'));
+      y += r.h + Math.round(S * 0.25);
+    }
+    if (s.note) { text(s.note, pad, y + S * 0.45, Math.round(S * 0.75), '#cbd5e1', 600); y += Math.round(S * 1.05); }
+    y += Math.round(S * 0.35);
+  }
+}
+
+// a PNG with a transparent background (the hub's panel calls this through the preview frame)
+window.savePng = function (name = 'gift-list.png') {
+  cv.toBlob((b) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, 'image/png');
+};
+
+let last = '';
+async function load() {
+  const p = new URLSearchParams();
+  for (const k of ['game', 'field', 'streamer']) if (q.get(k)) p.set(k, q.get(k));
+  try {
+    const r = await fetch('/api/gift-list?' + p);
+    const d = await r.json();
+    if (!d.ok) { document.getElementById('err').textContent = d.message || ''; return; }
+    document.getElementById('err').textContent = '';
+    const key = JSON.stringify(d);
+    if (key === last) return;
+    last = key;
+    await loadPics(d);
+    draw(d);
+  } catch { /* the hub is restarting: keep the last picture */ }
+}
+load();
+setInterval(load, Number(q.get('interval')) > 0 ? Number(q.get('interval')) * 1000 : 4000);
+</script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+{
+  "taiyoken": {
+    "label": "太陽拳（目くらまし）",
+    "target": "random",
+    "needsGame": false
+  },
+  "gomu_pistol": {
+    "label": "ゴムゴムのピストル（吹っ飛ばし＋足元2個）",
+    "target": "random",
+    "needsGame": false
+  },
+  "chidori": {
+    "label": "千鳥（周りを1段崩す）",
+    "target": "random",
+    "needsGame": false
+  },
+  "rasengan": {
+    "label": "螺旋丸（足元3×3を4段掘る）",
+    "target": "random",
+    "needsGame": false
+  },
+  "kienzan": {
+    "label": "気円斬（上2段を切る）",
+    "target": "server",
+    "needsGame": false
+  },
+  "kage_bunshin": {
+    "label": "影分身の術（分身が邪魔をする）",
+    "target": "random",
+    "needsGame": true
+  },
+  "aka": {
+    "label": "術式反転「赫」（上空へ吹っ飛ばす）",
+    "target": "random",
+    "needsGame": false
+  },
+  "kamehameha": {
+    "label": "かめはめ波（上3段を吹き飛ばす）",
+    "target": "server",
+    "needsGame": false
+  },
+  "ao": {
+    "label": "術式順転「蒼」（足元3×3を6段・引きずり込む）",
+    "target": "random",
+    "needsGame": false
+  },
+  "amaterasu": {
+    "label": "天照（黒い炎が2段焼く）",
+    "target": "server",
+    "needsGame": false
+  },
+  "hekireki": {
+    "label": "霹靂一閃（落雷の一閃で2段）",
+    "target": "server",
+    "needsGame": false
+  },
+  "murasaki": {
+    "label": "虚式「茈」（上8段を消し飛ばす）",
+    "target": "server",
+    "needsGame": false
+  },
+  "fukuma": {
+    "label": "領域展開「伏魔御廚子」（斬撃で穴だらけ）",
+    "target": "server",
+    "needsGame": false
+  },
+  "bijudama": {
+    "label": "尾獣玉（大爆発で6段）",
+    "target": "server",
+    "needsGame": false
+  },
+  "muryokusho": {
+    "label": "領域展開「無量空処」（8秒動けない＋4段）",
+    "target": "server",
+    "needsGame": false
+  },
+  "genkidama": {
+    "label": "元気玉（上12段を消し飛ばす）",
+    "target": "server",
+    "needsGame": false
+  },
+  "senzu": {
+    "label": "仙豆（穴を埋めて1段足す）",
+    "target": "server",
+    "needsGame": true
+  },
+  "ouen": {
+    "label": "みんなの応援（穴を埋めて3段足す）",
+    "target": "server",
+    "needsGame": true
+  },
+  "firework": {
+    "label": "花火",
+    "target": "server",
+    "needsGame": false
+  }
+}

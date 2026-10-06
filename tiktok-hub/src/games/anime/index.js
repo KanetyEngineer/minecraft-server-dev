@@ -162,7 +162,7 @@ export function createGame(ctx) {
   }
 
   const onEvent = createEventHandler({
-    log, enqueue: (field, ...rest) => { if (F[field]) enqueue(field, ...rest); }, config: () => config, recentGifts,
+    log, enqueue: (field, ...rest) => { if (F[field]) enqueue(field, ...rest); }, config: (f) => ctx.rules(f, config), recentGifts,
     addCoins: (n, c) => { state.coins += c; if (F[n]) F[n].coins += c; },
     likeState: (n) => F[n]?.tt ?? { totalLikes: 0, likeMarks: null },
   });
@@ -353,7 +353,7 @@ export function createGame(ctx) {
           state.coins += coins * repeat;
           F[field].coins += coins * repeat;
           log('gift', `[テスト] ${b.name || 'テスト'} → ${giftName} ×${repeat}（${coins * repeat}コイン）`, field);
-          for (const a of actionsForGift(config.giftRules, giftName, coins, repeat)) enqueue(field, a, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
+          for (const a of actionsForGift(ctx.rules(field, config).giftRules, giftName, coins, repeat)) enqueue(field, a, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
         }
       }
       return json(res, { ok: true, field: targets.length === 1 ? targets[0] : 'all' });
@@ -397,6 +397,8 @@ export function createGame(ctx) {
     },
     onEvent,
     handle,
+    actions: () => ACTIONS,
+    rulesConfig: () => config,
     log,
     resourcePack: () => ctx.data('anime_umetate_resourcepack.zip'),
     status: () => ({

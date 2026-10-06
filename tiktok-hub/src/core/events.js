@@ -4,14 +4,15 @@
 import { avatarUrl } from './avatar.js';
 import { actionsForGift } from './util.js';
 
-// opts: { log(kind, text, field), enqueue(field, action, name, label, source, avatar), config: () => cfg,
+// opts: { log(kind, text, field), enqueue(field, action, name, label, source, avatar),
+//         config: (field) => cfg (with that field's streamer's own gift rules over the game's),
 //         recentGifts: Map, addCoins(field, coins), likeState(field) -> { totalLikes, likeMarks } }
 export function createEventHandler(opts) {
   const chatLast = {}; // "<field>:<user>" -> ms
   const who = (d) => d.user?.nickname || d.user?.uniqueId;
 
   function onGift(field, data) {
-    const config = opts.config();
+    const config = opts.config(field);
     const g = data.gift ?? data.giftDetails ?? {};
     const giftType = g.type ?? g.giftType;
     if (giftType === 1 && !data.repeatEnd) return; // streak still running: wait for the final event
@@ -29,7 +30,7 @@ export function createEventHandler(opts) {
   }
 
   return function onEvent(field, type, d) {
-    const config = opts.config();
+    const config = opts.config(field);
     switch (type) {
       case 'gift':
         return onGift(field, d);

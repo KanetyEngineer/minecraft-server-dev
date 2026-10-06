@@ -1,0 +1,100 @@
+[
+  {
+    "id": "knight",
+    "name": "ナイト",
+    "cost": 3,
+    "kind": "troop",
+    "egg": "vindicator"
+  },
+  {
+    "id": "archers",
+    "name": "アーチャー",
+    "cost": 3,
+    "kind": "troop",
+    "egg": "skeleton"
+  },
+  {
+    "id": "goblins",
+    "name": "ゴブリン",
+    "cost": 2,
+    "kind": "troop",
+    "egg": "zombie"
+  },
+  {
+    "id": "giant",
+    "name": "ジャイアント",
+    "cost": 5,
+    "kind": "troop",
+    "egg": "iron_golem"
+  },
+  {
+    "id": "mini_pekka",
+    "name": "ミニペッカ",
+    "cost": 4,
+    "kind": "troop",
+    "egg": "wither_skeleton"
+  },
+  {
+    "id": "musketeer",
+    "name": "マスケット銃士",
+    "cost": 4,
+    "kind": "troop",
+    "egg": "pillager"
+  },
+  {
+    "id": "skarmy",
+    "name": "スケルトン部隊",
+    "cost": 3,
+    "kind": "troop",
+    "egg": "bogged"
+  },
+  {
+    "id": "minions",
+    "name": "ガーゴイル",
+    "cost": 3,
+    "kind": "troop",
+    "egg": "vex"
+  },
+  {
+    "id": "valkyrie",
+    "name": "バルキリー",
+    "cost": 4,
+    "kind": "troop",
+    "egg": "piglin_brute"
+  },
+  {
+    "id": "hog_rider",
+    "name": "ホグライダー",
+    "cost": 4,
+    "kind": "troop",
+    "egg": "hoglin"
+  },
+  {
+    "id": "wizard",
+    "name": "ウィザード",
+    "cost": 5,
+    "kind": "troop",
+    "egg": "evoker"
+  },
+  {
+    "id": "mini_ghast",
+    "name": "ミニガスト",
+    "cost": 4,
+    "kind": "troop",
+    "egg": "ghast"
+  },
+  {
+    "id": "fireball",
+    "name": "ファイアボール",
+    "cost": 4,
+    "kind": "spell",
+    "egg": "blaze"
+  },
+  {
+    "id": "arrows",
+    "name": "矢の雨",
+    "cost": 3,
+    "kind": "spell",
+    "egg": "stray"
+  }
+]

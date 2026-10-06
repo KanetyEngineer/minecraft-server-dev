@@ -1,0 +1,52 @@
+{
+  "tiktokUsername": "",
+  "signApiKey": "",
+  "rcon": { "host": "127.0.0.1", "port": 25581, "password": "" },
+  "panelPort": 8789,
+  "queue": { "intervalMs": 1200, "maxLength": 40 },
+
+  "giftRules": {
+    "byName": {
+      "Rose": "atk_goblins",
+      "バラ": "atk_goblins",
+      "TikTok": "atk_skarmy",
+      "GG": "atk_archers",
+      "Finger Heart": "atk_minions",
+      "指ハート": "atk_minions",
+      "Doughnut": "atk_giant",
+      "ドーナツ": "atk_giant",
+      "Ice Cream Cone": "help_elixir",
+      "アイスクリーム": "help_elixir"
+    },
+    "tiers": [
+      { "minCoins": 1,   "pick": "random", "actions": ["atk_goblins", "atk_skarmy", "atk_minions"] },
+      { "minCoins": 5,   "pick": "random", "actions": ["atk_knight", "atk_archers", "atk_hog_rider", "atk_elixir"] },
+      { "minCoins": 15,  "pick": "random", "actions": ["atk_musketeer", "atk_valkyrie", "atk_mini_pekka", "atk_mini_ghast"] },
+      { "minCoins": 30,  "pick": "random", "actions": ["atk_giant", "atk_wizard", "atk_freeze", "atk_arrows"] },
+      { "minCoins": 100, "pick": "random", "actions": ["atk_giant_army", "atk_fireball"] },
+      { "minCoins": 500, "pick": "all",    "actions": ["atk_mega_wave", "atk_freeze"] }
+    ],
+    "repeatSmallUpTo": 5
+  },
+
+  "follow": "help_knight",
+  "share": "atk_archers",
+  "subscribe": "help_heal",
+  "likes": { "every": 1000, "action": "help_elixir" },
+
+  "chatCommands": { "enabled": false, "cooldownSec": 60, "commands": { "!ゴブリン": "atk_goblins", "!応援": "help_skarmy" } },
+
+  "cooldownSec": { "atk_giant_army": 20, "atk_mega_wave": 45, "atk_freeze": 15, "atk_fireball": 10 },
+  "fallbackAction": "atk_goblins",
+
+  "game": {
+    "player": "",
+    "bot": 2,
+    "len": 3,
+    "auto": true,
+    "harass": "blue",
+    "viewerCap": 40,
+    "deckB": ["knight", "archers", "giant", "mini_pekka", "musketeer", "minions", "fireball", "arrows"],
+    "deckR": ["knight", "archers", "giant", "musketeer", "minions", "valkyrie", "hog_rider", "fireball"]
+  }
+}

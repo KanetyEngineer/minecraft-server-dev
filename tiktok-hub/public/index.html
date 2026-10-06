@@ -50,6 +50,24 @@
   .row > label { flex:1 1 150px; font-size:12px; color:var(--muted); }
   .row > label > input, .row > label > select { margin-top:3px; }
   .copy { cursor:pointer; }
+  .gl-wrap { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); gap:14px; align-items:start; }
+  @media (max-width: 1100px) { .gl-wrap { grid-template-columns:1fr; } }
+  .checker { background:repeating-conic-gradient(#3a3f4f 0 25%, #2a2e3a 0 50%) 0 0 / 20px 20px; border-radius:8px; overflow:auto; max-height:75vh; }
+  .checker iframe { border:0; display:block; width:100%; height:400px; background:transparent; }
+  .gl-t td { padding:4px; }
+  .chips { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+  .chip { background:#232838; border:1px solid var(--line); border-radius:999px; padding:2px 4px 2px 10px; font-size:12px; white-space:nowrap; }
+  .chip button { border:0; background:none; padding:0 4px; color:#fca5a5; }
+  .gthumbs { display:flex; gap:2px; min-width:40px; }
+  .gthumbs img { width:36px; height:36px; object-fit:contain; }
+  .gpick { border:1px solid var(--line); border-radius:8px; padding:8px; margin-top:6px; background:#11141c; }
+  .gpick-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:6px; max-height:340px; overflow:auto; margin-top:6px; }
+  .gpick-grid button { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 4px; font-size:11px; line-height:1.2; }
+  .gpick-grid img { width:52px; height:52px; object-fit:contain; }
+  .gpick-grid .c { color:#facc15; }
+  .gl-sub { font-size:13px; color:var(--accent2); margin:14px 0 4px; font-weight:700; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:#232838; border:1px solid var(--line); color:var(--muted); font-weight:400; }
+  .tag.own { color:#fde68a; border-color:#a16207; }
 </style>
 </head>
 <body>
@@ -91,6 +109,41 @@
     </section>
   </div>
 
+  <div class="page" id="p-gifts">
+    <section>
+      <h2>🎁 ギフト一覧</h2>
+      <p class="help">どのギフト・フォロー・シェア・いいねで何が起きるかの一覧です。配信者を選ぶと、その人だけのギフトの割り当てを決められます（決めていない配信者はゲームの設定のまま）。割り当てはゲームごとに別々に覚えます。</p>
+      <div class="row">
+        <label>だれの一覧<select id="gl-who" onchange="glPick()"></select></label>
+        <label>ゲーム<select id="gl-game" onchange="glLoad()"></select></label>
+      </div>
+    </section>
+    <div class="gl-wrap">
+      <section id="gl-edit-sec">
+        <h2><span id="gl-head"></span><span class="msg" id="gl-msg"></span></h2>
+        <div id="gl-edit"></div>
+      </section>
+      <section>
+        <h2>OBS 用の一覧（背景は透明）</h2>
+        <p class="help">OBS の「ブラウザ」ソースにこの URL を入れます（幅は下の「幅」と同じに。高さは中身に合わせて伸びるので大きめで OK）。割り当てを変えると数秒でオーバーレイも変わります。画像で使うときは「PNG で保存」。</p>
+        <div class="row">
+          <label style="flex:0 0 90px">幅<input id="gl-w" type="number" value="560" min="240" max="2000" oninput="glPreview()"></label>
+          <label style="flex:0 0 90px">文字<input id="gl-size" type="number" value="22" min="10" max="80" oninput="glPreview()"></label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="gl-o-bg" checked onchange="glPreview()"> 黒い背景</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="gl-o-tiers" checked onchange="glPreview()"> コインの段階</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="gl-o-other" checked onchange="glPreview()"> フォローなど</label>
+        </div>
+        <div style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <code class="copy" id="gl-url" title="クリックでコピー" onclick="copy(this)"></code>
+          <button class="small" onclick="glPng()">PNG で保存</button>
+          <a id="gl-open" target="_blank" style="color:var(--accent2);font-size:12px">別のタブで開く</a>
+        </div>
+        <div class="checker"><iframe id="gl-frame"></iframe></div>
+      </section>
+    </div>
+    <datalist id="gl-names"></datalist>
+  </div>
+
   <div class="page" id="p-settings">
     <section>
       <h2>TikTok 接続</h2>
@@ -128,7 +181,7 @@ const ttPill = (st, detail) => { const [c, t] = TT[st] ?? ['', st]; return `<spa
 
 // ------------------------------------------------------------------ tabs
 function buildNav() {
-  const items = [['home', '概要'], ['streamers', '配信者'], ...S.games.map((g) => ['g-' + g.id, `${g.icon} ${g.short}`]), ['settings', '設定']];
+  const items = [['home', '概要'], ['streamers', '配信者'], ['gifts', '🎁 ギフト一覧'], ...S.games.map((g) => ['g-' + g.id, `${g.icon} ${g.short}`]), ['settings', '設定']];
   $('nav').innerHTML = items.map(([id, label]) => `<a href="#${id}" data-t="${id}">${esc(label)}</a>`).join('');
   for (const g of S.games) {
     const div = document.createElement('div');
@@ -149,6 +202,7 @@ function show() {
     frames[tab] = f;
   }
   if (tab === 'streamers') loadStreamers();
+  if (tab === 'gifts') glInit();
 }
 window.addEventListener('hashchange', show);
 
@@ -169,7 +223,7 @@ function renderHome() {
     <section>
       <h2>${esc(g.icon)} ${esc(g.title)} <a href="#g-${g.id}" style="color:var(--accent2);font-size:12px">パネルを開く</a></h2>
       <div class="muted" style="font-size:12px;margin-bottom:6px">
-        <span class="dot ${g.rcon === 'connected' ? 'ok' : 'bad'}"></span>サーバー（RCON ${g.rconPort}）: ${g.rcon === 'connected' ? 'つながっています' : esc('つながっていません ' + (g.rconDetail || ''))}
+        <span class="dot ${g.rcon === 'connected' ? 'ok' : 'bad'}"></span>${esc(g.serverLabel || `サーバー（RCON ${g.rconPort}）`)}: ${g.rcon === 'connected' ? 'つながっています' : esc('つながっていません ' + (g.rconDetail || ''))}
         ${g.legacy ? ` ・ 旧アドレス :${g.legacy.port} ${g.legacy.bound ? '✓' : '× ' + esc(g.legacy.error)}` : ''}
       </div>
       <table><thead><tr><th>${esc(g.fieldWord)}</th><th>状態</th><th>配信者</th><th>TikTok</th><th>キュー</th><th>OBS</th></tr></thead><tbody>
@@ -271,6 +325,229 @@ async function saveSign() {
   $('sign-msg').className = 'msg ok'; $('sign-msg').textContent = r.ok ? '保存しました' : 'エラー';
   $('sign').value = '';
   refresh();
+}
+
+// ------------------------------------------------------------------ gift list + per-streamer gift rules
+let GL = null; // last /api/gift-list
+let GCAT = null; // TikTok's gifts: [{ id, name, coins, ja }]
+async function glCatalog() {
+  if (GCAT) return GCAT;
+  try { GCAT = (await (await fetch('/api/gift-catalog')).json()).gifts ?? []; } catch { GCAT = []; }
+  return GCAT;
+}
+// a gift name as typed in the rules (English or Japanese) -> catalog entry
+function gcatFind(name) {
+  const n = String(name).trim().toLowerCase();
+  if (!n || !GCAT) return null;
+  return GCAT.find((g) => g.name.toLowerCase() === n || (g.ja && g.ja === name.trim())) ?? null;
+}
+const gimg = (g, cls = '') => g ? `<img class="${cls}" src="/gift-img/${g.id}" alt="" title="${esc(g.name)}・${g.coins}コイン" loading="lazy">` : '';
+function thumbs(names) {
+  const seen = new Set();
+  return names.map(gcatFind).filter((g) => g && !seen.has(g.id) && seen.add(g.id)).map((g) => gimg(g)).join('');
+}
+function glInit(listOnly = false) {
+  const sel = $('gl-who').value;
+  const rulesGames = S.games.filter((g) => g.hasRules);
+  const gameName = (id) => { const g = S.games.find((x) => x.id === id); return g ? `${g.icon} ${g.short}` : ''; };
+  $('gl-who').innerHTML = '<optgroup label="配信者（その人だけの割り当てを決められる）">' + S.streamers.map((s) => `<option value="s:${s.id}">${esc([s.tiktok && '@' + s.tiktok, s.mc].filter(Boolean).join(' / '))}${s.assigned ? `（${esc(gameName(s.game))} ${s.field}）` : ''}${s.ownRules?.length ? ' ★' : ''}</option>`).join('') + '</optgroup>'
+    + '<optgroup label="ゲームの設定（配信者が決めていないときに使う）">' + rulesGames.map((g) => `<option value="g:${g.id}">${esc(g.icon + ' ' + g.title)}</option>`).join('') + '</optgroup>';
+  $('gl-game').innerHTML = rulesGames.map((g) => `<option value="${g.id}">${esc(g.icon + ' ' + g.title)}</option>`).join('');
+  if (listOnly) return;
+  if (sel && [...$('gl-who').options].some((o) => o.value === sel)) { $('gl-who').value = sel; glLoad(); } else glPick();
+}
+function glPick() {
+  const v = $('gl-who').value;
+  if (v.startsWith('g:')) $('gl-game').value = v.slice(2);
+  else {
+    const s = S.streamers.find((x) => x.id === v.slice(2));
+    if (s && S.games.some((g) => g.id === s.game && g.hasRules)) $('gl-game').value = s.game;
+  }
+  glLoad();
+}
+async function glLoad() {
+  const v = $('gl-who').value;
+  if (!v) { $('gl-edit').innerHTML = '<p class="muted">配信者もゲームもありません。</p>'; return; }
+  const game = $('gl-game').value;
+  if (v.startsWith('g:') && v.slice(2) !== game) $('gl-who').value = 'g:' + game;
+  const p = new URLSearchParams({ game });
+  if ($('gl-who').value.startsWith('s:')) p.set('streamer', v.slice(2));
+  const d = await (await fetch('/api/gift-list?' + p)).json();
+  if (!d.ok) { $('gl-edit').innerHTML = `<p class="muted">${esc(d.message)}</p>`; return; }
+  GL = d;
+  await glCatalog();
+  glRender(d.rules);
+  glPreview();
+}
+
+const actOpts = (sel, none) => (none ? `<option value="">（なし）</option>` : '') + Object.entries(GL.actions).map(([k, l]) => `<option value="${esc(k)}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
+
+function glRender(r) {
+  const d = GL;
+  const who = d.streamer ? [d.streamer.tiktok && '@' + d.streamer.tiktok, d.streamer.mc].filter(Boolean).join(' / ') : '';
+  $('gl-head').innerHTML = d.streamer
+    ? `${esc(who)} の ${esc(d.game.icon + ' ' + d.game.short)} ${d.custom ? '<span class="tag own">この配信者だけの割り当て</span>' : '<span class="tag">ゲームの設定のまま</span>'}`
+    : `${esc(d.game.icon + ' ' + d.game.title)} の設定 <span class="tag">配信者が決めていないとき</span>`;
+  $('gl-names').innerHTML = [...d.known.flatMap((k) => [k.ja, k.en]), ...(GCAT ?? []).map((g) => g.name)].filter((x, i, a) => a.indexOf(x) === i).map((n) => `<option value="${esc(n)}">`).join('');
+  const ro = !d.streamer;
+  // gifts by name: one row per action, all the names it may arrive as
+  const groups = [];
+  for (const [name, a] of Object.entries(r.giftRules?.byName ?? {})) {
+    const g = groups.find((x) => x.action === a);
+    if (g) g.names.push(name); else groups.push({ action: a, names: [name] });
+  }
+  const giftRow = (g) => `<tr class="gl-gift"><td style="width:1%"><div class="gthumbs">${thumbs(g.names)}</div></td><td><input class="gl-names" onchange="this.closest('tr').querySelector('.gthumbs').innerHTML = thumbs(this.value.split(/[,、，]/))" list="gl-names" value="${esc(g.names.join(', '))}" placeholder="ギフト名（例: バラ, Rose）"></td>
+    <td><select class="gl-act">${actOpts(g.action)}</select></td><td><button class="small del" onclick="this.closest('tr').remove()">×</button></td></tr>`;
+  const tierRow = (t) => `<tr class="gl-tier"><td style="width:100px"><input type="number" class="gl-min" min="1" value="${t.minCoins}"></td>
+    <td style="width:130px"><select class="gl-pick"><option value="random" ${t.pick !== 'all' ? 'selected' : ''}>どれか1つ</option><option value="all" ${t.pick === 'all' ? 'selected' : ''}>全部</option></select></td>
+    <td><div class="chips">${t.actions.map(chip).join('')}<select class="gl-add" style="width:auto" onchange="if(this.value){this.insertAdjacentHTML('beforebegin', chip(this.value));this.value=''}"><option value="">＋ 追加</option>${actOpts('')}</select></div></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">×</button></td></tr>`;
+  if (ro) {
+    $('gl-edit').innerHTML = `<p class="help">ゲームの設定は、${esc(d.game.short)} のパネルの「ギフト設定」で変えます（<a style="color:var(--accent2)" href="#g-${d.game.id}">パネルを開く</a>）。配信者ごとに変えるときは、上の「だれの一覧」で配信者を選んでください。</p>`
+      + glSummary(r);
+    return;
+  }
+  $('gl-edit').innerHTML = `
+    <div class="gl-sub">ギフト名で決める</div>
+    <p class="help">TikTok はギフト名を視聴者のアプリの言語で送ってくるので、日本語と英語の両方を「,」で区切って入れておくと確実です（候補から選べます）。ここにないギフトは下の「コインの段階」で決まります。</p>
+    <table class="gl-t"><tbody id="gl-gifts">${groups.map(giftRow).join('')}</tbody></table>
+    <div class="row" style="margin-top:6px">
+      <button class="small primary" onclick="glPicker()">＋ 画像からギフトを選ぶ</button>
+      <button class="small" onclick="glAddGift('')">＋ 名前で行を追加</button>
+      <label style="flex:0 0 220px">連続で贈られたときの最大回数<input type="number" id="gl-repeat" min="1" max="50" value="${r.giftRules?.repeatSmallUpTo ?? 5}"></label>
+    </div>
+    <div class="gpick" id="gl-pick" style="display:none">
+      <div class="row"><label style="flex:1 1 200px">さがす（名前・コイン数）<input id="gl-pick-q" placeholder="例: Rose / 1 / ドーナツ" oninput="glPickList()"></label><button class="small" onclick="$('gl-pick').style.display='none'">閉じる</button></div>
+      <div class="gpick-grid" id="gl-pick-grid"></div>
+    </div>
+    <div class="gl-sub">コインの段階（名前で決めていないギフト）</div>
+    <p class="help">ギフトのコインの合計で、届いた一番上の段階のアクションになります。</p>
+    <table class="gl-t"><thead><tr><th>コイン以上</th><th>選び方</th><th>アクション</th><th></th></tr></thead><tbody id="gl-tiers">${(r.giftRules?.tiers ?? []).map(tierRow).join('')}</tbody></table>
+    <button class="small" style="margin-top:6px" onclick="document.getElementById('gl-tiers').insertAdjacentHTML('beforeend', GL_tierRow({ minCoins: 1, pick: 'random', actions: [] }))">＋ 段階を追加</button>
+    <div class="gl-sub">そのほか</div>
+    <div class="row">
+      <label>フォロー<select id="gl-follow">${actOpts(r.follow, true)}</select></label>
+      <label>シェア<select id="gl-share">${actOpts(r.share, true)}</select></label>
+      <label>サブスク<select id="gl-subscribe">${actOpts(r.subscribe, true)}</select></label>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label style="flex:0 0 160px">いいね（何回ごと・0 で無し）<input type="number" id="gl-likes-every" min="0" value="${r.likes?.every ?? 0}"></label>
+      <label>いいねのアクション<select id="gl-likes-action">${actOpts(r.likes?.action, true)}</select></label>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="primary" onclick="glSave()">この配信者の割り当てとして保存</button>
+      <button onclick="glRender(GL.defaults)" title="ゲームの設定を下書きに写します（保存するまで反映されません）">ゲームの設定を写す</button>
+      ${d.custom ? '<button class="del" onclick="glReset()">ゲームの設定に戻す</button>' : ''}
+    </div>`;
+  window.GL_giftRow = giftRow;
+  window.GL_tierRow = tierRow;
+}
+function chip(a) {
+  return `<span class="chip" data-a="${esc(a)}">${esc(GL.actions[a] ?? a)}<button title="外す" onclick="this.parentNode.remove()">×</button></span>`;
+}
+function glAddGift(names) {
+  $('gl-gifts').insertAdjacentHTML('beforeend', GL_giftRow({ names: names ? names.split(/,\s*/) : [], action: Object.keys(GL.actions)[0] }));
+}
+// gift picker: TikTok's gifts with their pictures, cheapest first
+function glPicker() {
+  $('gl-pick').style.display = '';
+  glPickList();
+  $('gl-pick-q').focus();
+}
+function glPickList() {
+  const q = $('gl-pick-q').value.trim().toLowerCase();
+  const list = (GCAT ?? []).filter((g) => !q || g.name.toLowerCase().includes(q) || (g.ja && g.ja.includes(q)) || String(g.coins) === q).slice(0, 200);
+  $('gl-pick-grid').innerHTML = list.map((g) => `<button onclick="glPickAdd('${g.id}')" title="${esc(g.name)}">${gimg(g)}<span>${esc(g.ja || g.name)}</span><span class="c">${g.coins}コイン</span></button>`).join('')
+    || `<p class="muted">${GCAT?.length ? '見つかりません' : 'ギフトの一覧をまだ読み込めていません（ハブがインターネットにつながると読み込みます）'}</p>`;
+}
+function glPickAdd(id) {
+  const g = GCAT.find((x) => x.id === id);
+  if (!g) return;
+  glAddGift(g.ja && g.ja !== g.name ? `${g.ja}, ${g.name}` : g.name);
+  const rows = $('gl-gifts').querySelectorAll('tr');
+  rows[rows.length - 1].scrollIntoView({ block: 'nearest' });
+}
+// read-only summary (the game's own settings)
+function glSummary(r) {
+  const a = (x) => esc(GL.actions[x] ?? x);
+  const groups = {};
+  for (const [n, x] of Object.entries(r.giftRules?.byName ?? {})) (groups[x] ??= []).push(n);
+  const rows = Object.entries(groups).map(([x, ns]) => `<tr><td style="width:1%"><div class="gthumbs">${thumbs(ns)}</div></td><td>${esc(ns.join(', '))}</td><td>${a(x)}</td></tr>`).join('');
+  const tiers = (r.giftRules?.tiers ?? []).map((t) => `<tr><td>${t.minCoins} コイン以上</td><td>${t.actions.map(a).join(t.pick === 'all' ? ' ＋ ' : ' / ')}${t.pick !== 'all' && t.actions.length > 1 ? ' <span class="muted">のどれか</span>' : ''}</td></tr>`).join('');
+  const other = [['フォロー', r.follow], ['シェア', r.share], ['サブスク', r.subscribe]].filter(([, x]) => x).map(([k, x]) => `<tr><td>${k}</td><td>${a(x)}</td></tr>`).join('')
+    + (r.likes?.every && r.likes.action ? `<tr><td>いいね ${r.likes.every} ごと</td><td>${a(r.likes.action)}</td></tr>` : '');
+  return `<div class="gl-sub">ギフト名で決める</div><table>${rows || '<tr><td class="muted">なし</td></tr>'}</table>
+    <div class="gl-sub">コインの段階</div><table>${tiers}</table><div class="gl-sub">そのほか</div><table>${other || '<tr><td class="muted">なし</td></tr>'}</table>`;
+}
+function glCollect() {
+  const byName = {};
+  for (const tr of document.querySelectorAll('#gl-gifts tr')) {
+    const act = tr.querySelector('.gl-act').value;
+    for (const n of tr.querySelector('.gl-names').value.split(/[,、，]/).map((x) => x.trim()).filter(Boolean)) byName[n] = act;
+  }
+  const tiers = [...document.querySelectorAll('#gl-tiers tr')].map((tr) => ({
+    minCoins: Number(tr.querySelector('.gl-min').value) || 1,
+    pick: tr.querySelector('.gl-pick').value,
+    actions: [...tr.querySelectorAll('.chip')].map((c) => c.dataset.a),
+  }));
+  return {
+    giftRules: { byName, tiers, repeatSmallUpTo: Number($('gl-repeat').value) || 1 },
+    follow: $('gl-follow').value, share: $('gl-share').value, subscribe: $('gl-subscribe').value,
+    likes: { every: Number($('gl-likes-every').value) || 0, action: $('gl-likes-action').value },
+  };
+}
+async function glSave() {
+  const r = await post('/api/gift-rules', { streamer: GL.streamer.id, game: GL.game.id, rules: glCollect() });
+  msg('gl-msg', r);
+  if (r.ok) { GL = r; glRender(r.rules); glPreview(); refresh().then(glInitKeep); }
+}
+async function glReset() {
+  if (!confirm('この配信者の割り当てを消して、ゲームの設定に戻しますか？')) return;
+  const r = await post('/api/gift-rules', { streamer: GL.streamer.id, game: GL.game.id, rules: null });
+  msg('gl-msg', r);
+  if (r.ok) { GL = r; glRender(r.rules); glPreview(); refresh().then(glInitKeep); }
+}
+// redraw the "who" list (★ marks) without reloading the editor
+function glInitKeep() {
+  const v = $('gl-who').value;
+  const g = $('gl-game').value;
+  glInit(true);
+  $('gl-who').value = v;
+  $('gl-game').value = g;
+}
+function glUrl() {
+  if (!GL) return '';
+  const p = new URLSearchParams();
+  p.set('game', GL.game.id);
+  if (GL.streamer) {
+    if (GL.overlay) p.set('field', GL.field); else p.set('streamer', GL.streamer.id);
+  }
+  if (Number($('gl-w').value) && Number($('gl-w').value) !== 560) p.set('w', $('gl-w').value);
+  if (Number($('gl-size').value) && Number($('gl-size').value) !== 22) p.set('size', $('gl-size').value);
+  if (!$('gl-o-bg').checked) p.set('bg', '0');
+  if (!$('gl-o-tiers').checked) p.set('tiers', '0');
+  if (!$('gl-o-other').checked) p.set('other', '0');
+  return `${location.origin}/gift-list?${p}`;
+}
+let glTimer = null;
+function glPreview() {
+  const u = glUrl();
+  if (!u) return;
+  $('gl-url').textContent = u;
+  $('gl-open').href = u;
+  clearTimeout(glTimer);
+  glTimer = setTimeout(() => {
+    const f = $('gl-frame');
+    if (f.src !== u) f.src = u;
+  }, 250);
+}
+// the preview frame follows the picture's height
+setInterval(() => {
+  const c = $('gl-frame')?.contentDocument?.getElementById('c');
+  if (c && tab === 'gifts') $('gl-frame').style.height = Math.max(120, c.height + 4) + 'px';
+}, 500);
+function glPng() {
+  try { $('gl-frame').contentWindow.savePng(`gift-list-${GL.game.id}${GL.field ? '-' + GL.field : ''}.png`); } catch { alert('プレビューが読み込まれてから押してください'); }
 }
 
 // ------------------------------------------------------------------ main

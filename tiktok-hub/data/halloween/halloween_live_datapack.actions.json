@@ -1,0 +1,82 @@
+{
+  "candy1": {
+    "label": "お菓子+1（ランダムな1人）",
+    "target": "random",
+    "needsGame": false
+  },
+  "candy3": {
+    "label": "お菓子+3（ランダムな1人）",
+    "target": "random",
+    "needsGame": false
+  },
+  "candy_all": {
+    "label": "全員にお菓子+5",
+    "target": "all",
+    "needsGame": false
+  },
+  "firework": {
+    "label": "花火",
+    "target": "all",
+    "needsGame": false
+  },
+  "bats": {
+    "label": "コウモリの大群",
+    "target": "random",
+    "needsGame": false
+  },
+  "speed": {
+    "label": "応援スピードアップ（全員）",
+    "target": "all",
+    "needsGame": false
+  },
+  "heal": {
+    "label": "回復（全員）",
+    "target": "all",
+    "needsGame": false
+  },
+  "levitate": {
+    "label": "ふわふわの呪い",
+    "target": "random",
+    "needsGame": false
+  },
+  "jumpscare": {
+    "label": "ジャンプスケア",
+    "target": "random",
+    "needsGame": false
+  },
+  "thunder": {
+    "label": "雷鳴",
+    "target": "random",
+    "needsGame": false
+  },
+  "curse": {
+    "label": "カボチャ頭の呪い（20秒）",
+    "target": "random",
+    "needsGame": false
+  },
+  "zombies": {
+    "label": "カボチャゾンビ出現",
+    "target": "random",
+    "needsGame": true
+  },
+  "ghosts": {
+    "label": "ゴースト出現",
+    "target": "random",
+    "needsGame": true
+  },
+  "horde": {
+    "label": "ゾンビの大群（全員）",
+    "target": "all",
+    "needsGame": true
+  },
+  "miniboss": {
+    "label": "中ボス「パンプキン・ナイト」出現",
+    "target": "random",
+    "needsGame": true
+  },
+  "time_plus": {
+    "label": "制限時間+1分",
+    "target": "server",
+    "needsGame": true
+  }
+}

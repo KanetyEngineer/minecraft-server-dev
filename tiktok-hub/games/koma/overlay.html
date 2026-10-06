@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>コマバトルRPG ギフト表示</title>
+<style>
+  html, body { margin:0; background:transparent; overflow:hidden; font-family:"Yu Gothic UI","Meiryo",sans-serif; }
+  #list { position:absolute; left:20px; bottom:20px; display:flex; flex-direction:column; gap:8px; }
+  .item { display:flex; align-items:center; gap:10px; padding:8px 16px; border-radius:999px; background:rgba(20,16,32,.85); color:#fff; font-size:26px; font-weight:700;
+          border:2px solid #facc15; animation:in .4s ease-out; }
+  .item img { width:40px; height:40px; border-radius:50%; }
+  .item b { color:#facc15; }
+  @keyframes in { from { transform:translateX(-40px); opacity:0; } to { transform:none; opacity:1; } }
+</style>
+</head>
+<body>
+<!-- ゲームの画面は Unity をそのまま取り込む。これはギフトのお礼だけを重ねる補助のオーバーレイ -->
+<div id="list"></div>
+<script>
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let since = -1;
+async function poll() {
+  try {
+    const r = await (await fetch('api/overlay?since=' + Math.max(0, since))).json();
+    if (since < 0) { since = r.latest; return; }
+    for (const i of r.items) {
+      since = Math.max(since, i.id);
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = `${i.avatar ? `<img src="${esc(i.avatar)}">` : ''}<span>${esc(i.name)} <b>${esc(i.gift)}</b> ありがとう！</span>`;
+      document.getElementById('list').append(el);
+      setTimeout(() => el.remove(), 8000);
+    }
+  } catch {}
+}
+setInterval(poll, 1000);
+poll();
+</script>
+</body>
+</html>

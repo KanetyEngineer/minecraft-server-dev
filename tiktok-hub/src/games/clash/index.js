@@ -253,7 +253,7 @@ export function createGame(ctx) {
   }
 
   const onEvent = createEventHandler({
-    log, enqueue, config: () => config, recentGifts,
+    log, enqueue, config: (f) => ctx.rules(f, config), recentGifts,
     addCoins: (id, n) => { const a = arenaById(id); if (a) a.coins += n; },
     likeState: (id) => arenaById(id) ?? { totalLikes: 0, likeMarks: null },
   });
@@ -349,7 +349,7 @@ export function createGame(ctx) {
         const giftName = String(b.gift || 'テストギフト');
         a.coins += coins * repeat;
         log('gift', `[テスト] ${b.name || 'テスト'} → ${giftName} ×${repeat}（${coins * repeat}コイン）`, a.id);
-        for (const act of actionsForGift(config.giftRules, giftName, coins, repeat)) enqueue(a.id, act, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
+        for (const act of actionsForGift(ctx.rules(a.id, config).giftRules, giftName, coins, repeat)) enqueue(a.id, act, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
       }
       return json(res, { ok: true, arena: a.id, field: a.id });
     }
@@ -407,6 +407,8 @@ export function createGame(ctx) {
     },
     onEvent,
     handle,
+    actions: () => ACTIONS,
+    rulesConfig: () => config,
     log,
     resourcePack: () => ctx.data('crmc_resourcepack.zip'),
     status: () => ({

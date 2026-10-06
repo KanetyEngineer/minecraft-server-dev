@@ -1,0 +1,172 @@
+{
+  "atk_knight": {
+    "label": "視聴者のナイト（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_archers": {
+    "label": "視聴者のアーチャー（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_goblins": {
+    "label": "視聴者のゴブリン（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_giant": {
+    "label": "視聴者のジャイアント（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_mini_pekka": {
+    "label": "視聴者のミニペッカ（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_musketeer": {
+    "label": "視聴者のマスケット銃士（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_skarmy": {
+    "label": "視聴者のスケルトン部隊（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_minions": {
+    "label": "視聴者のガーゴイル（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_valkyrie": {
+    "label": "視聴者のバルキリー（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_hog_rider": {
+    "label": "視聴者のホグライダー（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_wizard": {
+    "label": "視聴者のウィザード（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_mini_ghast": {
+    "label": "視聴者のミニガスト（相手側に出現）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "help_knight": {
+    "label": "応援のナイト（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_archers": {
+    "label": "応援のアーチャー（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_goblins": {
+    "label": "応援のゴブリン（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_giant": {
+    "label": "応援のジャイアント（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_mini_pekka": {
+    "label": "応援のミニペッカ（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_musketeer": {
+    "label": "応援のマスケット銃士（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_skarmy": {
+    "label": "応援のスケルトン部隊（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_minions": {
+    "label": "応援のガーゴイル（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_valkyrie": {
+    "label": "応援のバルキリー（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_hog_rider": {
+    "label": "応援のホグライダー（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_wizard": {
+    "label": "応援のウィザード（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_mini_ghast": {
+    "label": "応援のミニガスト（配信者側に出現）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "atk_giant_army": {
+    "label": "ジャイアント軍団（3体）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_mega_wave": {
+    "label": "総攻撃（ジャイアント＋ウィザード＋マスケット＋ガーゴイル）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_fireball": {
+    "label": "ファイアボールが配信者のタワーへ",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_arrows": {
+    "label": "矢の雨が配信者の陣地へ",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_freeze": {
+    "label": "フリーズ（配信者のユニットが4秒止まる）",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "atk_elixir": {
+    "label": "相手のエリクサー+3",
+    "kind": "atk",
+    "needsGame": true
+  },
+  "help_elixir": {
+    "label": "配信者のエリクサー+3",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_heal": {
+    "label": "配信者のタワーを回復（+20）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "help_fireball": {
+    "label": "応援ファイアボール（相手のタワーへ）",
+    "kind": "help",
+    "needsGame": true
+  },
+  "firework": {
+    "label": "花火",
+    "kind": "none",
+    "needsGame": false
+  }
+}
