@@ -286,9 +286,13 @@ export class Builder {
       if (this.placed === before) break;
     }
     await this.cleanupScaffolds();
-    // ドアは、ほかが全部置けてから（残りがあるうちにドアを閉めると、中の残りを置きに入れなくなった）
+    // ドアは、ほかが全部置けてから（残りがあるうちにドアを閉めると、中の残りを置きに入れなくなった）。
+    // ただし、前の回から 1 個も増えなかった（残りがもう置けそうにない）ときは、ドアだけ付けないまま終わらないよう付ける
     const rest = [...this.targets.values()].filter((t) => !isDoor(t) && !this.done(t)).length;
-    if (rest === 0) await this.placeDoors();
+    const okNow = this.progress().ok;
+    const stalled = this.prevPassOk !== undefined && okNow <= this.prevPassOk;
+    this.prevPassOk = okNow;
+    if (rest === 0 || stalled) await this.placeDoors();
     else if ([...this.targets.values()].some((t) => isDoor(t) && !this.done(t))) this.log.info(`ドアは、残りの ${rest} 個を置いてから付ける`);
     if (this.stocked) await this.returnLeftovers().catch((e) => { if (e.name === 'AbortError') throw e; this.log.warn(`余りを戻せなかった: ${e.message}`); });
     // 途中で一度取れなかった（チェストに近づけなかった など）だけで、いまは手持ちとチェストにそろっている素材は「足りない」としない
@@ -693,8 +697,16 @@ export class Builder {
         if (there() || (await tryPath())) return;
         this.log.warn(`はしごから移ったあとも近づけない（いま ${here()}）`);
       }
-      // 建物の中に閉じ込められて外へ歩いて出られないなら、ドアや壁を壊してでも行く（あとで置き直す）
-      if (this.isEnclosed()) {
+      // 高い所（屋根の上など）に取り残されていたら、登ってきた柱へ戻って掘りながら降りる。
+      // 柱が無ければ、体力に余裕があるときだけ、怪我をしても死なない高さまでの飛び降りを許す
+      if (Math.floor(bot.entity.position.y) - this.origin.y >= 3 && p.y < Math.floor(bot.entity.position.y)) {
+        if (await this.climbDown()) {
+          if (there() || (await tryPath())) return;
+        }
+      }
+      // 建物の中に閉じ込められて外へ歩いて出られないなら、ドアや壁を壊してでも行く（あとで置き直す）。
+      // 高い所にいるときは使わない（屋根や床を掘り抜いて下へ降りていた）
+      if (Math.floor(bot.entity.position.y) - this.origin.y < 3 && this.isEnclosed()) {
         this.log.info('建物の中に閉じ込められたので、ドアか壁を壊して出る（あとで置き直す）');
         this.ctx.allowEscape = true;
         try { if (await tryPath()) return; } finally { this.ctx.allowEscape = false; }
@@ -712,6 +724,8 @@ export class Builder {
       // 近くに柱を立てられない（屋根の真ん中など）なら、建物の外に柱を積んでその高さまで登り、そこから歩いて行く
       if (p.y - Math.floor(bot.entity.position.y) >= 2 && (await this.climbToLevel(p))) {
         if (there() || (await tryPath())) return;
+        // 経路探索は柵の上などを歩けないので、登った柱から同じ高さのまま、見える所まで足場を伸ばしてみる
+        if (await this.bridgeNear(p, ok, notUnder)) return;
         this.log.warn(`登ったあとも近づけない（いま ${here()}）`);
       }
       // 建物の中の低い所に閉じ込められていたら、頭の上を掘って柱で上がる（掘ったマスはあとで置き直す）
@@ -945,6 +959,7 @@ export class Builder {
         await this.centerOnBlock();
         await this.pillarUp(h);
         await bot.waitForTicks(4);
+        if (h > 0) this.lastPillarTop = bot.entity.position.floored();
         if (ok(bot.entity.position.floored())) return true;
         this.log.warn(`柱で登りきれなかった（いま ${bot.entity.position.floored()}）`);
       } catch (e) {
@@ -1002,6 +1017,48 @@ export class Builder {
       if (/(water|lava)/.test(b.name)) return b.name === 'water';
     }
     return false;
+  }
+
+  // 高い所から降りる: 登ってきた柱の上へ歩いて戻り、掘りながら降りる。柱が無ければ、体力に余裕があるときだけ
+  // 落ちても 6 以上残る高さまでの飛び降りを経路探索に許す
+  async climbDown() {
+    const { bot } = this;
+    const top = this.lastPillarTop;
+    if (top && this.scaffolds.has(key(top.offset(0, -1, 0)))) {
+      const f = bot.entity.position.floored();
+      if (!f.equals(top)) {
+        let timer;
+        try {
+          await Promise.race([
+            bot.pathfinder.goto(new goals.GoalBlock(top.x, top.y, top.z)),
+            new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('柱へ戻れない')), 20_000); }),
+          ]);
+        } catch (e) {
+          if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+        } finally {
+          clearTimeout(timer);
+          try { bot.pathfinder.setGoal(null); } catch {}
+        }
+      }
+      if (bot.entity.position.floored().equals(top)) {
+        this.log.info(`登ってきた柱 (${key(top)}) に戻って降りる`);
+        const n = await this.descendOwnPillar();
+        if (n > 0) return true;
+      }
+    }
+    const mv = bot.pathfinder.movements;
+    const drop = Math.min(12, Math.floor(bot.health) - 6 + 3);
+    if (!mv || drop <= mv.maxDropDown) return false;
+    this.log.info(`高い所から降りる道が無いので、${drop} 段までの飛び降りを許す（体力 ${Math.round(bot.health)}）`);
+    const saved = mv.maxDropDown;
+    mv.maxDropDown = drop;
+    try {
+      await bot.pathfinder.goto(new goals.GoalY(this.origin.y)).catch(() => {});
+      return true;
+    } finally {
+      mv.maxDropDown = saved;
+      try { bot.pathfinder.setGoal(null); } catch {}
+    }
   }
 
   // 立っている柱（自分で積んだ足場）を、足元を掘りながら降りる。掘った土はそのまま拾える
@@ -1109,6 +1166,7 @@ export class Builder {
         await this.centerOnBlock();
         await this.pillarUp(h);
         await bot.waitForTicks(4);
+        if (h > 0) this.lastPillarTop = bot.entity.position.floored();
         if (bot.entity.position.floored().y >= level) return true;
         this.log.warn(`柱で登りきれなかった（いま ${bot.entity.position.floored()}）`);
       } catch (e) {
