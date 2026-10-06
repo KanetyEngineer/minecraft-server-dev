@@ -14,10 +14,11 @@ import * as defense from './games/defense/index.js';
 import * as clash from './games/clash/index.js';
 import * as anime from './games/anime/index.js';
 import * as halloween from './games/halloween/index.js';
+import * as koma from './games/koma/index.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WORK = path.dirname(ROOT); // the folder with the old per-game apps (only on the developer's PC)
-const MODULES = [defense, clash, anime, halloween];
+const MODULES = [defense, clash, anime, halloween, koma];
 const CONFIG_FILE = process.env.HUB_CONFIG || path.join(ROOT, 'config.json');
 const STATE_DIR = path.join(ROOT, 'state');
 const VERSION = readJson(path.join(ROOT, 'package.json'), {}).version ?? '';
@@ -305,7 +306,7 @@ function statusJson() {
       const lp = legacy.get(g.meta.id);
       return {
         id: g.meta.id, title: g.meta.title, short: g.meta.short, icon: g.meta.icon, fieldWord: g.meta.fieldWord,
-        rcon: st.rcon, rconDetail: st.rconDetail, rconPort: st.port,
+        rcon: st.rcon, rconDetail: st.rconDetail, rconPort: st.port, serverLabel: st.serverLabel ?? '',
         fields: st.fields.map((f) => {
           const s = streamerAt(g.meta.id, f.n);
           return { ...f, streamer: s ? { id: s.id, tiktok: s.tiktok, mc: s.mc, status: all.find((x) => x.id === s.id)?.status } : null, overlay: overlayUrl(g.meta.id, f.n) };

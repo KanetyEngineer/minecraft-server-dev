@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コマバトルRPG パネル</title>
+<style>
+  :root { --bg:#12101c; --card:#1d1a2b; --line:#363050; --text:#efeaf7; --muted:#a79dbb; --accent:#facc15; --ok:#22c55e; --bad:#ef4444; --warn:#eab308; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Yu Gothic UI","Meiryo",sans-serif; font-size:14px; }
+  header { padding:12px 18px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  h1 { margin:0; font-size:18px; color:var(--accent); }
+  .pill { padding:4px 10px; border-radius:999px; background:var(--card); border:1px solid var(--line); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--muted); }
+  .ok .dot { background:var(--ok); } .bad .dot { background:var(--bad); } .warn .dot { background:var(--warn); }
+  main { padding:14px 18px 60px; }
+  .cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
+  @media (max-width: 900px) { .cols { grid-template-columns:1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  h2 { font-size:15px; margin:0 0 4px; }
+  .help { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  button { background:#2b2440; color:var(--text); border:1px solid var(--line); border-radius:7px; padding:7px 11px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#1b1405; font-weight:700; }
+  label.f { display:block; margin:8px 0 3px; color:var(--muted); font-size:12px; }
+  input { background:#0f0d17; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; width:100%; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+  .row > input { flex: 1 1 140px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; }
+  .kv div:nth-child(odd) { color:var(--muted); }
+  .msg { margin-top:8px; font-size:13px; min-height:1em; } .msg.ok { color:#86efac; } .msg.bad { color:#fca5a5; }
+  #log { max-height: 60vh; overflow:auto; font-size:13px; }
+  .l { padding:4px 0; border-bottom:1px dashed #2c2540; display:flex; gap:8px; }
+  .l .t { color:var(--muted); flex:none; }
+  .k-error { color:#fca5a5; } .k-warn { color:#fde68a; } .k-gift { color:#fcd34d; }
+  code { background:#0f0d17; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>♟️ コマバトルRPG（Unity）</h1>
+  <span id="pUnity" class="pill"><span class="dot"></span>Unity</span>
+  <span id="pTiktok" class="pill"><span class="dot"></span>TikTok</span>
+  <span class="pill">コイン <b id="coins">0</b></span>
+  <span class="pill">いいね <b id="likes">0</b></span>
+</header>
+<main>
+  <div class="cols">
+    <div>
+      <section>
+        <h2>ゲームの様子</h2>
+        <p class="help">Unity のゲームから届いた状態です（ゲームを再生すると自動でつながります）。</p>
+        <div class="kv" id="game"><div>状態</div><div>Unity が接続していません</div></div>
+        <div class="row" style="margin-top:10px">
+          <button onclick="control('skip')">物語を進める</button>
+          <button onclick="control('damage')" title="テスト用">ボスのHPを25%削る</button>
+        </div>
+        <div class="msg" id="ctlMsg"></div>
+      </section>
+
+      <section>
+        <h2>テスト</h2>
+        <p class="help">本物の TikTok イベントと同じ流れでゲームに送ります。</p>
+        <div class="row">
+          <input id="tName" placeholder="視聴者の名前（空ならテスト視聴者）">
+        </div>
+        <div class="row">
+          <button onclick="test({type:'comment', comment:'剣'})">剣で参加</button>
+          <button onclick="test({type:'comment', comment:'弓'})">弓で参加</button>
+          <button onclick="test({type:'comment', comment:'魔'})">魔で参加</button>
+          <button onclick="test({type:'comment', comment:'盾'})">盾で参加</button>
+        </div>
+        <div class="row">
+          <button onclick="test({type:'like', likes:50})">いいね ×50</button>
+          <button onclick="test({type:'gift', gift:'ローズ', coins:1})">ギフト 1</button>
+          <button onclick="test({type:'gift', gift:'ドーナツ', coins:30})">ギフト 30</button>
+          <button onclick="test({type:'gift', gift:'ギャラクシー', coins:1000})">ギフト 1000</button>
+          <button onclick="test({type:'follow'})">フォロー</button>
+          <button onclick="test({type:'share'})">シェア</button>
+        </div>
+        <div class="msg" id="testMsg"></div>
+      </section>
+
+      <section>
+        <h2>接続設定</h2>
+        <p class="help">TikTok の ID はハブの「配信者」ページでも変えられます。Unity 側は <code>KomaGame</code> の Web Socket Url を同じポートにします。</p>
+        <label class="f">TikTok の ID</label>
+        <input id="cTiktok" placeholder="例: kanetyy">
+        <label class="f">Unity とつなぐ WebSocket のポート</label>
+        <input id="cPort" type="number" min="1024" max="65535">
+        <div class="row" style="margin-top:10px">
+          <button class="primary" onclick="save()">保存</button>
+          <button onclick="tiktok(true)">TikTok に接続</button>
+          <button onclick="tiktok(false)">切断</button>
+        </div>
+        <div class="msg" id="cfgMsg"></div>
+      </section>
+    </div>
+
+    <section>
+      <h2>ログ</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+<script>
+const BASE = window.OVL_BASE || location.pathname.replace(/[^/]*$/, '');
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function post(path, body) {
+  const r = await fetch(BASE + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HL-Panel': '1' }, body: JSON.stringify(body) });
+  return r.json().catch(() => ({ ok: false, message: 'エラー' }));
+}
+function msg(id, r, okText) {
+  const el = $(id);
+  el.className = 'msg ' + (r.ok ? 'ok' : 'bad');
+  el.textContent = r.ok ? (r.message || okText) : (r.message || 'エラー');
+}
+const TT = { connected: ['ok', '接続中'], connecting: ['warn', '接続中…'], offline: ['warn', '配信していない'], error: ['bad', 'エラー'], off: ['', '切断'] };
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch(BASE + 'api/state')).json(); } catch { return; }
+  $('pUnity').className = 'pill ' + (s.unity ? 'ok' : 'bad');
+  $('pUnity').innerHTML = `<span class="dot"></span>Unity ${s.unity ? '接続中' : (s.wsError || '未接続')}（:${s.wsPort}）`;
+  const [c, t] = TT[s.tiktok] ?? ['', s.tiktok];
+  $('pTiktok').className = 'pill ' + c;
+  $('pTiktok').innerHTML = `<span class="dot"></span>TikTok ${s.username ? '@' + esc(s.username) : '（ID 未設定）'} ${esc(t)}`;
+  $('pTiktok').title = s.tiktokDetail || '';
+  $('coins').textContent = s.coins;
+  $('likes').textContent = s.likes;
+  const g = s.game;
+  $('game').innerHTML = g ? [
+    ['状態', `${esc(g.phaseLabel)}　${esc(g.chapterTitle)}`],
+    ['ボス', g.bossName ? `${esc(g.bossName)}　${Number(g.bossHp).toLocaleString()} / ${Number(g.bossMaxHp).toLocaleString()}${g.enraged ? '（怒り）' : ''}` : '-'],
+    ['ターン', g.turn],
+    ['参加', `${g.participants}人（盤上 ${g.alive}/${g.pieces}）`],
+    ['応援ゲージ', `${g.cheer} / ${g.cheerMax}`],
+    ['周回', `${g.loop + 1}周目`],
+  ].map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join('')
+    : `<div>状態</div><div>${s.unity ? 'ゲームの状態を待っています' : 'Unity が接続していません'}${s.held ? `（待機中のイベント ${s.held} 件）` : ''}</div>`;
+  $('log').innerHTML = s.log.map((l) => `<div class="l k-${l.kind}"><span class="t">${l.t}</span><span>${esc(l.text)}</span></div>`).join('');
+}
+
+async function loadConfig() {
+  const r = await (await fetch(BASE + 'api/config')).json();
+  $('cTiktok').value = r.config.tiktokUsername;
+  $('cPort').value = r.config.wsPort;
+}
+async function save() {
+  msg('cfgMsg', await post('api/config', { tiktokUsername: $('cTiktok').value, wsPort: Number($('cPort').value) }), '保存しました');
+}
+async function test(body) {
+  const r = await post('api/test', { ...body, name: $('tName').value });
+  if (r.ok && !r.unity) r.message = '送りました（Unity が未接続なので、つながったときに届けます）';
+  msg('testMsg', r, '送りました');
+  refresh();
+}
+async function control(command) { msg('ctlMsg', await post('api/control', { command }), '送りました'); }
+async function tiktok(connect) { msg('cfgMsg', await post('api/tiktok', { connect }), connect ? '接続します' : '切断しました'); refresh(); }
+
+loadConfig();
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

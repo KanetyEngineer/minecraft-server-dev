@@ -169,7 +169,7 @@ function renderHome() {
     <section>
       <h2>${esc(g.icon)} ${esc(g.title)} <a href="#g-${g.id}" style="color:var(--accent2);font-size:12px">パネルを開く</a></h2>
       <div class="muted" style="font-size:12px;margin-bottom:6px">
-        <span class="dot ${g.rcon === 'connected' ? 'ok' : 'bad'}"></span>サーバー（RCON ${g.rconPort}）: ${g.rcon === 'connected' ? 'つながっています' : esc('つながっていません ' + (g.rconDetail || ''))}
+        <span class="dot ${g.rcon === 'connected' ? 'ok' : 'bad'}"></span>${esc(g.serverLabel || `サーバー（RCON ${g.rconPort}）`)}: ${g.rcon === 'connected' ? 'つながっています' : esc('つながっていません ' + (g.rconDetail || ''))}
         ${g.legacy ? ` ・ 旧アドレス :${g.legacy.port} ${g.legacy.bound ? '✓' : '× ' + esc(g.legacy.error)}` : ''}
       </div>
       <table><thead><tr><th>${esc(g.fieldWord)}</th><th>状態</th><th>配信者</th><th>TikTok</th><th>キュー</th><th>OBS</th></tr></thead><tbody>
