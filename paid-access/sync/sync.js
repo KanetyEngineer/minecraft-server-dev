@@ -35,11 +35,24 @@ let lastFull = 0;
 
 async function fetchPlayers() {
   const full = Date.now() - lastFull >= (cfg.fullEveryMinutes || 60) * 60000;
+  if (!full) return fetchPlayersOnce(false);
+  try {
+    const players = await fetchPlayersOnce(true);
+    lastFull = Date.now();
+    return players;
+  } catch (e) {
+    // list の枠が尽きたときなど。作り直しは次の機会にして、いつもの一覧を使う
+    log("一覧の作り直しに失敗（いつもの一覧を使います）:", e.message);
+    lastFull = Date.now();
+    return fetchPlayersOnce(false);
+  }
+}
+
+async function fetchPlayersOnce(full) {
   const r = await fetch(cfg.api.replace(/\/$/, "") + "/api/players" + (full ? "?full=1" : ""), { headers: { authorization: `Bearer ${cfg.token}` } });
   if (!r.ok) throw new Error(`api ${r.status}`);
   const j = await r.json();
   if (!Array.isArray(j.players)) throw new Error("api: no players array");
-  if (full) lastFull = Date.now();
   return j.players.filter((p) => /^[0-9a-f-]{36}$/.test(p.uuid) && /^[A-Za-z0-9_]{1,16}$/.test(p.name));
 }
 
