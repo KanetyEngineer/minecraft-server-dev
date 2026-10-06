@@ -29,11 +29,17 @@ function loadState() {
   }
 }
 
+// 普段は Worker の一覧（KV を1回読むだけ）を使い、fullEveryMinutes ごとに KV を list して一覧を作り直させる。
+// KV の list は無料枠が 1日1000回しかないので、毎回 list すると枠が尽きる
+let lastFull = 0;
+
 async function fetchPlayers() {
-  const r = await fetch(cfg.api.replace(/\/$/, "") + "/api/players", { headers: { authorization: `Bearer ${cfg.token}` } });
+  const full = Date.now() - lastFull >= (cfg.fullEveryMinutes || 60) * 60000;
+  const r = await fetch(cfg.api.replace(/\/$/, "") + "/api/players" + (full ? "?full=1" : ""), { headers: { authorization: `Bearer ${cfg.token}` } });
   if (!r.ok) throw new Error(`api ${r.status}`);
   const j = await r.json();
   if (!Array.isArray(j.players)) throw new Error("api: no players array");
+  if (full) lastFull = Date.now();
   return j.players.filter((p) => /^[0-9a-f-]{36}$/.test(p.uuid) && /^[A-Za-z0-9_]{1,16}$/.test(p.name));
 }
 

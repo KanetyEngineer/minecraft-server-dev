@@ -5,6 +5,10 @@
 //   p:<uuid>      → {"uuid","name","paidAt","session","pi","amount","mode","note"}
 //   pi:<id>       → uuid（返金・チャージバックのときに消すため）
 //   cfg:<mode>    → {"priceId","amount","currency","webhookId","webhookSecret"}（mode は test / live）
+//   idx:players   → [{"uuid","name"}]（購入者の一覧。p:<uuid> を足し引きするたびに書き直す）
+//
+// KV の無料枠は list・書き込み・削除が合わせて 1日1000回しかないので、sync が毎回 list すると枠が尽きる。
+// sync は普段 idx:players を1回読むだけにし、取りこぼしの直しとして ?full=1（list して一覧を作り直す）をたまに呼ぶ
 // Secrets: STRIPE_SECRET_KEY（sk_test_… か sk_live_…）, ADMIN_TOKEN（PC の sync と管理用）
 // Vars: SITE_URL, GAMES_URL, PRODUCT_NAME, SELLER_*（特定商取引法の表記）
 
@@ -24,7 +28,7 @@ export default {
       if (req.method === "POST" && url.pathname === "/webhook") return await webhook(req, env);
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/admin/")) {
         if (!authorized(req, env)) return json({ error: "unauthorized" }, 401);
-        if (req.method === "GET" && url.pathname === "/api/players") return json({ players: await players(env) });
+        if (req.method === "GET" && url.pathname === "/api/players") return json({ players: await players(env, url.searchParams.get("full") === "1") });
         if (req.method === "POST" && url.pathname === "/admin/setup") return await setup(req, env, url);
         if (req.method === "POST" && url.pathname === "/admin/grant") return await grant(req, env);
         if (req.method === "POST" && url.pathname === "/admin/revoke") return await revoke(req, env);
@@ -194,7 +198,7 @@ async function webhook(req, env) {
     // 全額返金とチャージバックのときだけ外す（一部返金はそのまま）
     const full = ev.type === "charge.dispute.created" || o.amount_refunded >= o.amount;
     const uuid = o.payment_intent && (await env.PASS.get(`pi:${o.payment_intent}`));
-    if (full && uuid) await env.PASS.delete(`p:${uuid}`);
+    if (full && uuid) await removePlayer(env, uuid);
   }
   return json({ received: true });
 }
@@ -210,6 +214,7 @@ async function record(env, s) {
     session: s.id, pi: pi || null, amount: s.amount_total, mode: s.livemode ? "live" : "test",
   }));
   if (pi) await env.PASS.put(`pi:${pi}`, uuid);
+  await indexPlayer(env, uuid, s.metadata.mc_name);
 }
 
 async function verify(body, header, secret) {
@@ -237,7 +242,11 @@ function authorized(req, env) {
   return !!env.ADMIN_TOKEN && timingSafeEqual(h, `Bearer ${env.ADMIN_TOKEN}`);
 }
 
-async function players(env) {
+async function players(env, full) {
+  if (!full) {
+    const idx = await env.PASS.get("idx:players", "json");
+    if (Array.isArray(idx)) return idx;
+  }
   const out = [];
   let cursor;
   do {
@@ -248,7 +257,25 @@ async function players(env) {
     }
     cursor = r.list_complete ? undefined : r.cursor;
   } while (cursor);
+  await writeIndex(env, out);
   return out;
+}
+
+async function writeIndex(env, list) {
+  const old = await env.PASS.get("idx:players");
+  const text = JSON.stringify(list);
+  if (old !== text) await env.PASS.put("idx:players", text);
+}
+
+async function indexPlayer(env, uuid, name) {
+  const idx = (await env.PASS.get("idx:players", "json")) || [];
+  await writeIndex(env, [...idx.filter((p) => p.uuid !== uuid), { uuid, name }]);
+}
+
+async function removePlayer(env, uuid) {
+  await env.PASS.delete(`p:${uuid}`);
+  const idx = (await env.PASS.get("idx:players", "json")) || [];
+  await writeIndex(env, idx.filter((p) => p.uuid !== uuid));
 }
 
 // 商品・価格・webhook を Stripe に作って KV に保存する。body: {"amount":500,"currency":"jpy"}。価格を変えるときも同じ呼び出しで新しい価格を作る
@@ -277,6 +304,7 @@ async function grant(req, env) {
   const prof = await mojang(String(b.name || ""));
   if (!prof) return json({ error: "unknown player" }, 404);
   await env.PASS.put(`p:${prof.uuid}`, JSON.stringify({ uuid: prof.uuid, name: prof.name, paidAt: new Date().toISOString(), session: null, pi: null, amount: 0, mode: "manual", note: b.note || "" }));
+  await indexPlayer(env, prof.uuid, prof.name);
   return json({ granted: prof });
 }
 
@@ -284,7 +312,7 @@ async function revoke(req, env) {
   const b = await req.json();
   const prof = await mojang(String(b.name || ""));
   if (!prof) return json({ error: "unknown player" }, 404);
-  await env.PASS.delete(`p:${prof.uuid}`);
+  await removePlayer(env, prof.uuid);
   return json({ revoked: prof });
 }
 
