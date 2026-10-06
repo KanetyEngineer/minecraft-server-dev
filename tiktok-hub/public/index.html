@@ -213,11 +213,25 @@
             <label style="flex:0 0 auto"><input type="checkbox" id="lvs-tts-readName"> 名前も読む</label>
           </div>
           <div class="row" style="margin-top:6px">
-            <label>声の出し方<select id="lvs-tts-engine"><option value="windows">Windows の声（OBS のブラウザソースで鳴る）</option><option value="browser">ブラウザの声</option></select></label>
-            <label>声<select id="lvs-tts-voice"></select></label>
-            <label style="flex:0 0 110px">速さ（-10〜10）<input type="number" id="lvs-tts-rate" min="-10" max="10"></label>
+            <label>声の出し方<select id="lvs-tts-engine" onchange="lvEngine()"><option value="windows">Windows の声</option><option value="voicevox">VOICEVOX</option><option value="yukkuri">ゆっくり（AquesTalkPlayer）</option><option value="browser">ブラウザの声</option></select></label>
+            <label class="eng-windows">声<select id="lvs-tts-voice"></select></label>
+            <label class="eng-windows eng-browser" style="flex:0 0 110px">速さ（-10〜10）<input type="number" id="lvs-tts-rate" min="-10" max="10"></label>
             <label style="flex:0 0 110px">音量（0〜100）<input type="number" id="lvs-tts-volume" min="0" max="100"></label>
           </div>
+          <div class="row eng-voicevox" style="margin-top:6px">
+            <label style="flex:2 1 220px">VOICEVOX の声<select id="lvs-tts-vvSpeaker"></select></label>
+            <label style="flex:0 0 110px">速さ（0.5〜2）<input type="number" id="lvs-tts-vvSpeed" min="0.5" max="2" step="0.05"></label>
+            <label style="flex:0 0 120px">高さ（-0.15〜0.15）<input type="number" id="lvs-tts-vvPitch" min="-0.15" max="0.15" step="0.01"></label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-tts-vvRandom"> コメントは人ごとに声を変える</label>
+            <label style="flex:1 1 200px">VOICEVOX の URL<input id="lvs-tts-vvUrl" placeholder="http://127.0.0.1:50021"></label>
+          </div>
+          <p class="help eng-voicevox" id="lv-vv-help" style="margin:4px 0"></p>
+          <div class="row eng-yukkuri" style="margin-top:6px">
+            <label style="flex:3 1 300px">AquesTalkPlayer.exe の場所<input id="lvs-tts-aqExe" placeholder="例: C:\Users\kanek\Documents\ClaudeCode\aquestalkplayer\AquesTalkPlayer.exe"></label>
+            <label style="flex:1 1 140px">声（プリセット）<input id="lvs-tts-aqPreset" list="lv-aq-presets"></label>
+          </div>
+          <datalist id="lv-aq-presets"><option value="れいむ"><option value="まりさ"></datalist>
+          <p class="help eng-yukkuri" style="margin:4px 0">ゆっくりの声は AquesTalkPlayer（a-quest.com）で作ります。無料なのは個人の非商用だけです。収益のある配信では商用ライセンスを確かめてください。</p>
           <div class="row" style="margin-top:6px">
             <label>だれのコメント<select id="lvs-tts-who"><option value="all">全員</option><option value="followers">フォロワーだけ</option><option value="subs">サブスク・モデレーターだけ</option></select></label>
             <label style="flex:0 0 120px">最大の文字数<input type="number" id="lvs-tts-maxLen" min="5"></label>
@@ -773,8 +787,12 @@ function lvFill() {
   const s = LV.settings;
   const set = (id, v) => { const el = $(id); if (!el) return; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; };
   $('lvs-tts-voice').innerHTML = '<option value="">（いつもの声）</option>' + LV.voices.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}（${esc(v.lang)}）</option>`).join('');
+  const vv = LV.vvSpeakers ?? [];
+  $('lvs-tts-vvSpeaker').innerHTML = (vv.some((x) => x.id === s.tts.vvSpeaker) ? '' : `<option value="${s.tts.vvSpeaker}">番号 ${s.tts.vvSpeaker}</option>`) + vv.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('lv-vv-help').textContent = vv.length ? `VOICEVOX につながっています（${vv.length} の声）。声を使うときはキャラクターの利用規約にしたがい、配信に「VOICEVOX:キャラ名」のクレジットを入れてください。` : 'VOICEVOX につながりません。VOICEVOX を起動してからこのページを開き直してください（つながらないあいだは Windows の声で読みます）。';
   for (const sec of ['tts', 'timer', 'chat', 'top']) for (const [k, v] of Object.entries(s[sec])) set(`lvs-${sec}-${k}`, Array.isArray(v) ? v.join('、') : v);
   set('lvs-alerts-volume', s.alerts.volume); set('lvs-alerts-duration', s.alerts.duration);
+  lvEngine();
   if (!LV.windowsTts) $('lvs-tts-engine').querySelector('option[value=windows]').textContent = 'Windows の声（この PC では使えません）';
   $('lv-alerts').innerHTML = LV_TYPES.map(([k, label]) => `<tr data-k="${k}"><td>${label}</td><td><input type="checkbox" class="a-on" ${s.alerts[k].on ? 'checked' : ''}></td>
     <td><input class="a-text" value="${esc(s.alerts[k].text)}"></td>
@@ -784,6 +802,10 @@ function lvFill() {
   $('lvs-alerts-gift-bigSound').innerHTML = lvSoundOptions(s.alerts.gift.bigSound);
   lvGoals(s.goals);
   lvSounds();
+}
+function lvEngine() {
+  const e = $('lvs-tts-engine').value;
+  document.querySelectorAll('#p-live [class*="eng-"]').forEach((el) => { el.style.display = el.classList.contains('eng-' + e) ? '' : 'none'; });
 }
 function lvGoals(goals) {
   $('lv-goals').innerHTML = goals.map((g) => `<tr><td><select class="g-type">${Object.entries(LV_GOALS).map(([k, l]) => `<option value="${k}" ${k === g.type ? 'selected' : ''}>${l}</option>`).join('')}</select></td>

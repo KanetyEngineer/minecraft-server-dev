@@ -26,11 +26,14 @@ export const WIDGETS = [
 
 const ALERT_TYPES = ['follow', 'share', 'subscribe', 'gift', 'like', 'join'];
 const GOAL_TYPES = ['likes', 'coins', 'follows', 'shares', 'subs', 'viewers', 'gifts', 'joins'];
+const ENGINES = ['windows', 'voicevox', 'yukkuri', 'browser'];
 const BUILTIN_SOUNDS = { chime: 'チャイム', coin: 'コイン', fanfare: 'ファンファーレ', levelup: 'レベルアップ', pop: 'ポン', bell: 'ベル', whoosh: 'シュッ' };
 
 export const LIVE_DEFAULTS = {
   tts: {
     engine: 'windows', voice: '', rate: 1, volume: 100,
+    vvUrl: 'http://127.0.0.1:50021', vvSpeaker: 3, vvSpeed: 1.1, vvPitch: 0, vvRandom: false,
+    aqExe: '', aqPreset: 'れいむ', aqSpeed: 100,
     chat: true, readName: true, maxLen: 60, who: 'all', skipPrefix: '!', cooldownSec: 0, maxQueue: 6, banned: [],
   },
   alerts: {
@@ -61,7 +64,11 @@ export function cleanLive(raw = {}) {
   const D = LIVE_DEFAULTS;
   const t = raw.tts ?? {};
   const tts = {
-    engine: ['windows', 'browser'].includes(t.engine) ? t.engine : D.tts.engine,
+    engine: ENGINES.includes(t.engine) ? t.engine : D.tts.engine,
+    vvUrl: /^https?:\/\/[\w.:-]+\/?$/.test(t.vvUrl ?? '') ? t.vvUrl.replace(/\/$/, '') : D.tts.vvUrl,
+    vvSpeaker: Math.round(num(t.vvSpeaker, D.tts.vvSpeaker, 0, 100000)), vvSpeed: num(t.vvSpeed, D.tts.vvSpeed, 0.5, 2),
+    vvPitch: num(t.vvPitch, 0, -0.15, 0.15), vvRandom: bool(t.vvRandom, false),
+    aqExe: str(t.aqExe, '', 260), aqPreset: str(t.aqPreset, D.tts.aqPreset, 40), aqSpeed: Math.round(num(t.aqSpeed, D.tts.aqSpeed, 50, 300)),
     voice: str(t.voice, '', 80), rate: Math.round(num(t.rate, D.tts.rate, -10, 10)), volume: Math.round(num(t.volume, D.tts.volume, 0, 100)),
     chat: bool(t.chat, D.tts.chat), readName: bool(t.readName, D.tts.readName), maxLen: Math.round(num(t.maxLen, D.tts.maxLen, 5, 300)),
     who: ['all', 'followers', 'subs'].includes(t.who) ? t.who : 'all', skipPrefix: str(t.skipPrefix, D.tts.skipPrefix, 5),
@@ -260,6 +267,83 @@ function createSapi({ dir, log }) {
   return { available, speak, listVoices, waiting: () => pending.size, stop: () => proc?.kill() };
 }
 
+
+// ------------------------------------------------------------------ VOICEVOX (its engine's HTTP API, usually 127.0.0.1:50021)
+function createVoicevox({ dir, log }) {
+  let speakers = null;
+  let speakersAt = 0;
+  let warned = 0;
+  let seq = 0;
+  async function list(url) {
+    if (speakers && Date.now() - speakersAt < 60000) return speakers;
+    try {
+      const r = await fetch(`${url}/speakers`, { signal: AbortSignal.timeout(3000) });
+      speakers = (await r.json()).flatMap((sp) => sp.styles.map((st) => ({ id: st.id, name: `${sp.name}（${st.name}）` })));
+    } catch { speakers = []; }
+    speakersAt = Date.now();
+    return speakers;
+  }
+  // -> the wav file name, or null
+  let busy = 0;
+  async function speak(text, set, speaker) {
+    busy++;
+    try {
+      const q = await fetch(`${set.vvUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${speaker}`, { method: 'POST', signal: AbortSignal.timeout(10000) });
+      if (!q.ok) throw new Error(`audio_query HTTP ${q.status}`);
+      const query = await q.json();
+      query.speedScale = set.vvSpeed;
+      query.pitchScale = set.vvPitch;
+      query.volumeScale = set.volume / 100;
+      const w = await fetch(`${set.vvUrl}/synthesis?speaker=${speaker}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query), signal: AbortSignal.timeout(20000) });
+      if (!w.ok) throw new Error(`synthesis HTTP ${w.status}`);
+      const name = `vv${Date.now().toString(36)}${(++seq).toString(36)}.wav`;
+      fs.writeFileSync(path.join(dir, name), Buffer.from(await w.arrayBuffer()));
+      return name;
+    } catch (err) {
+      if (Date.now() - warned > 60000) { warned = Date.now(); log('warn', `VOICEVOX で読み上げられません（${err.message}）。VOICEVOX を起動してください。Windows の声で読みます`); }
+      return null;
+    } finally {
+      busy--;
+    }
+  }
+  return { list, speak, waiting: () => busy };
+}
+
+// ------------------------------------------------------------------ ゆっくり (AquesTalkPlayer's command line)
+function createYukkuri({ dir, log }) {
+  let seq = 0;
+  let warned = 0;
+  const queue = [];
+  let running = false;
+  function run(job) {
+    return new Promise((resolve) => {
+      const name = `aq${Date.now().toString(36)}${(++seq).toString(36)}.wav`;
+      const file = path.join(dir, name);
+      const p = spawn(job.set.aqExe, ['/T', job.text, '/P', job.set.aqPreset, '/W', file], { windowsHide: true });
+      const timer = setTimeout(() => p.kill(), 15000);
+      p.on('error', (err) => { clearTimeout(timer); resolve({ err: err.message }); });
+      p.on('exit', () => { clearTimeout(timer); resolve(fs.existsSync(file) && fs.statSync(file).size > 44 ? { name } : { err: '音声ができませんでした' }); });
+    });
+  }
+  async function pump() {
+    if (running) return;
+    running = true;
+    while (queue.length) { const j = queue.shift(); j.done(await run(j)); }
+    running = false;
+  }
+  function speak(text, set) {
+    if (!set.aqExe || !fs.existsSync(set.aqExe)) {
+      if (Date.now() - warned > 60000) { warned = Date.now(); log('warn', 'ゆっくりの声: AquesTalkPlayer.exe の場所が設定されていません。Windows の声で読みます'); }
+      return Promise.resolve(null);
+    }
+    return new Promise((done) => { queue.push({ text, set, done }); pump(); }).then((r) => {
+      if (r.err && Date.now() - warned > 60000) { warned = Date.now(); log('warn', `ゆっくりの声で読み上げられません（${r.err}）`); }
+      return r.name ?? null;
+    });
+  }
+  return { speak, waiting: () => queue.length };
+}
+
 // ------------------------------------------------------------------ text helpers
 const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}]/gu;
 function speakable(s, max) {
@@ -285,6 +369,8 @@ export function createLive(hooks) {
   fs.mkdirSync(ttsDir, { recursive: true });
   fs.mkdirSync(soundDir, { recursive: true });
   const sapi = createSapi({ dir: ttsDir, log: hooks.log });
+  const voicevox = createVoicevox({ dir: ttsDir, log: hooks.log });
+  const yukkuri = createYukkuri({ dir: ttsDir, log: hooks.log });
   const S = () => cleanLive(hooks.settings());
 
   // ---- per-streamer session (counters of this LIVE)
@@ -366,11 +452,25 @@ export function createLive(hooks) {
 
   // ---- speech + alerts
   const lastSpoke = new Map(); // "<sid>:<user>" -> ms
-  async function speech(text) {
+  // who: the viewer's ID, so "a different VOICEVOX voice for each viewer" keeps one voice per person
+  async function speech(text, who = '') {
     const set = S().tts;
     const t = speakable(text, 300);
     if (!t) return null;
-    if (set.engine === 'windows' && sapi.available) {
+    if (set.engine === 'voicevox') {
+      let speaker = set.vvSpeaker;
+      if (set.vvRandom && who) {
+        const list = await voicevox.list(set.vvUrl);
+        if (list.length) speaker = list[[...String(who)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length].id;
+      }
+      const file = await voicevox.speak(t, set, speaker);
+      if (file) return { url: `/tts/${file}` };
+    }
+    if (set.engine === 'yukkuri') {
+      const file = await yukkuri.speak(t, set);
+      if (file) return { url: `/tts/${file}` };
+    }
+    if (set.engine !== 'browser' && sapi.available) {
       const file = await sapi.speak(t, set);
       if (file) return { url: `/tts/${file}` };
     }
@@ -409,11 +509,11 @@ export function createLive(hooks) {
     if (set.cooldownSec && (lastSpoke.get(key) ?? 0) > Date.now() - set.cooldownSec * 1000) return;
     lastSpoke.set(key, Date.now());
     if (lastSpoke.size > 5000) lastSpoke.clear();
-    if (sapi.waiting() >= set.maxQueue) return; // chat faster than the voice: skip rather than fall behind
+    if (sapi.waiting() + yukkuri.waiting() + voicevox.waiting() >= set.maxQueue) return; // chat faster than the voice: skip rather than fall behind
     const body = speakable(comment, set.maxLen);
     if (!body) return;
     const name = speakable(nick(d.user), 20);
-    const sp = await speech(set.readName && name ? `${name}、${body}` : body);
+    const sp = await speech(set.readName && name ? `${name}、${body}` : body, d.user?.uniqueId ?? name);
     if (sp) push(sid, { kind: 'tts', ...sp, maxQueue: set.maxQueue });
   }
 
@@ -585,7 +685,7 @@ export function createLive(hooks) {
       ...Object.entries(BUILTIN_SOUNDS).map(([id, label]) => ({ id, label, url: `/live-sound/${id}.wav`, builtin: true })),
       ...fs.readdirSync(soundDir).filter((f) => /\.(mp3|wav|ogg|m4a)$/i.test(f)).map((f) => ({ id: f, label: f.replace(/^u-/, ''), url: `/live-sound/${encodeURIComponent(f)}` })),
     ];
-    return { settings: S(), defaults: LIVE_DEFAULTS, sounds, voices: await sapi.listVoices(), windowsTts: sapi.available, widgets: WIDGETS, goalTypes: GOAL_TYPES };
+    return { settings: S(), defaults: LIVE_DEFAULTS, sounds, voices: await sapi.listVoices(), windowsTts: sapi.available, vvSpeakers: await voicevox.list(S().tts.vvUrl), widgets: WIDGETS, goalTypes: GOAL_TYPES };
   }
 
   // -> true when the request was one of ours
