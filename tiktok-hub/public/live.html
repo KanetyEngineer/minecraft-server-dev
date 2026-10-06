@@ -92,6 +92,7 @@ const fmt = (n) => Number(n || 0).toLocaleString('ja-JP');
 const av = (u, cls = 'av') => (u ? `<img class="${cls}" src="${esc(u)}" onerror="this.remove()">` : '');
 document.documentElement.style.setProperty('--s', Number(Q.get('size')) || 1);
 if (Q.get('bg') === '1') document.body.classList.add('bg');
+if (Q.get('anim') === '0') document.head.insertAdjacentHTML('beforeend', '<style>*{animation:none!important;transition:none!important}</style>');
 const root = document.getElementById('root');
 let D = { stats: {}, chat: [], events: [], gifters: [], likers: [], goals: [], timer: { running: false, left: 0, endAt: 0 } };
 let skew = 0; // server clock - this clock
@@ -258,6 +259,7 @@ R.timer = {
   init() {
     root.innerHTML = `<div id="timer"><div class="clock sh">--:--</div><div class="lab sh">${esc(Q.get('title') ?? '延長タイマー')}</div></div>`;
     if (!this.iv) this.iv = setInterval(() => this.tick(), 250);
+    this.tick();
   },
   left() { const t = D.timer ?? {}; return t.running ? Math.max(0, t.endAt - (Date.now() + skew)) : (t.left ?? 0); },
   tick() {
@@ -309,6 +311,12 @@ function connect() {
 }
 widget.init();
 connect();
+// ?demo=1: a sample alert that stays (for placing the source in OBS)
+if (W === 'alerts' && Q.get('demo') === '1') {
+  const el = document.getElementById('alert');
+  el.className = 't-gift in';
+  el.innerHTML = '<div class="pics"><img class="gimg" src="/gift-img/5655"></div><div class="txt sh">視聴者 さんが バラ ×5 をくれました！</div>';
+}
 </script>
 </body>
 </html>
