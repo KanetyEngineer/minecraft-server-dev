@@ -1,4 +1,4 @@
-// SharyTech TikTok Hub: every game's TikTok LIVE link in one app.
+// SharyTech Hub: every game's TikTok LIVE link in one app.
 //   TikTok LIVE (one connection per streamer) ──> hub ──> the streamer's game + field ──(RCON)──> that game's server
 // One panel at http://127.0.0.1:8800/ (game tabs, streamers page, status). Each game keeps its own panel, API and
 // OBS overlay under /g/<game>/ , and the hub also answers on each game's old port (8787-8790) so OBS sources and
@@ -12,6 +12,7 @@ import { TikTokManager } from './core/tiktok.js';
 import { send, json, readBody, readJson, cleanTikTok } from './core/util.js';
 import { KNOWN_GIFTS, pickRules } from './core/gifts.js';
 import { createGiftCatalog } from './core/giftcatalog.js';
+import { createLive, cleanLive } from './core/live.js';
 import * as defense from './games/defense/index.js';
 import * as clash from './games/clash/index.js';
 import * as anime from './games/anime/index.js';
@@ -59,6 +60,8 @@ hub.streamers ??= [];
 hub.games ??= {};
 hub.serverDirs ??= {};
 hub.disabledGames ??= [];
+hub.live = cleanLive(hub.live ?? {});
+hub.presets ??= {}; // { <game>: [{ name, rules }] } gift-rule presets to switch during a LIVE
 if (process.env.HUB_PORT) hub.hubPort = Number(process.env.HUB_PORT); // for trying a second copy
 const saveHub = () => {
   const tmp = `${CONFIG_FILE}.tmp`;
@@ -145,6 +148,8 @@ function makeCtx(mod) {
     fieldsEdited: () => reconcileFromGame(id),
     tiktokControl: (field, connect) => tiktokControl(id, field, connect),
     // the game's config with the gift rules of the streamer on that field (their own, if they set any)
+    // big gifts jump the action queue from this many coins (the stream tools' setting; off = never)
+    firstCoins: () => hub.live?.interrupt?.minCoins || Infinity,
     rules: (field, cfg) => {
       const own = streamerAt(id, field)?.rules?.[id];
       return own ? { ...cfg, ...own } : cfg;
@@ -255,12 +260,17 @@ function streamerLabel(s) {
   return s.tiktok ? `@${s.tiktok}` : s.mc || '?';
 }
 
+// the games only know these (joins, viewer counts and connects are for the stream tools)
+const GAME_EVENTS = new Set(['gift', 'follow', 'share', 'subscribe', 'like', 'chat']);
+
 tiktok = new TikTokManager({
   signApiKey: () => hub.signApiKey,
   event: (sid, type, d) => {
     if (type === 'gift') giftCatalog.learn(d);
     const s = hub.streamers.find((x) => x.id === sid);
-    if (!s || !assigned(s)) return;
+    if (!s) return;
+    live.onEvent(s, type, d); // the stream tools: every streamer, assigned or not
+    if (!assigned(s) || !GAME_EVENTS.has(type)) return;
     games.get(s.game).onEvent(s.field, type, d);
   },
   log: (kind, text, sid) => {
@@ -290,6 +300,35 @@ function cleanStreamer(b, existing) {
 // ------------------------------------------------------------------ gift rules (list + per-streamer)
 const giftCatalog = createGiftCatalog({ stateDir: STATE_DIR, log: (k, t) => log(k, t) });
 const hasRules = (g) => typeof g?.actions === 'function';
+
+// ------------------------------------------------------------------ stream tools (TTS, alerts, goals, overlays)
+// overlays name their streamer by ?user=<TikTok ID>, ?streamer=<id> or ?game=&field= (whoever is on that field now)
+function liveStreamer(q) {
+  const user = cleanTikTok(q.get('user') ?? '').toLowerCase();
+  if (user) return hub.streamers.find((x) => x.tiktok.toLowerCase() === user) ?? null;
+  const sid = q.get('streamer');
+  if (sid) return hub.streamers.find((x) => x.id === sid) ?? null;
+  const field = Math.round(Number(q.get('field'))) || 1;
+  return q.get('game') ? streamerAt(q.get('game'), field) : null;
+}
+const live = createLive({
+  stateDir: STATE_DIR,
+  publicDir: path.join(ROOT, 'public'),
+  settings: () => hub.live,
+  save: (v) => { hub.live = v; saveHub(); },
+  log: (k, t) => log(k, t),
+  find: liveStreamer,
+  byId: (id) => hub.streamers.find((x) => x.id === id) ?? null,
+  label: (s) => streamerLabel(s),
+  runAction: (s, action, name, label, avatar) => {
+    const g = assigned(s) ? games.get(s.game) : null;
+    if (!g?.runAction || !g.actions?.()?.[action]) return false;
+    g.runAction(s.field, action, name, label, avatar);
+    return true;
+  },
+  gameActions: () => Object.fromEntries([...games.values()].filter(hasRules).map((g) => [g.meta.id, { title: g.meta.short, icon: g.meta.icon, actions: Object.fromEntries(Object.entries(g.actions()).map(([k, a]) => [k, a.label ?? k])) }])),
+  giftImage: (id, name) => (id ? `/gift-img/${id}` : giftCatalog.find(name) ? `/gift-img/${giftCatalog.find(name).id}` : ''),
+});
 
 // what each gift / follow / share / like does for one streamer (or the game's settings when nobody / no own rules)
 function giftListJson(gameId, s, fieldWanted = 0) {
@@ -371,7 +410,7 @@ function statusJson() {
 const PANEL_INJECT_HEAD = '<script>window.OVL_BASE = location.origin + location.pathname.replace(/[^/]*$/, \'\');</script>';
 function panelBanner() {
   return `<div id="hub-banner" style="background:#0f172a;color:#cbd5e1;border-bottom:1px solid #334155;padding:6px 18px;font:13px 'Yu Gothic UI',Meiryo,sans-serif">` +
-    `SharyTech TikTok Hub の一部です。配信者の割り当て・ほかのゲームは <a style="color:#7dd3fc" href="http://127.0.0.1:${hub.hubPort}/" target="_top">ハブのパネル（http://127.0.0.1:${hub.hubPort}/）</a></div>` +
+    `SharyTech Hub の一部です。配信者の割り当て・ほかのゲームは <a style="color:#7dd3fc" href="http://127.0.0.1:${hub.hubPort}/" target="_top">ハブのパネル（http://127.0.0.1:${hub.hubPort}/）</a></div>` +
     '<script>if (window.top !== window) document.getElementById(\'hub-banner\').remove();</script>';
 }
 
@@ -424,6 +463,7 @@ async function hubRoute(req, res, url) {
     return gameRoute(g, req, res, sub);
   }
   if (req.method === 'GET' && (p === '/' || p === '/index.html')) return send(res, 200, 'text/html; charset=utf-8', hubPanelFile());
+  if (await live.handle(req, res, url)) return;
   if (req.method === 'GET' && p === '/overlay') {
     const id = url.searchParams.get('game');
     if (id && games.has(id)) return serveOverlay(res, id, `/g/${id}/`);
@@ -466,6 +506,41 @@ async function hubRoute(req, res, url) {
       return json(res, { ok: false, message: err.message }, 400);
     }
   }
+  // gift-rule presets: save a streamer's rules (or the game's) under a name, put them back on any streamer mid-LIVE
+  if (req.method === 'GET' && p === '/api/presets') {
+    const gameId = url.searchParams.get('game') || '';
+    return json(res, { ok: true, presets: (hub.presets[gameId] ?? []).map((x) => ({ name: x.name, rules: x.rules })) });
+  }
+  if (req.method === 'POST' && p === '/api/presets') {
+    const b = await readBody(req);
+    try {
+      if (!hasRules(games.get(b.game))) throw new Error('そのゲームはありません');
+      const list = (hub.presets[b.game] ??= []);
+      const name = String(b.name ?? '').trim().slice(0, 30);
+      const s = b.streamer ? hub.streamers.find((x) => x.id === b.streamer) : null;
+      if (b.streamer && !s) throw new Error('その配信者はいません');
+      if (b.op === 'save') {
+        if (!name) throw new Error('プリセットの名前を入れてください');
+        const rules = b.rules ? cleanRules(b.game, b.rules) : (s?.rules?.[b.game] ?? pickRules(games.get(b.game).rulesConfig()));
+        const i = list.findIndex((x) => x.name === name);
+        if (i >= 0) list[i] = { name, rules }; else list.push({ name, rules });
+        log('info', `${games.get(b.game).meta.short} のプリセット「${name}」を保存しました`);
+      } else if (b.op === 'apply') {
+        const pr = list.find((x) => x.name === name);
+        if (!pr) throw new Error('そのプリセットはありません');
+        if (!s) throw new Error('配信者を選んでください');
+        s.rules = { ...(s.rules ?? {}), [b.game]: cleanRules(b.game, pr.rules) };
+        log('info', `${streamerLabel(s)} の ${games.get(b.game).meta.short} にプリセット「${name}」を使いました`);
+      } else if (b.op === 'delete') {
+        const i = list.findIndex((x) => x.name === name);
+        if (i >= 0) list.splice(i, 1);
+      } else throw new Error('知らない操作です');
+      saveHub();
+      return json(res, { ok: true, presets: list.map((x) => ({ name: x.name, rules: x.rules })), ...(s ? giftListJson(b.game, s) : {}) });
+    } catch (err) {
+      return json(res, { ok: false, message: err.message }, 400);
+    }
+  }
   if (req.method === 'GET' && p === '/api/status') return json(res, statusJson());
   if (req.method === 'GET' && p === '/api/streamers') return json(res, { streamers: streamersJson() });
   if (req.method === 'POST' && p === '/api/streamers') {
@@ -475,6 +550,7 @@ async function hubRoute(req, res, url) {
       if (b.id && !s) throw new Error('その配信者はいません');
       if (b.op === 'delete') {
         hub.streamers.splice(hub.streamers.indexOf(s), 1);
+        live.forget(s.id);
         log('info', `配信者 ${streamerLabel(s)} を消しました`);
       } else if (b.op === 'test') {
         // a fake gift that goes through exactly the same routing as a real one from this streamer's LIVE
@@ -483,7 +559,9 @@ async function hubRoute(req, res, url) {
         const gift = String(b.gift || 'テストギフト').slice(0, 40);
         const name = String(b.name || 'テスト視聴者').slice(0, 24);
         log('info', `${streamerLabel(s)} にテストギフト「${gift}」${coins}コイン → ${games.get(s.game).meta.short} ${games.get(s.game).meta.fieldWord}${s.field}`);
-        games.get(s.game).onEvent(s.field, 'gift', { user: { nickname: name, uniqueId: 'test' }, gift: { name: gift, diamondCount: coins, type: 0 }, repeatCount: 1, repeatEnd: true });
+        const fake = { user: { nickname: name, uniqueId: 'test' }, gift: { name: gift, diamondCount: coins, type: 0 }, repeatCount: 1, repeatEnd: true };
+        live.onEvent(s, 'gift', fake);
+        games.get(s.game).onEvent(s.field, 'gift', fake);
         return json(res, { ok: true, game: s.game, field: s.field });
       } else if (b.op === 'connect' || b.op === 'disconnect') {
         if (!s.tiktok) throw new Error('TikTok の ID がありません');

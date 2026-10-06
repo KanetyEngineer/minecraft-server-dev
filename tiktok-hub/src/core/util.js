@@ -41,6 +41,13 @@ export function actionsForGift(rules, giftName, coinsEach, repeat) {
   return tier.pick === 'all' ? [...tier.actions] : [pick(tier.actions)];
 }
 
+// a big gift's action goes ahead of the ordinary ones still waiting (but after other big ones)
+export function pushQueued(q, item, first) {
+  item.first = Boolean(first);
+  const i = first ? q.findIndex((x) => !x.first) : -1;
+  if (i < 0) q.push(item); else q.splice(i, 0, item);
+}
+
 export const readJson = (file, def) => {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return def; }
 };

@@ -89,6 +89,8 @@ export class TikTokManager {
     connection.on(WebcastEvent.SUBSCRIBE ?? 'subscribe', fwd('subscribe'));
     connection.on(WebcastEvent.LIKE, fwd('like'));
     connection.on(WebcastEvent.CHAT, fwd('chat'));
+    connection.on(WebcastEvent.MEMBER, fwd('member'));
+    connection.on(WebcastEvent.ROOM_USER, fwd('roomUser'));
     connection.on(ControlEvent.DISCONNECTED, () => {
       if (c.stopping || !alive()) return;
       this.set(c, 'connecting', '切断されたので30秒後に再接続します');
@@ -106,6 +108,7 @@ export class TikTokManager {
       c.roomId = s.roomId;
       c.since = Date.now();
       this.set(c, 'connected', `@${user}（roomId ${s.roomId}）`);
+      try { this.hooks.event(id, 'connected', { roomId: String(s.roomId ?? '') }); } catch { /* the stream tools only */ }
       this.hooks.log('info', `TikTok LIVE に接続しました: @${user}`, id);
     } catch (err) {
       if (!alive()) return;
