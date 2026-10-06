@@ -144,6 +144,152 @@
     <datalist id="gl-names"></datalist>
   </div>
 
+  <div class="page" id="p-live">
+    <section>
+      <h2>📺 配信ツール</h2>
+      <p class="help">TikFinity のような配信の道具です。ゲームとは別に、どの配信者にも使えます: コメントの読み上げ、フォロー・シェア・サブスク・ギフト・いいね達成・入室のアラート（効果音＋読み上げ）、ゴール（目標バー）、延長タイマー、チャット欄・最近のイベント・ランキング・カウンターの OBS 用オーバーレイ。設定は全員共通、数は配信者ごと・LIVE ごとです（新しい LIVE に接続すると 0 から）。</p>
+      <div class="row">
+        <label>配信者<select id="lv-who" onchange="lvPick()"></select></label>
+        <button onclick="lvReset()" title="この配信者のいいね・コイン・ランキング・チャットなどを 0 に戻します（タイマーはそのまま）">数を 0 に戻す</button>
+        <span class="msg" id="lv-msg"></span>
+      </div>
+      <div id="lv-stats" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+    </section>
+
+    <div class="gl-wrap">
+      <div>
+        <section>
+          <h2>テスト（本物と同じ流れでアラート・読み上げ・数が動きます）</h2>
+          <div class="row">
+            <label>名前<input id="lv-tname" value="テスト視聴者"></label>
+            <label>コメント<input id="lv-tcomment" value="こんにちは！がんばって！"></label>
+          </div>
+          <div class="chips" style="margin-top:8px;gap:6px">
+            <button onclick="lvTest('follow')">➕ フォロー</button>
+            <button onclick="lvTest('share')">🔁 シェア</button>
+            <button onclick="lvTest('subscribe')">⭐ サブスク</button>
+            <button onclick="lvTest('gift',{gift:'Rose',coins:1,giftId:5655})">🌹 バラ 1</button>
+            <button onclick="lvTest('gift',{gift:'Finger Heart',coins:5,giftId:5487})">🫰 指ハート 5</button>
+            <button onclick="lvTest('gift',{gift:'Hand Heart',coins:100,giftId:5660,count:3})">💖 ハンドハート ×3</button>
+            <button onclick="lvTest('like',{likes:500})">❤️ いいね +500</button>
+            <button onclick="lvTest('chat')">💬 コメント</button>
+            <button onclick="lvTest('member')">🚪 入室</button>
+            <button onclick="lvTest('viewers',{viewers:Math.floor(50+Math.random()*300)})">👀 視聴者数</button>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label style="flex:3 1 260px">好きな文を読み上げる<input id="lv-say" placeholder="例: みんな来てくれてありがとう！"></label>
+            <button onclick="lvSay()">🔊 読み上げ</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>⏱️ 延長タイマー（サブアソン）</h2>
+          <p class="help">ギフトのコイン・フォロー・シェア・サブスク・いいねで時間が延びるタイマーです。OBS には右の「延長タイマー」の URL を入れます。</p>
+          <div class="chips" style="gap:6px">
+            <button class="primary" onclick="lvTimer('start')">▶ スタート</button>
+            <button onclick="lvTimer('pause')">⏸ 一時停止</button>
+            <button onclick="lvTimer('add',60)">+1分</button>
+            <button onclick="lvTimer('add',300)">+5分</button>
+            <button onclick="lvTimer('add',-60)">-1分</button>
+            <button onclick="lvTimer('reset')" title="はじめの時間に戻して止めます">リセット</button>
+            <span id="lv-clock" style="font-size:20px;font-weight:800;margin-left:8px;font-variant-numeric:tabular-nums"></span>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>はじめの時間（分）<input type="number" id="lvs-timer-startMin" min="0"></label>
+            <label>上限（分、0 = なし）<input type="number" id="lvs-timer-maxMin" min="0"></label>
+            <label>1コインで（秒）<input type="number" id="lvs-timer-perCoin" min="0" step="0.5"></label>
+            <label>フォローで（秒）<input type="number" id="lvs-timer-perFollow" min="0"></label>
+            <label>シェアで（秒）<input type="number" id="lvs-timer-perShare" min="0"></label>
+            <label>サブスクで（秒）<input type="number" id="lvs-timer-perSub" min="0"></label>
+            <label>いいね何回ごと<input type="number" id="lvs-timer-likeEvery" min="0"></label>
+            <label>…に（秒）<input type="number" id="lvs-timer-perLikes" min="0"></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>🔊 読み上げ</h2>
+          <div class="row">
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-tts-chat"> コメントを読み上げる</label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-tts-readName"> 名前も読む</label>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label>声の出し方<select id="lvs-tts-engine"><option value="windows">Windows の声（OBS のブラウザソースで鳴る）</option><option value="browser">ブラウザの声</option></select></label>
+            <label>声<select id="lvs-tts-voice"></select></label>
+            <label style="flex:0 0 110px">速さ（-10〜10）<input type="number" id="lvs-tts-rate" min="-10" max="10"></label>
+            <label style="flex:0 0 110px">音量（0〜100）<input type="number" id="lvs-tts-volume" min="0" max="100"></label>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label>だれのコメント<select id="lvs-tts-who"><option value="all">全員</option><option value="followers">フォロワーだけ</option><option value="subs">サブスク・モデレーターだけ</option></select></label>
+            <label style="flex:0 0 120px">最大の文字数<input type="number" id="lvs-tts-maxLen" min="5"></label>
+            <label style="flex:0 0 140px">読まない頭の文字<input id="lvs-tts-skipPrefix" placeholder="!"></label>
+            <label style="flex:0 0 150px">同じ人の間隔（秒）<input type="number" id="lvs-tts-cooldownSec" min="0"></label>
+            <label style="flex:0 0 150px">ためておく数<input type="number" id="lvs-tts-maxQueue" min="1"></label>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label style="flex:1 1 100%">読まない言葉（この言葉が入ったコメントは読まない。読点か改行で区切る）<input id="lvs-tts-banned" placeholder="例: 死ね、うざい"></label>
+          </div>
+          <p class="help" style="margin-top:8px">読み上げと効果音は「アラート」のオーバーレイ（OBS のブラウザソース）から鳴ります。OBS のソースの「OBS で音声を制御する」を入れると、音量を OBS で調整できます。絵文字は読まず、URL は「URL」と読みます。</p>
+        </section>
+
+        <section>
+          <h2>🔔 アラート</h2>
+          <p class="help">文の中の <code>{name}</code> は名前、<code>{gift}</code> はギフト名、<code>{count}</code> は個数、<code>{coins}</code> はコイン、<code>{likes}</code> はいいね数になります。</p>
+          <div class="row">
+            <label style="flex:0 0 130px">効果音の音量<input type="number" id="lvs-alerts-volume" min="0" max="100"></label>
+            <label style="flex:0 0 130px">出す長さ（秒）<input type="number" id="lvs-alerts-duration" min="2" max="30"></label>
+          </div>
+          <table class="gl-t" style="margin-top:8px">
+            <thead><tr><th style="width:100px">いつ</th><th style="width:40px">出す</th><th>文</th><th style="width:180px">効果音</th><th style="width:60px">読上げ</th></tr></thead>
+            <tbody id="lv-alerts"></tbody>
+          </table>
+          <div class="row" style="margin-top:8px">
+            <label>ギフトは何コインから出す<input type="number" id="lvs-alerts-gift-minCoins" min="1"></label>
+            <label>大きいギフト（コイン以上、0 = なし）<input type="number" id="lvs-alerts-gift-bigCoins" min="0"></label>
+            <label>大きいギフトの効果音<select id="lvs-alerts-gift-bigSound"></select></label>
+            <label>いいね何回ごとに出す<input type="number" id="lvs-alerts-like-every" min="10"></label>
+          </div>
+        </section>
+
+        <section>
+          <h2>🎵 効果音</h2>
+          <p class="help">最初から入っている音のほかに、自分の mp3 / wav / ogg / m4a を足せます（8MB まで）。</p>
+          <div id="lv-sounds" class="chips" style="gap:6px"></div>
+          <div class="row" style="margin-top:8px"><label><input type="file" id="lv-file" accept=".mp3,.wav,.ogg,.m4a,audio/*"></label><button onclick="lvUpload()">追加</button><span class="msg" id="lv-up-msg"></span></div>
+        </section>
+
+        <section>
+          <h2>🎯 ゴール</h2>
+          <p class="help">「次の目標」に数を入れると、達成したときに目標がその分だけ上がります（0 なら達成のまま）。OBS の URL の <code>n=</code> が上からの番号です。</p>
+          <table class="gl-t"><thead><tr><th>何を数える</th><th>見出し</th><th style="width:110px">目標</th><th style="width:110px">次の目標</th><th style="width:60px">色</th><th style="width:40px"></th></tr></thead><tbody id="lv-goals"></tbody></table>
+          <button class="small" style="margin-top:6px" onclick="lvAddGoal()">＋ ゴールを足す</button>
+        </section>
+
+        <section>
+          <h2>💬 チャット欄・ランキング</h2>
+          <div class="row">
+            <label style="flex:0 0 160px">チャット欄の行数<input type="number" id="lvs-chat-max" min="1" max="50"></label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-chat-showGifts"> ギフトもチャット欄に出す</label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-chat-showJoins"> 入室もチャット欄に出す</label>
+            <label style="flex:0 0 160px">ランキングの人数<input type="number" id="lvs-top-count" min="1" max="20"></label>
+          </div>
+        </section>
+        <div style="position:sticky;bottom:0;background:var(--bg);padding:8px 0;z-index:2"><button class="primary" onclick="lvSave()">設定を保存</button><button onclick="lvDefaults()" style="margin-left:6px">はじめの設定に戻す</button><span class="msg" id="lv-save-msg"></span></div>
+      </div>
+
+      <section style="position:sticky;top:0">
+        <h2>OBS のオーバーレイ</h2>
+        <p class="help">OBS の「ブラウザ」ソースに URL を入れます（背景は透明、大きさは URL の下の数字が目安）。ゲームに割り当てた配信者は「ゲーム＋番号」の URL になり、その番号に入った人に自動で切り替わります。<code>&amp;size=1.5</code> で文字を大きく、<code>&amp;max=</code> で行数を変えられます。</p>
+        <table class="gl-t"><tbody id="lv-widgets"></tbody></table>
+        <div class="row" style="margin-top:10px">
+          <label>プレビュー<select id="lv-prev" onchange="lvPreview()"></select></label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="lv-prev-sound" onchange="lvPreview()"> プレビューでも音を出す</label>
+        </div>
+        <p class="help" style="margin:4px 0">OBS でも鳴っているときにプレビューの音を出すと二重に聞こえます。</p>
+        <div class="checker"><iframe id="lv-frame" style="height:420px"></iframe></div>
+      </section>
+    </div>
+  </div>
+
   <div class="page" id="p-settings">
     <section>
       <h2>TikTok 接続</h2>
@@ -181,7 +327,7 @@ const ttPill = (st, detail) => { const [c, t] = TT[st] ?? ['', st]; return `<spa
 
 // ------------------------------------------------------------------ tabs
 function buildNav() {
-  const items = [['home', '概要'], ['streamers', '配信者'], ['gifts', '🎁 ギフト一覧'], ...S.games.map((g) => ['g-' + g.id, `${g.icon} ${g.short}`]), ['settings', '設定']];
+  const items = [['home', '概要'], ['streamers', '配信者'], ['gifts', '🎁 ギフト一覧'], ['live', '📺 配信ツール'], ...S.games.map((g) => ['g-' + g.id, `${g.icon} ${g.short}`]), ['settings', '設定']];
   $('nav').innerHTML = items.map(([id, label]) => `<a href="#${id}" data-t="${id}">${esc(label)}</a>`).join('');
   for (const g of S.games) {
     const div = document.createElement('div');
@@ -203,6 +349,7 @@ function show() {
   }
   if (tab === 'streamers') loadStreamers();
   if (tab === 'gifts') glInit();
+  if (tab === 'live') lvInit();
 }
 window.addEventListener('hashchange', show);
 
@@ -548,6 +695,175 @@ setInterval(() => {
 }, 500);
 function glPng() {
   try { $('gl-frame').contentWindow.savePng(`gift-list-${GL.game.id}${GL.field ? '-' + GL.field : ''}.png`); } catch { alert('プレビューが読み込まれてから押してください'); }
+}
+
+// ------------------------------------------------------------------ stream tools
+let LV = null;          // /api/live/settings
+let LVS = null;         // the chosen streamer's counters, timer, ranking
+let LV_STREAMERS = [];
+let lvSkew = 0;
+const LV_TYPES = [['follow', '➕ フォロー'], ['share', '🔁 シェア'], ['subscribe', '⭐ サブスク'], ['gift', '🎁 ギフト'], ['like', '❤️ いいね達成'], ['join', '🚪 入室']];
+const LV_GOALS = { likes: 'いいね', coins: 'コイン', follows: 'フォロー', shares: 'シェア', subs: 'サブスク', viewers: '視聴者数', gifts: 'ギフトの数', joins: '入室' };
+async function lvInit() {
+  const d = await (await fetch('/api/streamers')).json();
+  const keep = $('lv-who').value;
+  LV_STREAMERS = d.streamers;
+  $('lv-who').innerHTML = d.streamers.map((s) => `<option value="${s.id}">${esc(s.tiktok ? '@' + s.tiktok : s.mc)}${s.assigned ? `（${esc(S.games.find((g) => g.id === s.game)?.short ?? s.game)} ${s.field}）` : ''}</option>`).join('') || '<option value="">配信者がいません</option>';
+  if (keep && d.streamers.some((s) => s.id === keep)) $('lv-who').value = keep;
+  if (!LV) { LV = await (await fetch('/api/live/settings')).json(); lvFill(); }
+  lvPick();
+}
+const lvWho = () => LV_STREAMERS.find((s) => s.id === $('lv-who').value);
+function lvQuery(s) {
+  if (!s) return '';
+  return s.assigned ? `game=${s.game}&field=${s.field}` : s.tiktok ? `user=${encodeURIComponent(s.tiktok)}` : `streamer=${s.id}`;
+}
+function lvUrl(w, extra = '') {
+  return `${location.origin}/live/${w}?${[lvQuery(lvWho()), extra].filter(Boolean).join('&')}`;
+}
+function lvPick() {
+  if (!LV) return;
+  const goals = LV.settings.goals.length ? LV.settings.goals : [null];
+  const rows = LV.widgets.flatMap((w) => (w.id === 'goal'
+    ? goals.map((g, i) => ({ ...w, title: `ゴール ${i + 1}${g ? `（${g.title}）` : ''}`, url: lvUrl('goal', `n=${i + 1}`) }))
+    : [{ ...w, url: lvUrl(w.id) }]));
+  $('lv-widgets').innerHTML = lvWho() ? rows.map((w) => `<tr><td style="white-space:nowrap">${esc(w.title)}<div class="muted" style="font-size:11px">${w.w}×${w.h}</div></td><td><code class="copy" title="クリックでコピー" onclick="copy(this)">${esc(w.url)}</code></td></tr>`).join('') : '<tr><td class="muted">配信者を「配信者」ページで追加してください</td></tr>';
+  const prev = $('lv-prev').selectedIndex;
+  $('lv-prev').innerHTML = rows.map((w) => `<option value="${esc(w.url)}">${esc(w.title)}</option>`).join('');
+  if (prev > 0 && prev < rows.length) $('lv-prev').selectedIndex = prev;
+  lvPreview();
+  lvPoll();
+}
+function lvPreview() {
+  const u = $('lv-prev').value;
+  if (!u || !lvWho()) return;
+  const src = u + ($('lv-prev-sound').checked ? '' : '&sound=0&tts=0') + '&size=0.8';
+  if ($('lv-frame').getAttribute('src') !== src) $('lv-frame').src = src;
+}
+async function lvPoll() {
+  const s = lvWho();
+  if (!s || tab !== 'live') return;
+  const r = await post('/api/live/session', { streamer: s.id });
+  if (!r.ok) return;
+  LVS = r;
+  lvSkew = r.timer.now - Date.now();
+  const st = r.stats;
+  const pill = (i, v, l) => `<span class="pill">${i} <b>${Number(v || 0).toLocaleString('ja-JP')}</b> <span class="muted">${l}</span></span>`;
+  $('lv-stats').innerHTML = pill('👀', st.viewers, '視聴者') + pill('❤️', st.likes, 'いいね') + pill('🪙', st.coins, 'コイン') + pill('🎁', st.gifts, 'ギフト') + pill('➕', st.follows, 'フォロー') + pill('🔁', st.shares, 'シェア') + pill('⭐', st.subs, 'サブスク') + pill('💬', st.comments, 'コメント') + pill('🚪', st.joins, '入室') +
+    (r.gifters[0] ? `<span class="pill">🥇 ${esc(r.gifters[0].name)} ${r.gifters[0].n}コイン</span>` : '');
+}
+setInterval(() => { if (tab === 'live') lvPoll(); }, 2000);
+setInterval(() => {
+  if (tab !== 'live' || !LVS) return;
+  const t = LVS.timer;
+  const ms = t.running ? Math.max(0, t.endAt - (Date.now() + lvSkew)) : t.left;
+  const s = Math.ceil(ms / 1000);
+  $('lv-clock').textContent = `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}${t.running ? '' : '（停止中）'}`;
+}, 250);
+
+function lvSoundOptions(sel) {
+  return '<option value="">（なし）</option>' + LV.sounds.map((x) => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>${esc(x.label)}</option>`).join('');
+}
+function lvPlay(id) {
+  const x = LV.sounds.find((v) => v.id === id);
+  if (x) { const a = new Audio(x.url); a.volume = (Number($('lvs-alerts-volume').value) || 70) / 100; a.play(); }
+}
+// settings -> the form
+function lvFill() {
+  const s = LV.settings;
+  const set = (id, v) => { const el = $(id); if (!el) return; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; };
+  $('lvs-tts-voice').innerHTML = '<option value="">（いつもの声）</option>' + LV.voices.map((v) => `<option value="${esc(v.name)}">${esc(v.name)}（${esc(v.lang)}）</option>`).join('');
+  for (const sec of ['tts', 'timer', 'chat', 'top']) for (const [k, v] of Object.entries(s[sec])) set(`lvs-${sec}-${k}`, Array.isArray(v) ? v.join('、') : v);
+  set('lvs-alerts-volume', s.alerts.volume); set('lvs-alerts-duration', s.alerts.duration);
+  if (!LV.windowsTts) $('lvs-tts-engine').querySelector('option[value=windows]').textContent = 'Windows の声（この PC では使えません）';
+  $('lv-alerts').innerHTML = LV_TYPES.map(([k, label]) => `<tr data-k="${k}"><td>${label}</td><td><input type="checkbox" class="a-on" ${s.alerts[k].on ? 'checked' : ''}></td>
+    <td><input class="a-text" value="${esc(s.alerts[k].text)}"></td>
+    <td><div style="display:flex;gap:4px"><select class="a-sound">${lvSoundOptions(s.alerts[k].sound)}</select><button class="small" title="鳴らす" onclick="lvPlay(this.previousElementSibling.value)">▶</button></div></td>
+    <td><input type="checkbox" class="a-tts" ${s.alerts[k].tts ? 'checked' : ''}></td></tr>`).join('');
+  set('lvs-alerts-gift-minCoins', s.alerts.gift.minCoins); set('lvs-alerts-gift-bigCoins', s.alerts.gift.bigCoins); set('lvs-alerts-like-every', s.alerts.like.every);
+  $('lvs-alerts-gift-bigSound').innerHTML = lvSoundOptions(s.alerts.gift.bigSound);
+  lvGoals(s.goals);
+  lvSounds();
+}
+function lvGoals(goals) {
+  $('lv-goals').innerHTML = goals.map((g) => `<tr><td><select class="g-type">${Object.entries(LV_GOALS).map(([k, l]) => `<option value="${k}" ${k === g.type ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+    <td><input class="g-title" value="${esc(g.title)}"></td><td><input type="number" class="g-target" value="${g.target}" min="1"></td><td><input type="number" class="g-step" value="${g.step}" min="0"></td>
+    <td><input type="color" class="g-color" value="${g.color}" style="padding:0;height:30px"></td><td><button class="small del" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join('');
+}
+function lvAddGoal() {
+  const cur = lvCollect().goals;
+  cur.push({ type: 'likes', title: '新しい目標', target: 1000, step: 0, color: '#a855f7' });
+  lvGoals(cur);
+}
+function lvSounds() {
+  $('lv-sounds').innerHTML = LV.sounds.map((x) => `<span class="chip">${esc(x.label)} <button style="color:var(--accent2)" title="鳴らす" onclick="lvPlay('${esc(x.id)}')">▶</button>${x.builtin ? '' : `<button title="消す" onclick="lvDelSound('${esc(x.id)}')">✕</button>`}</span>`).join('');
+}
+// the form -> settings
+function lvCollect() {
+  const s = JSON.parse(JSON.stringify(LV.settings));
+  const val = (id) => { const el = $(id); return el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value; };
+  for (const sec of ['tts', 'timer', 'chat', 'top']) for (const k of Object.keys(s[sec])) if ($(`lvs-${sec}-${k}`)) s[sec][k] = val(`lvs-${sec}-${k}`);
+  s.tts.banned = String($('lvs-tts-banned').value).split(/[,、\n]/).map((w) => w.trim()).filter(Boolean);
+  s.alerts.volume = val('lvs-alerts-volume'); s.alerts.duration = val('lvs-alerts-duration');
+  for (const tr of $('lv-alerts').querySelectorAll('tr')) {
+    const a = s.alerts[tr.dataset.k];
+    a.on = tr.querySelector('.a-on').checked; a.text = tr.querySelector('.a-text').value; a.sound = tr.querySelector('.a-sound').value; a.tts = tr.querySelector('.a-tts').checked;
+  }
+  s.alerts.gift.minCoins = val('lvs-alerts-gift-minCoins'); s.alerts.gift.bigCoins = val('lvs-alerts-gift-bigCoins'); s.alerts.gift.bigSound = val('lvs-alerts-gift-bigSound');
+  s.alerts.like.every = val('lvs-alerts-like-every');
+  s.goals = [...$('lv-goals').querySelectorAll('tr')].map((tr) => ({ type: tr.querySelector('.g-type').value, title: tr.querySelector('.g-title').value, target: Number(tr.querySelector('.g-target').value), step: Number(tr.querySelector('.g-step').value), color: tr.querySelector('.g-color').value }));
+  return s;
+}
+async function lvSave() {
+  const r = await post('/api/live/settings', { settings: lvCollect() });
+  if (r.ok) { LV = r; lvFill(); lvPick(); }
+  msg('lv-save-msg', r.ok ? { ok: true, message: '保存しました' } : r);
+}
+async function lvDefaults() {
+  if (!confirm('配信ツールの設定をはじめの設定に戻しますか？（追加した効果音は残ります）')) return;
+  const r = await post('/api/live/settings', { settings: LV.defaults });
+  if (r.ok) { LV = r; lvFill(); lvPick(); }
+  msg('lv-save-msg', r.ok ? { ok: true, message: 'はじめの設定に戻しました' } : r);
+}
+async function lvTest(type, extra = {}) {
+  const s = lvWho();
+  if (!s) return msg('lv-msg', { ok: false, message: '配信者を選んでください' });
+  const r = await post('/api/live/test', { streamer: s.id, type, name: $('lv-tname').value, comment: $('lv-tcomment').value, ...extra });
+  msg('lv-msg', r.ok ? { ok: true, message: 'テストを送りました' } : r);
+  setTimeout(lvPoll, 400);
+}
+async function lvSay() {
+  const s = lvWho();
+  if (!s) return;
+  const r = await post('/api/live/say', { streamer: s.id, text: $('lv-say').value });
+  msg('lv-msg', r.ok ? { ok: true, message: '読み上げます（アラートのオーバーレイから鳴ります）' } : r);
+}
+async function lvTimer(op, sec = 0) {
+  const s = lvWho();
+  if (!s) return;
+  const r = await post('/api/live/timer', { streamer: s.id, op, sec });
+  if (!r.ok) msg('lv-msg', r);
+  lvPoll();
+}
+async function lvReset() {
+  const s = lvWho();
+  if (!s || !confirm('この配信者のいいね・コイン・ランキング・チャットなどを 0 に戻しますか？')) return;
+  const r = await post('/api/live/reset', { streamer: s.id, keepTimer: true });
+  msg('lv-msg', r.ok ? { ok: true, message: '0 に戻しました' } : r);
+  lvPoll();
+}
+async function lvUpload() {
+  const f = $('lv-file').files[0];
+  if (!f) return msg('lv-up-msg', { ok: false, message: 'ファイルを選んでください' });
+  const data = await new Promise((resolve) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).split(',')[1] ?? ''); fr.readAsDataURL(f); });
+  const r = await post('/api/live/sound', { name: f.name, data });
+  if (r.ok) { const keep = lvCollect(); LV = { ...r, settings: keep }; lvFill(); }
+  msg('lv-up-msg', r.ok ? { ok: true, message: '追加しました（アラートの効果音で選べます）' } : r);
+}
+async function lvDelSound(id) {
+  if (!confirm(`${id} を消しますか？`)) return;
+  const r = await post('/api/live/sound-delete', { file: id });
+  if (r.ok) { const keep = lvCollect(); LV = { ...r, settings: keep }; lvFill(); }
 }
 
 // ------------------------------------------------------------------ main

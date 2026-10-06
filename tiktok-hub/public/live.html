@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SharyTech TikTok Hub 配信ツール</title>
+<style>
+  :root { --pink:#fe2c55; --cyan:#25f4ee; --gold:#facc15; --s:1; }
+  html, body { margin:0; background:transparent; overflow:hidden; font-family:"Yu Gothic UI","Meiryo",sans-serif; color:#fff; }
+  body.bg { background:#0f1117; }
+  .sh { text-shadow:0 2px 4px #000, 0 0 2px #000; }
+  img.av { border-radius:50%; object-fit:cover; flex:none; background:#333; }
+
+  /* alerts */
+  #alert { position:absolute; left:50%; top:calc(60px * var(--s)); transform:translate(-50%, -30px) scale(.9); opacity:0; transition:opacity .4s, transform .4s;
+           display:flex; flex-direction:column; align-items:center; gap:calc(10px * var(--s)); text-align:center; width:max-content; max-width:90vw; }
+  #alert.in { opacity:1; transform:translate(-50%, 0) scale(1); }
+  #alert .pics { display:flex; gap:calc(10px * var(--s)); align-items:center; }
+  #alert .pics img { width:calc(110px * var(--s)); height:calc(110px * var(--s)); }
+  #alert .pics img.av { border:calc(4px * var(--s)) solid var(--gold); box-shadow:0 0 30px rgba(250,204,21,.6); }
+  #alert .pics img.gimg { object-fit:contain; animation:bob 1.2s ease-in-out infinite; }
+  #alert .txt { font-size:calc(40px * var(--s)); font-weight:800; padding:calc(10px * var(--s)) calc(26px * var(--s)); border-radius:16px;
+                background:linear-gradient(90deg, rgba(254,44,85,.88), rgba(124,58,237,.88)); border:2px solid rgba(255,255,255,.5); line-height:1.3; }
+  #alert.t-follow .txt { background:linear-gradient(90deg, rgba(14,165,233,.9), rgba(37,244,238,.75)); }
+  #alert.t-share .txt { background:linear-gradient(90deg, rgba(34,197,94,.9), rgba(20,184,166,.85)); }
+  #alert.t-subscribe .txt { background:linear-gradient(90deg, rgba(234,179,8,.92), rgba(249,115,22,.9)); }
+  #alert.t-like .txt { background:linear-gradient(90deg, rgba(254,44,85,.92), rgba(244,114,182,.88)); }
+  #alert.t-join .txt { background:rgba(15,23,42,.85); font-size:calc(30px * var(--s)); }
+  @keyframes bob { 50% { transform:translateY(-8px) rotate(-4deg); } }
+  #unlock { position:fixed; inset:auto 10px 10px auto; background:#000c; border:1px solid #fff5; border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; display:none; }
+
+  /* lists */
+  .list { position:absolute; left:0; right:0; display:flex; flex-direction:column; gap:calc(6px * var(--s)); padding:calc(8px * var(--s)); }
+  #chat { bottom:0; }
+  .line { display:flex; gap:calc(8px * var(--s)); align-items:flex-start; background:rgba(0,0,0,.55); border-radius:12px; padding:calc(6px * var(--s)) calc(10px * var(--s));
+          font-size:calc(19px * var(--s)); animation:slide .35s ease; line-height:1.35; }
+  .line img.av { width:calc(30px * var(--s)); height:calc(30px * var(--s)); }
+  .line .n { color:var(--cyan); font-weight:700; margin-right:6px; white-space:nowrap; }
+  .line.gift { background:rgba(120,53,15,.65); } .line.gift .n { color:var(--gold); }
+  .line.join { opacity:.75; font-size:calc(16px * var(--s)); }
+  .line img.gi { width:calc(26px * var(--s)); height:calc(26px * var(--s)); object-fit:contain; vertical-align:middle; }
+  @keyframes slide { from { opacity:0; transform:translateX(-20px); } }
+  #events { top:0; }
+  .ev { display:flex; gap:calc(10px * var(--s)); align-items:center; background:rgba(0,0,0,.6); border-left:calc(5px * var(--s)) solid var(--pink); border-radius:10px;
+        padding:calc(6px * var(--s)) calc(10px * var(--s)); font-size:calc(19px * var(--s)); animation:slide .35s ease; }
+  .ev img.av { width:calc(34px * var(--s)); height:calc(34px * var(--s)); }
+  .ev .n { font-weight:700; } .ev .w { color:#cbd5e1; margin-left:auto; white-space:nowrap; display:flex; align-items:center; gap:4px; }
+  .ev img.gi { width:calc(30px * var(--s)); height:calc(30px * var(--s)); object-fit:contain; }
+  .ev.follow { border-color:var(--cyan); } .ev.share { border-color:#22c55e; } .ev.subscribe { border-color:#f97316; } .ev.gift { border-color:var(--gold); } .ev.like { border-color:#f472b6; }
+
+  /* goal */
+  #goal { position:absolute; left:calc(10px * var(--s)); right:calc(10px * var(--s)); top:calc(10px * var(--s)); }
+  #goal .head { display:flex; justify-content:space-between; font-size:calc(22px * var(--s)); font-weight:800; margin-bottom:calc(6px * var(--s)); }
+  #goal .bar { height:calc(34px * var(--s)); border-radius:999px; background:rgba(0,0,0,.6); border:2px solid rgba(255,255,255,.6); overflow:hidden; position:relative; }
+  #goal .fill { position:absolute; inset:0 auto 0 0; width:0; border-radius:999px; transition:width .6s ease; box-shadow:0 0 18px currentColor; }
+  #goal .pct { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:calc(18px * var(--s)); }
+  #goal.done .bar { animation:glow 1s ease-in-out infinite; }
+  @keyframes glow { 50% { box-shadow:0 0 22px #fff; } }
+
+  /* ranking */
+  #rank { position:absolute; inset:0; padding:calc(10px * var(--s)); }
+  #rank h3 { margin:0 0 calc(8px * var(--s)); font-size:calc(22px * var(--s)); }
+  .rk { display:flex; align-items:center; gap:calc(10px * var(--s)); background:rgba(0,0,0,.55); border-radius:10px; padding:calc(5px * var(--s)) calc(10px * var(--s));
+        margin-bottom:calc(6px * var(--s)); font-size:calc(19px * var(--s)); }
+  .rk .i { width:calc(30px * var(--s)); text-align:center; font-weight:800; }
+  .rk img.av { width:calc(32px * var(--s)); height:calc(32px * var(--s)); }
+  .rk .n { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+  .rk .v { color:var(--gold); font-weight:800; }
+
+  /* counters */
+  #stats { position:absolute; inset:0; display:flex; gap:calc(10px * var(--s)); padding:calc(8px * var(--s)); flex-wrap:wrap; align-content:flex-start; }
+  .stat { background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:calc(6px * var(--s)) calc(16px * var(--s)); font-size:calc(24px * var(--s)); font-weight:800; white-space:nowrap; }
+  .stat small { font-size:.6em; color:#cbd5e1; margin-left:4px; }
+
+  /* timer */
+  #timer { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  #timer .clock { font-size:calc(84px * var(--s)); font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:.03em; line-height:1; }
+  #timer .lab { font-size:calc(18px * var(--s)); color:#e2e8f0; }
+  #timer.paused .clock { opacity:.6; } #timer.zero .clock { color:var(--pink); }
+  .plus { position:absolute; font-size:calc(30px * var(--s)); font-weight:900; color:#86efac; animation:up 1.6s ease forwards; }
+  @keyframes up { to { transform:translateY(-60px); opacity:0; } }
+  .empty { color:#cbd5e1; font-size:14px; padding:10px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="unlock" onclick="unlock()">🔈 クリックで音を出す</div>
+<script>
+const Q = new URLSearchParams(location.search);
+const W = location.pathname.split('/')[2] || 'alerts';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const fmt = (n) => Number(n || 0).toLocaleString('ja-JP');
+const av = (u, cls = 'av') => (u ? `<img class="${cls}" src="${esc(u)}" onerror="this.remove()">` : '');
+document.documentElement.style.setProperty('--s', Number(Q.get('size')) || 1);
+if (Q.get('bg') === '1') document.body.classList.add('bg');
+const root = document.getElementById('root');
+let D = { stats: {}, chat: [], events: [], gifters: [], likers: [], goals: [], timer: { running: false, left: 0, endAt: 0 } };
+let skew = 0; // server clock - this clock
+
+// ------------------------------------------------------------------ audio (alerts + speech, one after another)
+const MUTE = Q.get('sound') === '0';
+const NO_TTS = Q.get('tts') === '0';
+const jobs = [];
+let busy = false;
+function playUrl(url, vol = 1) {
+  return new Promise((resolve) => {
+    if (!url || MUTE) return resolve();
+    const a = new Audio(url);
+    a.volume = Math.max(0, Math.min(1, vol));
+    let done = false;
+    const end = () => { if (!done) { done = true; resolve(); } };
+    a.onended = end; a.onerror = end;
+    setTimeout(end, 30000);
+    a.play().catch(() => { document.getElementById('unlock').style.display = 'block'; end(); });
+  });
+}
+function sayBrowser(t) {
+  return new Promise((resolve) => {
+    if (MUTE || !window.speechSynthesis) return resolve();
+    const u = new SpeechSynthesisUtterance(t.text);
+    u.lang = 'ja-JP';
+    u.rate = Math.max(0.5, Math.min(2, 1 + (t.rate || 0) / 10));
+    u.volume = (t.volume ?? 100) / 100;
+    const v = speechSynthesis.getVoices().find((x) => x.lang?.startsWith('ja'));
+    if (v) u.voice = v;
+    u.onend = resolve; u.onerror = resolve;
+    setTimeout(resolve, 20000);
+    speechSynthesis.speak(u);
+  });
+}
+const speak = (t) => (!t || NO_TTS ? Promise.resolve() : t.url ? playUrl(t.url, 1) : sayBrowser(t));
+function unlock() { document.getElementById('unlock').style.display = 'none'; new Audio().play().catch(() => {}); }
+async function runJobs() {
+  if (busy) return;
+  busy = true;
+  while (jobs.length) {
+    const j = jobs.shift();
+    try { await j.run(); } catch { /* keep going */ }
+  }
+  busy = false;
+}
+function addJob(job) {
+  if (job.tts && !job.alert) {
+    // chat speech: drop the oldest waiting ones when the queue gets long
+    const waiting = jobs.filter((x) => x.tts && !x.alert);
+    if (waiting.length >= (job.maxQueue || 6)) jobs.splice(jobs.indexOf(waiting[0]), 1);
+  }
+  if (job.alert) {
+    // alerts go before waiting chat speech
+    const i = jobs.findIndex((x) => !x.alert);
+    if (i >= 0) jobs.splice(i, 0, job); else jobs.push(job);
+  } else jobs.push(job);
+  runJobs();
+}
+
+// ------------------------------------------------------------------ widgets
+const R = {};
+
+R.alerts = {
+  init() { if (!document.getElementById('alert')) root.innerHTML = '<div id="alert"></div>'; },
+  alert(it) {
+    if (W !== 'alerts') return;
+    addJob({ alert: true, run: async () => {
+      const el = document.getElementById('alert');
+      el.className = `t-${it.type}`;
+      el.innerHTML = `<div class="pics">${it.avatar ? av(it.avatar) : ''}${it.img ? `<img class="gimg" src="${esc(it.img)}">` : ''}</div><div class="txt sh">${esc(it.text)}</div>`;
+      void el.offsetWidth;
+      el.classList.add('in');
+      const t0 = Date.now();
+      await playUrl(it.sound, (it.volume ?? 70) / 100);
+      await speak(it.tts);
+      const left = (it.duration || 6) * 1000 - (Date.now() - t0);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      el.classList.remove('in');
+      await new Promise((r) => setTimeout(r, 450));
+    } });
+  },
+  tts(it) { addJob({ tts: true, maxQueue: it.maxQueue, run: () => speak(it) }); },
+};
+
+R.chat = {
+  init() { root.innerHTML = '<div class="list" id="chat"></div>'; this.render(); },
+  max() { return Number(Q.get('max')) || D.chatSettings?.max || 10; },
+  line(c) {
+    const cls = c.gift ? 'gift' : c.join ? 'join' : '';
+    return `<div class="line ${cls} sh">${av(c.avatar)}<div><span class="n">${esc(c.name)}</span>${c.img ? `<img class="gi" src="${esc(c.img)}"> ` : ''}${esc(c.comment)}</div></div>`;
+  },
+  render() { document.getElementById('chat').innerHTML = D.chat.slice(-this.max()).map((c) => this.line(c)).join(''); },
+  chat(c) {
+    D.chat.push(c);
+    D.chat = D.chat.slice(-this.max());
+    const box = document.getElementById('chat');
+    box.insertAdjacentHTML('beforeend', this.line(c));
+    while (box.children.length > this.max()) box.firstElementChild.remove();
+  },
+};
+
+const EV_ICON = { follow: '➕', share: '🔁', subscribe: '⭐', gift: '🎁', like: '❤️' };
+R.events = {
+  init() { root.innerHTML = '<div class="list" id="events"></div>'; this.render(); },
+  max() { return Number(Q.get('max')) || 6; },
+  row(e) { return `<div class="ev ${e.type} sh">${av(e.avatar)}<span class="n">${esc(e.name)}</span><span class="w">${e.img ? `<img class="gi" src="${esc(e.img)}">` : EV_ICON[e.type] ?? ''} ${esc(e.text)}</span></div>`; },
+  render() { document.getElementById('events').innerHTML = D.events.slice(-this.max()).reverse().map((e) => this.row(e)).join(''); },
+  event(e) { D.events.push(e); D.events = D.events.slice(-30); this.render(); },
+};
+
+const GOAL_WORD = { likes: 'いいね', coins: 'コイン', follows: 'フォロー', shares: 'シェア', subs: 'サブスク', viewers: '視聴者', gifts: 'ギフト', joins: '入室' };
+R.goal = {
+  init() { root.innerHTML = '<div id="goal"><div class="head sh"><span class="t"></span><span class="v"></span></div><div class="bar"><div class="fill"></div><div class="pct sh"></div></div></div>'; this.render(); },
+  render() {
+    const g = D.goals?.[(Number(Q.get('n')) || 1) - 1];
+    const el = document.getElementById('goal');
+    if (!g) { el.querySelector('.t').textContent = 'ゴールがありません（パネルで作ってください）'; return; }
+    const v = Number(D.stats?.[g.type] || 0);
+    let target = g.target;
+    if (g.step > 0 && v >= target) target += g.step * Math.ceil((v - target + 1) / g.step);
+    const pct = Math.min(100, (v / target) * 100);
+    el.classList.toggle('done', v >= target);
+    el.querySelector('.t').textContent = g.title || GOAL_WORD[g.type];
+    el.querySelector('.v').textContent = `${fmt(v)} / ${fmt(target)}`;
+    const f = el.querySelector('.fill');
+    f.style.width = pct + '%';
+    f.style.background = `linear-gradient(90deg, ${g.color}, ${g.color}cc)`;
+    f.style.color = g.color;
+    el.querySelector('.pct').textContent = Math.floor(pct) + '%';
+  },
+  stats() { this.render(); }, settings() { this.render(); },
+};
+
+function rankWidget(key, title, unit) {
+  return {
+    init() { root.innerHTML = '<div id="rank"></div>'; this.render(); },
+    render() {
+      const list = D[key] ?? [];
+      const medal = ['🥇', '🥈', '🥉'];
+      const head = Q.get('title') ?? title;
+      document.getElementById('rank').innerHTML = (head ? `<h3 class="sh">${esc(head)}</h3>` : '') +
+        (list.length ? list.map((r, i) => `<div class="rk sh"><span class="i">${medal[i] ?? i + 1}</span>${av(r.avatar)}<span class="n">${esc(r.name)}</span><span class="v">${fmt(r.n)}${unit}</span></div>`).join('') : '<div class="empty sh">まだいません</div>');
+    },
+    stats() { this.render(); },
+  };
+}
+R.top = rankWidget('gifters', '🎁 ギフトランキング', '');
+R.likers = rankWidget('likers', '❤️ いいねランキング', '');
+
+R.stats = {
+  init() { root.innerHTML = '<div id="stats"></div>'; this.render(); },
+  render() {
+    const s = D.stats ?? {};
+    const show = (Q.get('show') || 'viewers,likes,coins,follows').split(',');
+    const items = { viewers: ['👀', '視聴者'], likes: ['❤️', 'いいね'], coins: ['🪙', 'コイン'], follows: ['➕', 'フォロー'], shares: ['🔁', 'シェア'], subs: ['⭐', 'サブスク'], gifts: ['🎁', 'ギフト'], joins: ['🚪', '入室'], comments: ['💬', 'コメント'] };
+    document.getElementById('stats').innerHTML = show.filter((k) => items[k]).map((k) => `<span class="stat sh">${items[k][0]} ${fmt(s[k])}<small>${items[k][1]}</small></span>`).join('');
+  },
+  stats() { this.render(); },
+};
+
+R.timer = {
+  last: null,
+  init() {
+    root.innerHTML = `<div id="timer"><div class="clock sh">--:--</div><div class="lab sh">${esc(Q.get('title') ?? '延長タイマー')}</div></div>`;
+    if (!this.iv) this.iv = setInterval(() => this.tick(), 250);
+  },
+  left() { const t = D.timer ?? {}; return t.running ? Math.max(0, t.endAt - (Date.now() + skew)) : (t.left ?? 0); },
+  tick() {
+    const ms = this.left();
+    const s = Math.ceil(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const el = document.getElementById('timer');
+    el.querySelector('.clock').textContent = (h ? `${h}:${String(m).padStart(2, '0')}` : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0');
+    el.classList.toggle('paused', !D.timer?.running);
+    el.classList.toggle('zero', s === 0);
+  },
+  stats(prev) {
+    const before = prev, after = this.left();
+    if (before != null && after - before > 1500) {
+      const p = document.createElement('div');
+      p.className = 'plus sh';
+      p.textContent = `+${Math.round((after - before) / 1000)}秒`;
+      p.style.top = '10%'; p.style.right = '8%';
+      root.append(p);
+      setTimeout(() => p.remove(), 1700);
+    }
+  },
+};
+
+const widget = R[W] ?? R.alerts;
+
+// ------------------------------------------------------------------ server events
+function connect() {
+  const es = new EventSource('/api/live/stream' + location.search);
+  es.onmessage = (m) => {
+    const it = JSON.parse(m.data);
+    if (it.kind === 'snapshot') {
+      D = { ...D, ...it };
+      if (it.timer?.now) skew = it.timer.now - Date.now();
+      widget.init();
+    } else if (it.kind === 'stats') {
+      const prev = W === 'timer' ? R.timer.left() : null;
+      D.stats = it.stats; D.gifters = it.gifters; D.likers = it.likers; D.timer = it.timer;
+      if (it.timer?.now) skew = it.timer.now - Date.now();
+      widget.stats?.(prev);
+    } else if (it.kind === 'settings') {
+      D.goals = it.goals; D.chatSettings = it.chatSettings;
+      widget.settings?.();
+    } else if (it.kind === 'chat') widget.chat?.(it);
+    else if (it.kind === 'event') widget.event?.(it);
+    else if (it.kind === 'alert') widget.alert?.(it);
+    else if (it.kind === 'tts') widget.tts?.(it);
+  };
+}
+widget.init();
+connect();
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ import { TikTokManager } from './core/tiktok.js';
 import { send, json, readBody, readJson, cleanTikTok } from './core/util.js';
 import { KNOWN_GIFTS, pickRules } from './core/gifts.js';
 import { createGiftCatalog } from './core/giftcatalog.js';
+import { createLive, cleanLive } from './core/live.js';
 import * as defense from './games/defense/index.js';
 import * as clash from './games/clash/index.js';
 import * as anime from './games/anime/index.js';
@@ -59,6 +60,7 @@ hub.streamers ??= [];
 hub.games ??= {};
 hub.serverDirs ??= {};
 hub.disabledGames ??= [];
+hub.live = cleanLive(hub.live ?? {});
 if (process.env.HUB_PORT) hub.hubPort = Number(process.env.HUB_PORT); // for trying a second copy
 const saveHub = () => {
   const tmp = `${CONFIG_FILE}.tmp`;
@@ -255,12 +257,17 @@ function streamerLabel(s) {
   return s.tiktok ? `@${s.tiktok}` : s.mc || '?';
 }
 
+// the games only know these (joins, viewer counts and connects are for the stream tools)
+const GAME_EVENTS = new Set(['gift', 'follow', 'share', 'subscribe', 'like', 'chat']);
+
 tiktok = new TikTokManager({
   signApiKey: () => hub.signApiKey,
   event: (sid, type, d) => {
     if (type === 'gift') giftCatalog.learn(d);
     const s = hub.streamers.find((x) => x.id === sid);
-    if (!s || !assigned(s)) return;
+    if (!s) return;
+    live.onEvent(s, type, d); // the stream tools: every streamer, assigned or not
+    if (!assigned(s) || !GAME_EVENTS.has(type)) return;
     games.get(s.game).onEvent(s.field, type, d);
   },
   log: (kind, text, sid) => {
@@ -290,6 +297,28 @@ function cleanStreamer(b, existing) {
 // ------------------------------------------------------------------ gift rules (list + per-streamer)
 const giftCatalog = createGiftCatalog({ stateDir: STATE_DIR, log: (k, t) => log(k, t) });
 const hasRules = (g) => typeof g?.actions === 'function';
+
+// ------------------------------------------------------------------ stream tools (TTS, alerts, goals, overlays)
+// overlays name their streamer by ?user=<TikTok ID>, ?streamer=<id> or ?game=&field= (whoever is on that field now)
+function liveStreamer(q) {
+  const user = cleanTikTok(q.get('user') ?? '').toLowerCase();
+  if (user) return hub.streamers.find((x) => x.tiktok.toLowerCase() === user) ?? null;
+  const sid = q.get('streamer');
+  if (sid) return hub.streamers.find((x) => x.id === sid) ?? null;
+  const field = Math.round(Number(q.get('field'))) || 1;
+  return q.get('game') ? streamerAt(q.get('game'), field) : null;
+}
+const live = createLive({
+  stateDir: STATE_DIR,
+  publicDir: path.join(ROOT, 'public'),
+  settings: () => hub.live,
+  save: (v) => { hub.live = v; saveHub(); },
+  log: (k, t) => log(k, t),
+  find: liveStreamer,
+  byId: (id) => hub.streamers.find((x) => x.id === id) ?? null,
+  label: (s) => streamerLabel(s),
+  giftImage: (id, name) => (id ? `/gift-img/${id}` : giftCatalog.find(name) ? `/gift-img/${giftCatalog.find(name).id}` : ''),
+});
 
 // what each gift / follow / share / like does for one streamer (or the game's settings when nobody / no own rules)
 function giftListJson(gameId, s, fieldWanted = 0) {
@@ -424,6 +453,7 @@ async function hubRoute(req, res, url) {
     return gameRoute(g, req, res, sub);
   }
   if (req.method === 'GET' && (p === '/' || p === '/index.html')) return send(res, 200, 'text/html; charset=utf-8', hubPanelFile());
+  if (await live.handle(req, res, url)) return;
   if (req.method === 'GET' && p === '/overlay') {
     const id = url.searchParams.get('game');
     if (id && games.has(id)) return serveOverlay(res, id, `/g/${id}/`);
@@ -475,6 +505,7 @@ async function hubRoute(req, res, url) {
       if (b.id && !s) throw new Error('その配信者はいません');
       if (b.op === 'delete') {
         hub.streamers.splice(hub.streamers.indexOf(s), 1);
+        live.forget(s.id);
         log('info', `配信者 ${streamerLabel(s)} を消しました`);
       } else if (b.op === 'test') {
         // a fake gift that goes through exactly the same routing as a real one from this streamer's LIVE
@@ -483,7 +514,9 @@ async function hubRoute(req, res, url) {
         const gift = String(b.gift || 'テストギフト').slice(0, 40);
         const name = String(b.name || 'テスト視聴者').slice(0, 24);
         log('info', `${streamerLabel(s)} にテストギフト「${gift}」${coins}コイン → ${games.get(s.game).meta.short} ${games.get(s.game).meta.fieldWord}${s.field}`);
-        games.get(s.game).onEvent(s.field, 'gift', { user: { nickname: name, uniqueId: 'test' }, gift: { name: gift, diamondCount: coins, type: 0 }, repeatCount: 1, repeatEnd: true });
+        const fake = { user: { nickname: name, uniqueId: 'test' }, gift: { name: gift, diamondCount: coins, type: 0 }, repeatCount: 1, repeatEnd: true };
+        live.onEvent(s, 'gift', fake);
+        games.get(s.game).onEvent(s.field, 'gift', fake);
         return json(res, { ok: true, game: s.game, field: s.field });
       } else if (b.op === 'connect' || b.op === 'disconnect') {
         if (!s.tiktok) throw new Error('TikTok の ID がありません');
