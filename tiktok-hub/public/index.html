@@ -124,6 +124,19 @@
         <div id="gl-edit"></div>
       </section>
       <section>
+        <h2>📁 プリセット<span class="msg" id="pl-msg"></span></h2>
+        <p class="help">ギフトの割り当てに名前を付けて取っておき、配信中にボタン1つで切り替えられます（ゲームごと）。「保存」は今この画面に出ている割り当てを、「この配信者に使う」は選んでいる配信者の割り当てを置きかえます。</p>
+        <div class="row">
+          <label>プリセット<select id="pl-list"></select></label>
+          <button onclick="plApply()">この配信者に使う</button>
+          <button class="small del" onclick="plDelete()">消す</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>新しい名前<input id="pl-name" placeholder="例: ゾンビ多め・やさしめ"></label>
+          <button onclick="plSave()">今の割り当てを保存</button>
+        </div>
+      </section>
+      <section>
         <h2>OBS 用の一覧（背景は透明）</h2>
         <p class="help">OBS の「ブラウザ」ソースにこの URL を入れます（幅は下の「幅」と同じに。高さは中身に合わせて伸びるので大きめで OK）。割り当てを変えると数秒でオーバーレイも変わります。画像で使うときは「PNG で保存」。</p>
         <div class="row">
@@ -253,7 +266,7 @@
             <label style="flex:0 0 130px">出す長さ（秒）<input type="number" id="lvs-alerts-duration" min="2" max="30"></label>
           </div>
           <table class="gl-t" style="margin-top:8px">
-            <thead><tr><th style="width:100px">いつ</th><th style="width:40px">出す</th><th>文</th><th style="width:180px">効果音</th><th style="width:60px">読上げ</th></tr></thead>
+            <thead><tr><th style="width:100px">いつ</th><th style="width:40px">出す</th><th>文</th><th style="width:170px">効果音</th><th style="width:140px">画像・動画</th><th style="width:50px">読上</th></tr></thead>
             <tbody id="lv-alerts"></tbody>
           </table>
           <div class="row" style="margin-top:8px">
@@ -262,6 +275,43 @@
             <label>大きいギフトの効果音<select id="lvs-alerts-gift-bigSound"></select></label>
             <label>いいね何回ごとに出す<input type="number" id="lvs-alerts-like-every" min="10"></label>
           </div>
+        </section>
+
+        <section>
+          <h2>🎁 ギフトごとのアラート</h2>
+          <p class="help">決めたギフトだけ、別の文・効果音・画像／GIF／動画でアラートを出します（ここにないギフトは上の「ギフト」の設定）。ギフト名は日本語と英語の両方（例: バラ, Rose）を入れておくと確実です。</p>
+          <table class="gl-t"><thead><tr><th style="width:150px">ギフト名</th><th>文</th><th style="width:150px">効果音</th><th style="width:150px">画像・動画</th><th style="width:50px">読上</th><th style="width:36px"></th></tr></thead><tbody id="lv-galerts"></tbody></table>
+          <button class="small" style="margin-top:6px" onclick="lvAddGiftAlert()">＋ ギフトを足す</button>
+          <div class="row" style="margin-top:12px">
+            <label style="flex:0 0 260px">⚡ 高額ギフトの割り込み（コイン以上、0 = なし）<input type="number" id="lvs-interrupt-minCoins" min="0"></label>
+          </div>
+          <p class="help" style="margin-top:4px">このコイン以上のギフトは、待っているアラートとゲームのアクションより先に出ます。</p>
+        </section>
+
+        <section>
+          <h2>🖼️ 画像・GIF・動画</h2>
+          <p class="help">アラートに出す png / jpg / gif / webp / mp4 / webm（25MB まで）。上のアラートの表の「画像・動画」で選びます。</p>
+          <div id="lv-media" class="chips" style="gap:6px"></div>
+          <div class="row" style="margin-top:8px"><label><input type="file" id="lv-mfile" accept="image/*,video/mp4,video/webm"></label><button onclick="lvUploadMedia()">追加</button><span class="msg" id="lv-m-msg"></span></div>
+        </section>
+
+        <section>
+          <h2>🎡 ギフトルーレット</h2>
+          <p class="help">決めたギフトが来るとルーレットが回り、止まったところの文を出して読み上げます。ゲームのアクションを選んでおくと、その配信者のゲームでそのアクションが起きます（ほかのゲームのアクションは起きません）。OBS には右の「ギフトルーレット」の URL を入れます。</p>
+          <div class="row">
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-wheel-on"> ルーレットを使う</label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="lvs-wheel-tts"> 結果を読み上げる</label>
+            <button class="small" onclick="lvTest('wheel')">🎡 テストで回す</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label style="flex:2 1 220px">回すギフト（読点区切り）<input id="lvs-wheel-gifts"></label>
+            <label style="flex:0 0 150px">または何コイン以上（0 = なし）<input type="number" id="lvs-wheel-minCoins" min="0"></label>
+            <label style="flex:0 0 110px">回る秒数<input type="number" id="lvs-wheel-spinSec" min="2" max="20"></label>
+            <label style="flex:0 0 130px">1回の最大の回数<input type="number" id="lvs-wheel-maxSpins" min="1" max="20"></label>
+          </div>
+          <div class="row" style="margin-top:6px"><label style="flex:1 1 100%">結果の文（{name} {result}）<input id="lvs-wheel-text"></label></div>
+          <table class="gl-t" style="margin-top:8px"><thead><tr><th>項目</th><th style="width:60px">色</th><th style="width:90px">出やすさ</th><th>ゲームのアクション</th><th style="width:36px"></th></tr></thead><tbody id="lv-wheel"></tbody></table>
+          <button class="small" style="margin-top:6px" onclick="lvAddSeg()">＋ 項目を足す</button>
         </section>
 
         <section>
@@ -544,6 +594,7 @@ async function glLoad() {
 const actOpts = (sel, none) => (none ? `<option value="">（なし）</option>` : '') + Object.entries(GL.actions).map(([k, l]) => `<option value="${esc(k)}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
 
 function glRender(r) {
+  plLoad();
   const d = GL;
   const who = d.streamer ? [d.streamer.tiktok && '@' + d.streamer.tiktok, d.streamer.mc].filter(Boolean).join(' / ') : '';
   $('gl-head').innerHTML = d.streamer
@@ -656,6 +707,33 @@ function glCollect() {
     follow: $('gl-follow').value, share: $('gl-share').value, subscribe: $('gl-subscribe').value,
     likes: { every: Number($('gl-likes-every').value) || 0, action: $('gl-likes-action').value },
   };
+}
+async function plLoad() {
+  if (!GL?.game) return;
+  const r = await (await fetch('/api/presets?game=' + GL.game.id)).json();
+  const keep = $('pl-list').value;
+  $('pl-list').innerHTML = r.presets.length ? r.presets.map((x) => `<option>${esc(x.name)}</option>`).join('') : '<option value="">（まだありません）</option>';
+  if (keep && r.presets.some((x) => x.name === keep)) $('pl-list').value = keep;
+}
+async function plSave() {
+  const name = $('pl-name').value.trim();
+  const r = await post('/api/presets', { op: 'save', game: GL.game.id, name, rules: GL.streamer ? glCollect() : GL.rules });
+  msg('pl-msg', r.ok ? { ok: true, message: `「${name}」を保存しました` } : r);
+  if (r.ok) { $('pl-name').value = ''; await plLoad(); $('pl-list').value = name; }
+}
+async function plApply() {
+  const name = $('pl-list').value;
+  if (!name) return;
+  if (!GL.streamer) return msg('pl-msg', { ok: false, message: '上の「だれの一覧」で配信者を選んでください' });
+  const r = await post('/api/presets', { op: 'apply', game: GL.game.id, name, streamer: GL.streamer.id });
+  msg('pl-msg', r.ok ? { ok: true, message: `「${name}」に切り替えました` } : r);
+  if (r.ok) { GL = r; glRender(r.rules); glPreview(); refresh().then(glInitKeep); }
+}
+async function plDelete() {
+  const name = $('pl-list').value;
+  if (!name || !confirm(`プリセット「${name}」を消しますか？`)) return;
+  const r = await post('/api/presets', { op: 'delete', game: GL.game.id, name });
+  if (r.ok) plLoad();
 }
 async function glSave() {
   const r = await post('/api/gift-rules', { streamer: GL.streamer.id, game: GL.game.id, rules: glCollect() });
@@ -790,18 +868,22 @@ function lvFill() {
   const vv = LV.vvSpeakers ?? [];
   $('lvs-tts-vvSpeaker').innerHTML = (vv.some((x) => x.id === s.tts.vvSpeaker) ? '' : `<option value="${s.tts.vvSpeaker}">番号 ${s.tts.vvSpeaker}</option>`) + vv.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   $('lv-vv-help').textContent = vv.length ? `VOICEVOX につながっています（${vv.length} の声）。声を使うときはキャラクターの利用規約にしたがい、配信に「VOICEVOX:キャラ名」のクレジットを入れてください。` : 'VOICEVOX につながりません。VOICEVOX を起動してからこのページを開き直してください（つながらないあいだは Windows の声で読みます）。';
-  for (const sec of ['tts', 'timer', 'chat', 'top']) for (const [k, v] of Object.entries(s[sec])) set(`lvs-${sec}-${k}`, Array.isArray(v) ? v.join('、') : v);
+  for (const sec of ['tts', 'timer', 'chat', 'top', 'interrupt', 'wheel']) for (const [k, v] of Object.entries(s[sec])) if (k !== 'segments') set(`lvs-${sec}-${k}`, Array.isArray(v) ? v.join('、') : v);
   set('lvs-alerts-volume', s.alerts.volume); set('lvs-alerts-duration', s.alerts.duration);
   lvEngine();
   if (!LV.windowsTts) $('lvs-tts-engine').querySelector('option[value=windows]').textContent = 'Windows の声（この PC では使えません）';
   $('lv-alerts').innerHTML = LV_TYPES.map(([k, label]) => `<tr data-k="${k}"><td>${label}</td><td><input type="checkbox" class="a-on" ${s.alerts[k].on ? 'checked' : ''}></td>
     <td><input class="a-text" value="${esc(s.alerts[k].text)}"></td>
     <td><div style="display:flex;gap:4px"><select class="a-sound">${lvSoundOptions(s.alerts[k].sound)}</select><button class="small" title="鳴らす" onclick="lvPlay(this.previousElementSibling.value)">▶</button></div></td>
+    <td><select class="a-media">${lvMediaOptions(s.alerts[k].media)}</select></td>
     <td><input type="checkbox" class="a-tts" ${s.alerts[k].tts ? 'checked' : ''}></td></tr>`).join('');
   set('lvs-alerts-gift-minCoins', s.alerts.gift.minCoins); set('lvs-alerts-gift-bigCoins', s.alerts.gift.bigCoins); set('lvs-alerts-like-every', s.alerts.like.every);
   $('lvs-alerts-gift-bigSound').innerHTML = lvSoundOptions(s.alerts.gift.bigSound);
   lvGoals(s.goals);
   lvSounds();
+  lvGiftAlerts(s.giftAlerts);
+  lvMedia();
+  lvWheel(s.wheel.segments);
 }
 function lvEngine() {
   const e = $('lvs-tts-engine').value;
@@ -811,6 +893,50 @@ function lvGoals(goals) {
   $('lv-goals').innerHTML = goals.map((g) => `<tr><td><select class="g-type">${Object.entries(LV_GOALS).map(([k, l]) => `<option value="${k}" ${k === g.type ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
     <td><input class="g-title" value="${esc(g.title)}"></td><td><input type="number" class="g-target" value="${g.target}" min="1"></td><td><input type="number" class="g-step" value="${g.step}" min="0"></td>
     <td><input type="color" class="g-color" value="${g.color}" style="padding:0;height:30px"></td><td><button class="small del" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join('');
+}
+function lvMediaOptions(sel) {
+  return '<option value="">（なし）</option>' + (LV.media ?? []).map((x) => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>${esc(x.id)}</option>`).join('');
+}
+function lvMedia() {
+  $('lv-media').innerHTML = (LV.media ?? []).map((x) => `<span class="chip">${/\.(mp4|webm)$/i.test(x.id) ? '🎬' : `<img src="${esc(x.url)}" style="width:22px;height:22px;object-fit:contain;vertical-align:middle">`} ${esc(x.id)} <button title="消す" onclick="lvDelMedia('${esc(x.id)}')">✕</button></span>`).join('') || '<span class="muted">まだありません</span>';
+}
+function lvGiftAlerts(list) {
+  $('lv-galerts').innerHTML = list.map((g) => `<tr><td><input class="ga-gifts" value="${esc(g.gifts.join(', '))}" placeholder="バラ, Rose"></td><td><input class="ga-text" value="${esc(g.text)}"></td>
+    <td><div style="display:flex;gap:4px"><select class="ga-sound">${lvSoundOptions(g.sound)}</select><button class="small" onclick="lvPlay(this.previousElementSibling.value)">▶</button></div></td>
+    <td><select class="ga-media">${lvMediaOptions(g.media)}</select></td><td><input type="checkbox" class="ga-tts" ${g.tts ? 'checked' : ''}></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join('');
+}
+function lvAddGiftAlert() {
+  const cur = lvCollect().giftAlerts;
+  cur.push({ gifts: ['ギャラクシー', 'Galaxy'], text: '{name} さん、{gift} ありがとう！！', sound: 'fanfare', media: '', tts: true });
+  lvGiftAlerts(cur);
+}
+function lvActionOptions(sel) {
+  const ga = LV.gameActions ?? {};
+  return '<option value="">（なし・文だけ）</option>' + Object.values(ga).map((g) => `<optgroup label="${esc(g.icon + ' ' + g.title)}">${Object.entries(g.actions).map(([k, l]) => `<option value="${esc(k)}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('');
+}
+function lvWheel(segs) {
+  $('lv-wheel').innerHTML = segs.map((x) => `<tr><td><input class="w-label" value="${esc(x.label)}" maxlength="20"></td><td><input type="color" class="w-color" value="${x.color}" style="padding:0;height:30px"></td>
+    <td><input type="number" class="w-weight" value="${x.weight}" min="0" step="0.5"></td><td><select class="w-action">${lvActionOptions(x.action)}</select></td>
+    <td><button class="small del" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join('');
+}
+function lvAddSeg() {
+  const cur = lvCollect().wheel.segments;
+  cur.push({ label: '新しい項目', color: '#38bdf8', weight: 1, action: '' });
+  lvWheel(cur);
+}
+async function lvUploadMedia() {
+  const f = $('lv-mfile').files[0];
+  if (!f) return msg('lv-m-msg', { ok: false, message: 'ファイルを選んでください' });
+  const data = await new Promise((resolve) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).split(',')[1] ?? ''); fr.readAsDataURL(f); });
+  const r = await post('/api/live/media', { name: f.name, data });
+  if (r.ok) { const keep = lvCollect(); LV = { ...r, settings: keep }; lvFill(); }
+  msg('lv-m-msg', r.ok ? { ok: true, message: '追加しました（アラートの「画像・動画」で選べます）' } : r);
+}
+async function lvDelMedia(id) {
+  if (!confirm(`${id} を消しますか？`)) return;
+  const r = await post('/api/live/media-delete', { file: id });
+  if (r.ok) { const keep = lvCollect(); LV = { ...r, settings: keep }; lvFill(); }
 }
 function lvAddGoal() {
   const cur = lvCollect().goals;
@@ -824,15 +950,18 @@ function lvSounds() {
 function lvCollect() {
   const s = JSON.parse(JSON.stringify(LV.settings));
   const val = (id) => { const el = $(id); return el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value; };
-  for (const sec of ['tts', 'timer', 'chat', 'top']) for (const k of Object.keys(s[sec])) if ($(`lvs-${sec}-${k}`)) s[sec][k] = val(`lvs-${sec}-${k}`);
+  for (const sec of ['tts', 'timer', 'chat', 'top', 'interrupt', 'wheel']) for (const k of Object.keys(s[sec])) if ($(`lvs-${sec}-${k}`)) s[sec][k] = val(`lvs-${sec}-${k}`);
   s.tts.banned = String($('lvs-tts-banned').value).split(/[,、\n]/).map((w) => w.trim()).filter(Boolean);
   s.alerts.volume = val('lvs-alerts-volume'); s.alerts.duration = val('lvs-alerts-duration');
   for (const tr of $('lv-alerts').querySelectorAll('tr')) {
     const a = s.alerts[tr.dataset.k];
-    a.on = tr.querySelector('.a-on').checked; a.text = tr.querySelector('.a-text').value; a.sound = tr.querySelector('.a-sound').value; a.tts = tr.querySelector('.a-tts').checked;
+    a.on = tr.querySelector('.a-on').checked; a.text = tr.querySelector('.a-text').value; a.sound = tr.querySelector('.a-sound').value; a.media = tr.querySelector('.a-media').value; a.tts = tr.querySelector('.a-tts').checked;
   }
   s.alerts.gift.minCoins = val('lvs-alerts-gift-minCoins'); s.alerts.gift.bigCoins = val('lvs-alerts-gift-bigCoins'); s.alerts.gift.bigSound = val('lvs-alerts-gift-bigSound');
   s.alerts.like.every = val('lvs-alerts-like-every');
+  s.wheel.gifts = String($('lvs-wheel-gifts').value).split(/[,、\n]/).map((w) => w.trim()).filter(Boolean);
+  s.wheel.segments = [...$('lv-wheel').querySelectorAll('tr')].map((tr) => ({ label: tr.querySelector('.w-label').value, color: tr.querySelector('.w-color').value, weight: Number(tr.querySelector('.w-weight').value), action: tr.querySelector('.w-action').value }));
+  s.giftAlerts = [...$('lv-galerts').querySelectorAll('tr')].map((tr) => ({ gifts: tr.querySelector('.ga-gifts').value.split(/[,、]/).map((w) => w.trim()).filter(Boolean), text: tr.querySelector('.ga-text').value, sound: tr.querySelector('.ga-sound').value, media: tr.querySelector('.ga-media').value, tts: tr.querySelector('.ga-tts').checked }));
   s.goals = [...$('lv-goals').querySelectorAll('tr')].map((tr) => ({ type: tr.querySelector('.g-type').value, title: tr.querySelector('.g-title').value, target: Number(tr.querySelector('.g-target').value), step: Number(tr.querySelector('.g-step').value), color: tr.querySelector('.g-color').value }));
   return s;
 }

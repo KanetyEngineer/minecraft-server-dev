@@ -61,6 +61,7 @@ hub.games ??= {};
 hub.serverDirs ??= {};
 hub.disabledGames ??= [];
 hub.live = cleanLive(hub.live ?? {});
+hub.presets ??= {}; // { <game>: [{ name, rules }] } gift-rule presets to switch during a LIVE
 if (process.env.HUB_PORT) hub.hubPort = Number(process.env.HUB_PORT); // for trying a second copy
 const saveHub = () => {
   const tmp = `${CONFIG_FILE}.tmp`;
@@ -147,6 +148,8 @@ function makeCtx(mod) {
     fieldsEdited: () => reconcileFromGame(id),
     tiktokControl: (field, connect) => tiktokControl(id, field, connect),
     // the game's config with the gift rules of the streamer on that field (their own, if they set any)
+    // big gifts jump the action queue from this many coins (the stream tools' setting; off = never)
+    firstCoins: () => hub.live?.interrupt?.minCoins || Infinity,
     rules: (field, cfg) => {
       const own = streamerAt(id, field)?.rules?.[id];
       return own ? { ...cfg, ...own } : cfg;
@@ -317,6 +320,13 @@ const live = createLive({
   find: liveStreamer,
   byId: (id) => hub.streamers.find((x) => x.id === id) ?? null,
   label: (s) => streamerLabel(s),
+  runAction: (s, action, name, label, avatar) => {
+    const g = assigned(s) ? games.get(s.game) : null;
+    if (!g?.runAction || !g.actions?.()?.[action]) return false;
+    g.runAction(s.field, action, name, label, avatar);
+    return true;
+  },
+  gameActions: () => Object.fromEntries([...games.values()].filter(hasRules).map((g) => [g.meta.id, { title: g.meta.short, icon: g.meta.icon, actions: Object.fromEntries(Object.entries(g.actions()).map(([k, a]) => [k, a.label ?? k])) }])),
   giftImage: (id, name) => (id ? `/gift-img/${id}` : giftCatalog.find(name) ? `/gift-img/${giftCatalog.find(name).id}` : ''),
 });
 
@@ -492,6 +502,41 @@ async function hubRoute(req, res, url) {
       }
       saveHub();
       return json(res, { ok: true, ...giftListJson(b.game, s) });
+    } catch (err) {
+      return json(res, { ok: false, message: err.message }, 400);
+    }
+  }
+  // gift-rule presets: save a streamer's rules (or the game's) under a name, put them back on any streamer mid-LIVE
+  if (req.method === 'GET' && p === '/api/presets') {
+    const gameId = url.searchParams.get('game') || '';
+    return json(res, { ok: true, presets: (hub.presets[gameId] ?? []).map((x) => ({ name: x.name, rules: x.rules })) });
+  }
+  if (req.method === 'POST' && p === '/api/presets') {
+    const b = await readBody(req);
+    try {
+      if (!hasRules(games.get(b.game))) throw new Error('そのゲームはありません');
+      const list = (hub.presets[b.game] ??= []);
+      const name = String(b.name ?? '').trim().slice(0, 30);
+      const s = b.streamer ? hub.streamers.find((x) => x.id === b.streamer) : null;
+      if (b.streamer && !s) throw new Error('その配信者はいません');
+      if (b.op === 'save') {
+        if (!name) throw new Error('プリセットの名前を入れてください');
+        const rules = b.rules ? cleanRules(b.game, b.rules) : (s?.rules?.[b.game] ?? pickRules(games.get(b.game).rulesConfig()));
+        const i = list.findIndex((x) => x.name === name);
+        if (i >= 0) list[i] = { name, rules }; else list.push({ name, rules });
+        log('info', `${games.get(b.game).meta.short} のプリセット「${name}」を保存しました`);
+      } else if (b.op === 'apply') {
+        const pr = list.find((x) => x.name === name);
+        if (!pr) throw new Error('そのプリセットはありません');
+        if (!s) throw new Error('配信者を選んでください');
+        s.rules = { ...(s.rules ?? {}), [b.game]: cleanRules(b.game, pr.rules) };
+        log('info', `${streamerLabel(s)} の ${games.get(b.game).meta.short} にプリセット「${name}」を使いました`);
+      } else if (b.op === 'delete') {
+        const i = list.findIndex((x) => x.name === name);
+        if (i >= 0) list.splice(i, 1);
+      } else throw new Error('知らない操作です');
+      saveHub();
+      return json(res, { ok: true, presets: list.map((x) => ({ name: x.name, rules: x.rules })), ...(s ? giftListJson(b.game, s) : {}) });
     } catch (err) {
       return json(res, { ok: false, message: err.message }, 400);
     }

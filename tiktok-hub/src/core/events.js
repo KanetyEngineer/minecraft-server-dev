@@ -25,7 +25,7 @@ export function createEventHandler(opts) {
     if (opts.recentGifts.size > 50) opts.recentGifts.delete(opts.recentGifts.keys().next().value);
     opts.log('gift', `${name} → ${giftName} ×${repeat}（${coins * repeat}コイン）`, field);
     for (const a of actionsForGift(config.giftRules, giftName, coins, repeat)) {
-      opts.enqueue(field, a, name, `${giftName}×${repeat}`, 'gift', avatarUrl(data.user));
+      opts.enqueue(field, a, name, `${giftName}×${repeat}`, 'gift', avatarUrl(data.user), coins * repeat);
     }
   }
 

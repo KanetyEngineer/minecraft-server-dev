@@ -52,10 +52,15 @@ TikTok LIVE（配信者ごとに1接続・何人でも同時）
 | `/live/top` ・ `/live/likers` | ギフトのコイン・いいねのランキング |
 | `/live/stats` | 視聴者・いいね・コイン・フォローのカウンター（`show=viewers,likes,coins,follows,shares,subs,gifts,joins,comments`） |
 | `/live/timer` | 延長タイマー（コイン・フォロー・シェア・サブスク・いいねで延びる。パネルでスタート・一時停止・±） |
+| `/live/wheel` | ギフトルーレット |
 
 - URL のうしろに `?game=<ゲーム>&field=<番号>`（その番号にいる配信者に自動で切り替わる）か `?user=<TikTok の ID>` を付けます。パネルの右側に配信者ごとの URL が出ます。共通で `size=1.5`（大きさ）・`bg=1`（黒い背景）・`max=`（行数）、alerts は `sound=0`・`tts=0` で音を消せます。
 - 読み上げの声は Windows の声（SAPI、この PC は Haruka）・VOICEVOX（起動中のエンジン 127.0.0.1:50021 の API。人ごとに声を変えることもできる）・ゆっくり（AquesTalkPlayer.exe をコマンドラインで呼ぶ。個人の非商用のみ無料）・ブラウザの声から選びます。VOICEVOX やゆっくりが使えないときは Windows の声で読みます。読み上げは wav を作り、alerts のオーバーレイが鳴らします（OBS の「OBS で音声を制御する」で音量を調整）。Windows 以外ではブラウザの声で読みます。絵文字は読まず、URL は「URL」、同じ文字の連続は 3 つまで。読まない言葉・頭が `!` のコメント・フォロワーだけ・同じ人の間隔・ためておく数を決められます。
 - 効果音は最初から 7 つ（チャイム・コイン・ファンファーレなど、ハブが作る音）＋自分の mp3/wav/ogg/m4a を足せます（`state/sounds/`）。
+- 🎡 ギフトルーレット（`/live/wheel`、`hide=1` で回っていないときは隠す）: 決めたギフトかコイン以上で回り、止まった項目の文を出して読み上げる。項目にゲームのアクションを付けると、その配信者のゲーム・番号でそのアクションが起きる（各ゲームの `runAction`）。
+- 🎁 ギフトごとのアラート: 決めたギフトだけ別の文・効果音・画像／GIF／動画（`state/media/`、png/jpg/gif/webp/mp4/webm）。種類ごとのアラートにも画像・動画を付けられる。
+- ⚡ 高額ギフトの割り込み: 決めたコイン以上のギフトは、アラートとゲームのアクションのキューで先頭に入る（各ゲームの `enqueue` → `pushQueued`、`ctx.firstCoins()`）。
+- 📁 プリセット（「🎁 ギフト一覧」ページ）: ギフトの割り当てに名前を付けて保存し、配信中に配信者へ切り替える（`config.json` の `presets.<ゲーム>`、`/api/presets`）。
 - 中身は `src/core/live.js`（設定は `config.json` の `live`）と `public/live.html`（全部のオーバーレイ）。オーバーレイは `/api/live/stream`（server-sent events）で受けます。
 
 ## 配信者の割り当て

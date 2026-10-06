@@ -8,7 +8,7 @@ import { Rcon } from '../../core/rcon.js';
 import { createAvatar } from '../../core/avatar.js';
 import { createEventHandler } from '../../core/events.js';
 import { rconTest } from '../../core/rcon-test.js';
-import { json, readBody, clean, pick, actionsForGift, readJson } from '../../core/util.js';
+import { json, readBody, clean, pick, actionsForGift, readJson, pushQueued } from '../../core/util.js';
 import { arenaCommands, lobbyCommands, fieldShape, FIELD_COLORS } from './arena.js';
 import { validateConfig, setupServer, GAME_LIMITS } from './config.js';
 import { presetEntries, presetSummary, ARMOR_MATERIALS, ARMOR_SLOTS, EFFECTS, ITEM_SLOTS, ITEM_SUGGESTIONS, MAX_ITEMS, MAX_EFFECTS, MAX_PRESETS } from './loadout.js';
@@ -87,7 +87,7 @@ export function createGame(ctx) {
     return n >= 1 && n <= config.fields.count ? n : def;
   };
 
-  function enqueue(n, action, name, label, source, avatar = null) {
+  function enqueue(n, action, name, label, source, avatar = null, coins = 0) {
     if (!F[n]) return;
     if (!ACTIONS[action]) {
       log('warn', `未定義のアクション "${action}"（${label}）`, n);
@@ -99,7 +99,7 @@ export function createGame(ctx) {
       const drop = q.shift();
       log('warn', `キューがいっぱいなので「${drop.label}」を捨てました`, n);
     }
-    q.push({ n, action, name: clean(name), label: clean(label, 32), source, avatar });
+    pushQueued(q, { n, action, name: clean(name), label: clean(label, 32), source, avatar }, coins >= ctx.firstCoins());
   }
 
   let running = false;
@@ -728,6 +728,8 @@ export function createGame(ctx) {
       if (c.reset) { f.likeMarks = null; f.totalLikes = 0; }
     },
     onEvent,
+    // the hub's stream tools (gift wheel): run one of this game's actions on a field
+    runAction: (field, action, name, label, avatar = null) => enqueue(field, action, name, label, 'wheel', avatar),
     handle,
     actions: () => ACTIONS,
     rulesConfig: () => config,

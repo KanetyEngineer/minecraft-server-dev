@@ -79,6 +79,18 @@
   .plus { position:absolute; font-size:calc(30px * var(--s)); font-weight:900; color:#86efac; animation:up 1.6s ease forwards; }
   @keyframes up { to { transform:translateY(-60px); opacity:0; } }
   .empty { color:#cbd5e1; font-size:14px; padding:10px; }
+  #alert .media { max-width:calc(420px * var(--s)); max-height:calc(300px * var(--s)); border-radius:12px; display:block; }
+
+  /* gift wheel */
+  #wheel { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; transition:opacity .4s; }
+  #wheel.hidden { opacity:0; }
+  #wheel .box { position:relative; width:calc(500px * var(--s)); height:calc(500px * var(--s)); }
+  #wheel canvas { width:100%; height:100%; display:block; filter:drop-shadow(0 6px 18px rgba(0,0,0,.6)); }
+  #wheel .ptr { position:absolute; left:50%; top:-6px; transform:translateX(-50%); width:0; height:0; border-left:calc(18px * var(--s)) solid transparent;
+                border-right:calc(18px * var(--s)) solid transparent; border-top:calc(38px * var(--s)) solid #fff; filter:drop-shadow(0 2px 3px #000); }
+  #wheel .who { font-size:calc(24px * var(--s)); font-weight:800; margin-bottom:calc(6px * var(--s)); min-height:1.4em; }
+  #wheel .res { margin-top:calc(8px * var(--s)); font-size:calc(34px * var(--s)); font-weight:900; padding:4px 20px; border-radius:12px; opacity:0; transform:scale(.8); transition:all .3s; }
+  #wheel .res.in { opacity:1; transform:none; }
 </style>
 </head>
 <body>
@@ -145,7 +157,11 @@ function addJob(job) {
     const waiting = jobs.filter((x) => x.tts && !x.alert);
     if (waiting.length >= (job.maxQueue || 6)) jobs.splice(jobs.indexOf(waiting[0]), 1);
   }
-  if (job.alert) {
+  if (job.alert && job.first) {
+    // a big gift: ahead of everything that is waiting, after other big gifts
+    const i = jobs.findIndex((x) => !x.first);
+    if (i >= 0) jobs.splice(i, 0, job); else jobs.push(job);
+  } else if (job.alert) {
     // alerts go before waiting chat speech
     const i = jobs.findIndex((x) => !x.alert);
     if (i >= 0) jobs.splice(i, 0, job); else jobs.push(job);
@@ -160,15 +176,21 @@ R.alerts = {
   init() { if (!document.getElementById('alert')) root.innerHTML = '<div id="alert"></div>'; },
   alert(it) {
     if (W !== 'alerts') return;
-    addJob({ alert: true, run: async () => {
+    addJob({ alert: true, first: it.first, run: async () => {
       const el = document.getElementById('alert');
       el.className = `t-${it.type}`;
-      el.innerHTML = `<div class="pics">${it.avatar ? av(it.avatar) : ''}${it.img ? `<img class="gimg" src="${esc(it.img)}">` : ''}</div><div class="txt sh">${esc(it.text)}</div>`;
+      const media = it.media ? (it.mediaVideo ? `<video class="media" src="${esc(it.media)}" autoplay playsinline ${MUTE ? 'muted' : ''}></video>` : `<img class="media" src="${esc(it.media)}">`) : '';
+      el.innerHTML = media
+        ? `${media}<div class="txt sh">${esc(it.text)}</div>`
+        : `<div class="pics">${it.avatar ? av(it.avatar) : ''}${it.img ? `<img class="gimg" src="${esc(it.img)}">` : ''}</div><div class="txt sh">${esc(it.text)}</div>`;
+      const vid = el.querySelector('video');
+      if (vid) vid.volume = (it.volume ?? 70) / 100;
       void el.offsetWidth;
       el.classList.add('in');
       const t0 = Date.now();
       await playUrl(it.sound, (it.volume ?? 70) / 100);
       await speak(it.tts);
+      if (vid && !vid.ended) await new Promise((r) => { vid.onended = r; vid.onerror = r; setTimeout(r, Math.max(0, (vid.duration || 0) * 1000 - (Date.now() - t0)) + 300); });
       const left = (it.duration || 6) * 1000 - (Date.now() - t0);
       if (left > 0) await new Promise((r) => setTimeout(r, left));
       el.classList.remove('in');
@@ -176,6 +198,8 @@ R.alerts = {
     } });
   },
   tts(it) { addJob({ tts: true, maxQueue: it.maxQueue, run: () => speak(it) }); },
+  // the wheel's result is spoken here (the wheel overlay only shows it)
+  wheelResult(it) { if (it.tts) addJob({ alert: true, run: () => speak(it.tts) }); },
 };
 
 R.chat = {
@@ -195,7 +219,7 @@ R.chat = {
   },
 };
 
-const EV_ICON = { follow: '➕', share: '🔁', subscribe: '⭐', gift: '🎁', like: '❤️' };
+const EV_ICON = { follow: '➕', share: '🔁', subscribe: '⭐', gift: '🎁', like: '❤️', wheel: '🎡' };
 R.events = {
   init() { root.innerHTML = '<div class="list" id="events"></div>'; this.render(); },
   max() { return Number(Q.get('max')) || 6; },
@@ -284,6 +308,72 @@ R.timer = {
   },
 };
 
+R.wheel = {
+  angle: 0, spinning: false, queue: [],
+  init() {
+    if (document.getElementById('wheel')) return this.draw();
+    root.innerHTML = `<div id="wheel" class="${Q.get('hide') === '1' ? 'hidden' : ''}"><div class="who sh"></div><div class="box"><canvas width="1000" height="1000"></canvas><div class="ptr"></div></div><div class="res sh"></div></div>`;
+    this.draw();
+  },
+  segs() { return this.cur ?? D.wheel ?? []; },
+  draw() {
+    const c = document.querySelector('#wheel canvas');
+    if (!c) return;
+    const g = c.getContext('2d');
+    const segs = this.segs();
+    const n = Math.max(1, segs.length), R0 = 480, cx = 500, cy = 500, step = (Math.PI * 2) / n;
+    g.clearRect(0, 0, 1000, 1000);
+    segs.forEach((sg, i) => {
+      const a0 = this.angle - Math.PI / 2 + i * step;
+      g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R0, a0, a0 + step); g.closePath();
+      g.fillStyle = sg.color; g.fill(); g.lineWidth = 6; g.strokeStyle = 'rgba(255,255,255,.85)'; g.stroke();
+      g.save(); g.translate(cx, cy); g.rotate(a0 + step / 2);
+      g.fillStyle = '#fff'; g.font = `800 ${n > 10 ? 34 : 44}px "Yu Gothic UI", Meiryo, sans-serif`; g.textAlign = 'right'; g.textBaseline = 'middle';
+      g.shadowColor = '#000'; g.shadowBlur = 8; g.fillText(sg.label, R0 - 30, 0, R0 - 120); g.restore();
+    });
+    g.beginPath(); g.arc(cx, cy, 70, 0, Math.PI * 2); g.fillStyle = '#0f172a'; g.fill(); g.lineWidth = 8; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.font = '900 60px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🎁', cx, cy + 4);
+  },
+  settings() { if (!this.spinning) { this.cur = null; this.draw(); } },
+  wheel(it) { this.queue.push(it); this.next(); },
+  async next() {
+    if (this.spinning || !this.queue.length) return;
+    this.spinning = true;
+    const it = this.queue.shift();
+    this.cur = it.segments;
+    const el = document.getElementById('wheel');
+    el.classList.remove('hidden');
+    el.querySelector('.who').textContent = `${it.name} さんのルーレット！`;
+    const res = el.querySelector('.res');
+    res.classList.remove('in');
+    const n = it.segments.length, step = (Math.PI * 2) / n;
+    // the pointer is at the top: segment i is under it when angle = -(i + 0.5) * step (mod 2π)
+    const jitter = (Math.random() - 0.5) * step * 0.6;
+    const base = this.angle - (this.angle % (Math.PI * 2));
+    const target = base + Math.PI * 2 * (5 + Math.floor(it.spinSec / 2)) - (it.index + 0.5) * step + jitter;
+    const from = this.angle, dur = it.spinSec * 1000, t0 = performance.now();
+    await new Promise((done) => {
+      const tick = (now) => {
+        const t = Math.min(1, (now - t0) / dur);
+        this.angle = from + (target - from) * (1 - Math.pow(1 - t, 4));
+        this.draw();
+        if (t < 1) requestAnimationFrame(tick); else done();
+      };
+      requestAnimationFrame(tick);
+    });
+    const sg = it.segments[it.index];
+    res.textContent = sg.label;
+    res.style.background = sg.color;
+    res.classList.add('in');
+    await new Promise((r) => setTimeout(r, 3200));
+    if (Q.get('hide') === '1' && !this.queue.length) el.classList.add('hidden');
+    res.classList.remove('in');
+    el.querySelector('.who').textContent = '';
+    this.spinning = false;
+    this.next();
+  },
+};
+
 const widget = R[W] ?? R.alerts;
 
 // ------------------------------------------------------------------ server events
@@ -301,12 +391,14 @@ function connect() {
       if (it.timer?.now) skew = it.timer.now - Date.now();
       widget.stats?.(prev);
     } else if (it.kind === 'settings') {
-      D.goals = it.goals; D.chatSettings = it.chatSettings;
+      D.goals = it.goals; D.chatSettings = it.chatSettings; D.wheel = it.wheel;
       widget.settings?.();
     } else if (it.kind === 'chat') widget.chat?.(it);
     else if (it.kind === 'event') widget.event?.(it);
     else if (it.kind === 'alert') widget.alert?.(it);
     else if (it.kind === 'tts') widget.tts?.(it);
+    else if (it.kind === 'wheel') widget.wheel?.(it);
+    else if (it.kind === 'wheelResult') widget.wheelResult?.(it);
   };
 }
 widget.init();

@@ -22,6 +22,7 @@ export const WIDGETS = [
   { id: 'likers', title: 'いいねランキング', w: 380, h: 360 },
   { id: 'stats', title: 'カウンター（視聴者・いいね・コイン・フォロー）', w: 720, h: 90 },
   { id: 'timer', title: '延長タイマー（サブアソン）', w: 480, h: 150 },
+  { id: 'wheel', title: 'ギフトルーレット', w: 560, h: 620 },
 ];
 
 const ALERT_TYPES = ['follow', 'share', 'subscribe', 'gift', 'like', 'join'];
@@ -53,6 +54,22 @@ export const LIVE_DEFAULTS = {
   timer: { startMin: 10, maxMin: 0, perCoin: 5, perFollow: 30, perShare: 10, perSub: 300, likeEvery: 100, perLikes: 5 },
   chat: { max: 10, showGifts: true, showJoins: false },
   top: { count: 5 },
+  // gifts with their own alert (text, sound, picture / GIF / video); the first entry that names the gift wins
+  giftAlerts: [],
+  // a big gift's alert and game action go ahead of the ordinary ones waiting (0 = off)
+  interrupt: { minCoins: 0 },
+  wheel: {
+    on: false, gifts: ['ドーナツ', 'Doughnut'], minCoins: 0, spinSec: 6, maxSpins: 5, tts: true,
+    text: '{name} さんのルーレット →「{result}」！',
+    segments: [
+      { label: 'ゾンビ追加', color: '#ef4444', action: '', weight: 1 },
+      { label: 'はずれ', color: '#64748b', action: '', weight: 1 },
+      { label: '回復', color: '#22c55e', action: '', weight: 1 },
+      { label: 'もう一回', color: '#facc15', action: '', weight: 1 },
+      { label: '大当たり', color: '#a855f7', action: '', weight: 0.5 },
+      { label: 'はずれ', color: '#475569', action: '', weight: 1 },
+    ],
+  },
 };
 
 const num = (v, def, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; };
@@ -80,7 +97,7 @@ export function cleanLive(raw = {}) {
   for (const k of ALERT_TYPES) {
     const d = D.alerts[k];
     const x = a[k] ?? {};
-    alerts[k] = { on: bool(x.on, d.on), text: str(x.text, d.text, 120), sound: str(x.sound, d.sound, 120), tts: bool(x.tts, d.tts) };
+    alerts[k] = { on: bool(x.on, d.on), text: str(x.text, d.text, 120), sound: str(x.sound, d.sound, 120), media: str(x.media, '', 120), tts: bool(x.tts, d.tts) };
     if (k === 'gift') Object.assign(alerts[k], { minCoins: Math.round(num(x.minCoins, d.minCoins, 1, 1e6)), bigCoins: Math.round(num(x.bigCoins, d.bigCoins, 0, 1e6)), bigSound: str(x.bigSound, d.bigSound, 120) });
     if (k === 'like') alerts[k].every = Math.round(num(x.every, d.every, 10, 1e7));
   }
@@ -95,7 +112,23 @@ export function cleanLive(raw = {}) {
   const c = raw.chat ?? {};
   const chat = { max: Math.round(num(c.max, D.chat.max, 1, 50)), showGifts: bool(c.showGifts, D.chat.showGifts), showJoins: bool(c.showJoins, D.chat.showJoins) };
   const top = { count: Math.round(num(raw.top?.count, D.top.count, 1, 20)) };
-  return { tts, alerts, goals, timer, chat, top };
+  const names = (v) => (Array.isArray(v) ? v : String(v ?? '').split(/[,、\n]/)).map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
+  const giftAlerts = (Array.isArray(raw.giftAlerts) ? raw.giftAlerts : []).slice(0, 40).map((g) => ({
+    gifts: names(g?.gifts), text: str(g?.text, '{name} さんが {gift} ×{count} をくれました！', 120), sound: str(g?.sound, '', 120),
+    media: str(g?.media, '', 120), tts: bool(g?.tts, true),
+  })).filter((g) => g.gifts.length);
+  const interrupt = { minCoins: Math.round(num(raw.interrupt?.minCoins, 0, 0, 1e6)) };
+  const w = raw.wheel ?? {};
+  const segs = (Array.isArray(w.segments) ? w.segments : D.wheel.segments).slice(0, 16).map((x) => ({
+    label: str(x?.label, '?', 20) || '?', color: /^#[0-9a-f]{6}$/i.test(x?.color ?? '') ? x.color : '#64748b',
+    action: str(x?.action, '', 60), weight: num(x?.weight, 1, 0, 100),
+  }));
+  const wheel = {
+    on: bool(w.on, D.wheel.on), gifts: Array.isArray(w.gifts) || typeof w.gifts === 'string' ? names(w.gifts) : D.wheel.gifts,
+    minCoins: Math.round(num(w.minCoins, 0, 0, 1e6)), spinSec: num(w.spinSec, D.wheel.spinSec, 2, 20), maxSpins: Math.round(num(w.maxSpins, D.wheel.maxSpins, 1, 20)),
+    tts: bool(w.tts, D.wheel.tts), text: str(w.text, D.wheel.text, 120), segments: segs.length >= 2 ? segs : D.wheel.segments,
+  };
+  return { tts, alerts, goals, timer, chat, top, giftAlerts, interrupt, wheel };
 }
 
 // ------------------------------------------------------------------ sounds (a few made here, plus uploaded files)
@@ -368,6 +401,8 @@ export function createLive(hooks) {
   const sessionFile = path.join(hooks.stateDir, 'live-sessions.json');
   fs.mkdirSync(ttsDir, { recursive: true });
   fs.mkdirSync(soundDir, { recursive: true });
+  const mediaDir = path.join(hooks.stateDir, 'media');
+  fs.mkdirSync(mediaDir, { recursive: true });
   const sapi = createSapi({ dir: ttsDir, log: hooks.log });
   const voicevox = createVoicevox({ dir: ttsDir, log: hooks.log });
   const yukkuri = createYukkuri({ dir: ttsDir, log: hooks.log });
@@ -433,7 +468,7 @@ export function createLive(hooks) {
     return {
       kind: 'snapshot', streamer: st ? { tiktok: st.tiktok, mc: st.mc, label: hooks.label(st) } : null,
       ...liveStats(sid), chat: s.chat.slice(-set.chat.max), events: s.events.slice(-20),
-      goals: set.goals, chatSettings: set.chat, ttsEngine: set.tts.engine,
+      goals: set.goals, chatSettings: set.chat, ttsEngine: set.tts.engine, wheel: set.wheel.segments.map(({ label, color }) => ({ label, color })),
     };
   }
   // overlays follow whoever is on their game + field; when that changes they get a fresh snapshot
@@ -483,14 +518,27 @@ export function createLive(hooks) {
     return fs.existsSync(path.join(soundDir, path.basename(name))) ? `/live-sound/${encodeURIComponent(path.basename(name))}` : null;
   }
 
+  function mediaUrl(name) {
+    if (!name) return null;
+    const f = path.basename(name);
+    return fs.existsSync(path.join(mediaDir, f)) ? `/live-media/${encodeURIComponent(f)}` : null;
+  }
+  const lc = (x) => String(x).toLowerCase();
+  const giftAlertFor = (giftName) => S().giftAlerts.find((g) => g.gifts.some((n) => lc(n) === lc(giftName))) ?? null;
+
   async function alert(sid, type, vars, extra = {}) {
     const set = S();
-    const a = set.alerts[type];
-    if (!a?.on) return;
+    const a = extra.rule ?? set.alerts[type];
+    if (!a?.on && !extra.rule) return;
     const text = fill(a.text, vars);
     let sound = a.sound;
-    if (type === 'gift' && a.bigCoins && vars.coins >= a.bigCoins && a.bigSound) sound = a.bigSound;
-    const item = { kind: 'alert', type, text, name: vars.name, avatar: vars.avatar ?? null, img: extra.img ?? null, sound: soundUrl(sound), volume: set.alerts.volume, duration: set.alerts.duration };
+    if (type === 'gift' && !extra.rule && a.bigCoins && vars.coins >= a.bigCoins && a.bigSound) sound = a.bigSound;
+    const media = mediaUrl(a.media);
+    const item = {
+      kind: 'alert', type, text, name: vars.name, avatar: vars.avatar ?? null, img: extra.img ?? null, sound: soundUrl(sound),
+      volume: set.alerts.volume, duration: set.alerts.duration, media, mediaVideo: media ? /\.(mp4|webm)$/i.test(media) : false,
+      first: Boolean(set.interrupt.minCoins && (vars.coins ?? 0) >= set.interrupt.minCoins),
+    };
     if (a.tts) item.tts = await Promise.race([speech(text), new Promise((r) => setTimeout(() => r(null), 5000))]);
     push(sid, item);
   }
@@ -641,13 +689,54 @@ export function createLive(hooks) {
         const img = hooks.giftImage(d.giftId ?? g.id, giftName) || null;
         event(sid, d, 'gift', `${giftName} ×${count}`, { coins, img });
         if (set.chat.showGifts) push(sid, { kind: 'chat', name, avatar, comment: `${giftName} ×${count} を贈りました`, gift: true, img, at: Date.now() });
-        if (coins >= set.alerts.gift.minCoins) alert(sid, 'gift', { name, avatar, gift: giftName, count, coins }, { img });
+        const own = giftAlertFor(giftName);
+        if (own) alert(sid, 'gift', { name, avatar, gift: giftName, count, coins }, { img, rule: own });
+        else if (set.alerts.gift.on && coins >= set.alerts.gift.minCoins) alert(sid, 'gift', { name, avatar, gift: giftName, count, coins }, { img });
+        const w = set.wheel;
+        if (w.on && (w.gifts.some((n) => lc(n) === lc(giftName)) || (w.minCoins && coins >= w.minCoins))) {
+          for (let i = 0; i < Math.min(count, w.maxSpins); i++) spin(st, name, avatar);
+        }
         timerAdd(sid, coins * set.timer.perCoin);
         pushStats(sid);
         return;
       }
       default:
     }
+  }
+
+  // ---- gift wheel: one spin at a time per streamer; the result can run one of the streamer's game actions
+  const spins = new Map(); // sid -> { busy, queue: [] }
+  function spin(st, name, avatar) {
+    const q = spins.get(st.id) ?? { busy: false, queue: [] };
+    spins.set(st.id, q);
+    if (q.queue.length >= 30) return;
+    q.queue.push({ name, avatar });
+    nextSpin(st);
+  }
+  function nextSpin(st) {
+    const q = spins.get(st.id);
+    if (!q || q.busy || !q.queue.length) return;
+    q.busy = true;
+    const { name, avatar } = q.queue.shift();
+    const w = S().wheel;
+    const total = w.segments.reduce((t, x) => t + x.weight, 0) || 1;
+    let r = Math.random() * total;
+    let index = w.segments.findIndex((x) => (r -= x.weight) < 0);
+    if (index < 0) index = w.segments.length - 1;
+    const seg = w.segments[index];
+    push(st.id, { kind: 'wheel', segments: w.segments.map(({ label, color }) => ({ label, color })), index, name, avatar, spinSec: w.spinSec });
+    setTimeout(async () => {
+      const text = fill(w.text, { name, result: seg.label });
+      event(st.id, { user: { nickname: name } }, 'wheel', `ルーレット「${seg.label}」`);
+      const item = { kind: 'wheelResult', text, label: seg.label, color: seg.color };
+      if (w.tts) item.tts = await Promise.race([speech(text), new Promise((res) => setTimeout(() => res(null), 5000))]);
+      push(st.id, item);
+      if (seg.action) {
+        const ok = hooks.runAction(st, seg.action, name, `ルーレット: ${seg.label}`, avatar);
+        hooks.log(ok ? 'info' : 'warn', `${hooks.label(st)}: ルーレット「${seg.label}」${ok ? ` → ${seg.action}` : `のアクション ${seg.action} はこの配信者のゲームにありません`}`);
+      }
+      setTimeout(() => { q.busy = false; nextSpin(st); }, 3500);
+    }, w.spinSec * 1000);
   }
 
   // ---- fake events from the panel (the same path as real ones)
@@ -668,6 +757,7 @@ export function createLive(hooks) {
         return onEvent(st, 'like', { user, likeCount: n, totalLikeCount: s.stats.likes + n });
       }
       case 'viewers': return onEvent(st, 'roomUser', { viewerCount: Math.max(0, Number(b.viewers) || 120) });
+      case 'wheel': return spin(st, nickname, null);
       case 'follow': case 'share': case 'subscribe': case 'member': return onEvent(st, type, { user });
       default: throw new Error('知らない種類です');
     }
@@ -685,7 +775,7 @@ export function createLive(hooks) {
       ...Object.entries(BUILTIN_SOUNDS).map(([id, label]) => ({ id, label, url: `/live-sound/${id}.wav`, builtin: true })),
       ...fs.readdirSync(soundDir).filter((f) => /\.(mp3|wav|ogg|m4a)$/i.test(f)).map((f) => ({ id: f, label: f.replace(/^u-/, ''), url: `/live-sound/${encodeURIComponent(f)}` })),
     ];
-    return { settings: S(), defaults: LIVE_DEFAULTS, sounds, voices: await sapi.listVoices(), windowsTts: sapi.available, vvSpeakers: await voicevox.list(S().tts.vvUrl), widgets: WIDGETS, goalTypes: GOAL_TYPES };
+    return { settings: S(), defaults: LIVE_DEFAULTS, sounds, voices: await sapi.listVoices(), windowsTts: sapi.available, vvSpeakers: await voicevox.list(S().tts.vvUrl), media: fs.readdirSync(mediaDir).filter((f) => /\.(png|jpe?g|gif|webp|mp4|webm)$/i.test(f)).map((f) => ({ id: f, url: `/live-media/${encodeURIComponent(f)}` })), gameActions: hooks.gameActions(), widgets: WIDGETS, goalTypes: GOAL_TYPES };
   }
 
   // -> true when the request was one of ours
@@ -694,6 +784,14 @@ export function createLive(hooks) {
     if (req.method === 'GET' && p.startsWith('/live/')) {
       if (!WIDGETS.some((w) => w.id === p.slice(6))) return send(res, 404, 'text/plain', 'no such widget'), true;
       send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(path.join(hooks.publicDir, 'live.html')));
+      return true;
+    }
+    if (req.method === 'GET' && p.startsWith('/live-media/')) {
+      const file = path.join(mediaDir, path.basename(decodeURIComponent(p.slice(12))));
+      if (!fs.existsSync(file)) return send(res, 404, 'text/plain', 'not found'), true;
+      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm' }[path.extname(file).toLowerCase()] ?? 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'public, max-age=3600' });
+      fs.createReadStream(file).pipe(res);
       return true;
     }
     if (req.method === 'GET' && p.startsWith('/live-sound/')) {
@@ -730,13 +828,13 @@ export function createLive(hooks) {
     }
     if (req.method === 'GET' && op === 'settings') return json(res, { ok: true, ...(await settingsJson()) }), true;
     if (req.method !== 'POST') return false;
-    const b = await readBody(req, 12_000_000);
+    const b = await readBody(req, 40_000_000);
     try {
       if (op === 'settings') {
         const v = cleanLive(b.settings ?? {});
         hooks.save(v);
         hooks.log('info', '配信ツールの設定を保存しました');
-        for (const c of clients) if (c.sid) write(c, { kind: 'settings', goals: v.goals, chatSettings: v.chat, ttsEngine: v.tts.engine });
+        for (const c of clients) if (c.sid) write(c, { kind: 'settings', goals: v.goals, chatSettings: v.chat, ttsEngine: v.tts.engine, wheel: v.wheel.segments.map(({ label, color }) => ({ label, color })) });
         return json(res, { ok: true, ...(await settingsJson()) }), true;
       }
       if (op === 'test') { test(streamerFromBody(b), String(b.type), b); return json(res, { ok: true }), true; }
@@ -767,6 +865,20 @@ export function createLive(hooks) {
         fs.writeFileSync(path.join(soundDir, `u-${name}`), data);
         hooks.log('info', `効果音 ${name} を追加しました`);
         return json(res, { ok: true, file: `u-${name}`, ...(await settingsJson()) }), true;
+      }
+      if (op === 'media') {
+        const name = String(b.name ?? '').replace(/[^\w.\-\u3040-\u30ff\u4e00-\u9fff]/g, '_').slice(0, 60);
+        if (!/\.(png|jpe?g|gif|webp|mp4|webm)$/i.test(name)) throw new Error('png / jpg / gif / webp / mp4 / webm のファイルを選んでください');
+        const data = Buffer.from(String(b.data ?? ''), 'base64');
+        if (!data.length || data.length > 25_000_000) throw new Error('ファイルが空か大きすぎます（25MB まで）');
+        fs.writeFileSync(path.join(mediaDir, name), data);
+        hooks.log('info', `アラートの画像・動画 ${name} を追加しました`);
+        return json(res, { ok: true, file: name, ...(await settingsJson()) }), true;
+      }
+      if (op === 'media-delete') {
+        const file = path.join(mediaDir, path.basename(String(b.file ?? '')));
+        if (fs.existsSync(file)) fs.unlinkSync(file);
+        return json(res, { ok: true, ...(await settingsJson()) }), true;
       }
       if (op === 'sound-delete') {
         const file = path.join(soundDir, path.basename(String(b.file ?? '')));
