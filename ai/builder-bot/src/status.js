@@ -21,6 +21,16 @@ export function startStatusServer(port, getAgent) {
           layer: b ? `${b.layer + 1}/${b.size.y}` : null,
           missing: b ? Object.fromEntries(b.missing) : null,
           inventory: agent.bot.inventory.items().map((i) => `${i.name}×${i.count}`),
+          // 動きの様子（固まったときに見る）
+          motion: {
+            physicsAgoMs: agent.lastTick ? Date.now() - agent.lastTick : null,
+            onGround: agent.bot.entity.onGround,
+            pathGoal: agent.bot.pathfinder?.goal ? agent.bot.pathfinder.goal.constructor.name : null,
+            moving: agent.bot.pathfinder?.isMoving?.() ?? null,
+            mining: agent.bot.pathfinder?.isMining?.() ?? null,
+            building: agent.bot.pathfinder?.isBuilding?.() ?? null,
+            controls: Object.entries(agent.bot.controlState ?? {}).filter(([, v]) => v).map(([k]) => k),
+          },
         };
       }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });

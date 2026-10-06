@@ -38,7 +38,10 @@ export function loadConfig() {
     buildOrigin: process.env.BUILD_ORIGIN === 'here' ? 'here' : vec('BUILD_ORIGIN'),
     // 設計図の範囲にある邪魔なブロック（地形・木）をどける
     clearArea: bool('BUILD_CLEAR', true),
-    // 最初に石の道具をそろえる
+    // 素材のそろえ方。stocked: 手持ちとチェストに用意してある素材だけで建てる（取り出し・クラフトのみ）
+    //                 gather: 足りない素材は自分で採掘・精錬・狩り・クラフトして集める
+    supplyMode: (process.env.BUILD_SUPPLY || 'gather').toLowerCase() === 'stocked' ? 'stocked' : 'gather',
+    // 最初に石の道具をそろえる（gather のとき。stocked ではチェストにある道具を持つだけ）
     prepareTools: bool('BUILD_PREPARE_TOOLS', true),
     // 夜は穴にこもって朝を待つ（false なら夜も建て続ける）
     shelterAtNight: bool('BUILD_SHELTER_AT_NIGHT', true),

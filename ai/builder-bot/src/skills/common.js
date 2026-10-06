@@ -302,8 +302,9 @@ export async function mineBlocks(ctx, names, n, { maxDistance = 40, explore = tr
       // 水や溶岩に接したブロックは狙わない（水中の鉄鉱石に 40 秒ずつ粘って溺れたことがある）
       .filter((b) => !isUnreachable(ctx, b.position) && (!filter || filter(b)) && !(avoidLiquid && isNextToLiquid(bot, b.position))
         && !nearDanger(ctx, b.position)
-        // 建築範囲のブロックは素材として掘らない（建てた丸石の床や原木の柱を掘って素材にしていた）
-        && !ctx.isBuildPos?.(b.position));
+        // 建築範囲のブロックは素材として掘らない（建てた丸石の床や原木の柱を掘って素材にしていた）。
+        // 建物の真下と周りの地面も掘らない（足場用の土を中庭で掘って、穴だらけにしていた）
+        && !ctx.isBuildPos?.(b.position) && !ctx.isUnderBuild?.(b.position));
     if (blocks.length === 0) {
       if (!explore || explored >= maxExplore) break;
       explored++;
@@ -474,11 +475,23 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
 
 export async function pickUpItems(ctx, radius = 8) {
   const { bot } = ctx;
+  const tried = new Set();
   for (let i = 0; i < 10; i++) {
     abortable(ctx);
-    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(bot.entity.position) < radius);
+    const item = bot.nearestEntity((e) => e.name === 'item' && !tried.has(e.id) && e.position.distanceTo(bot.entity.position) < radius);
     if (!item) return;
-    await bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.8)).catch(() => {});
+    tried.add(item.id);
+    // 行けない所に落ちた物（壁の中の隙間など）で止まり続けないよう、1 個 10 秒で打ち切る
+    let timer;
+    try {
+      await Promise.race([
+        bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.8)).catch(() => {}),
+        new Promise((resolve) => { timer = setTimeout(resolve, 10_000); }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      try { bot.pathfinder.setGoal(null); } catch {}
+    }
     await sleep(250);
   }
 }
@@ -867,8 +880,9 @@ export { goals, LOGS, Vec3 };
 
 // 足場・壁・ふたに使うブロックは、使い道の少ないものから先に使う（丸石は道具やかまど、ゲートに要るので最後）
 const PILLAR_BLOCKS = ['dirt', 'coarse_dirt', 'netherrack', 'andesite', 'diorite', 'granite', 'tuff', 'stone', 'cobbled_deepslate', 'cobblestone'];
+// bot.keepForBuild（建築に使う素材を用意してもらったとき BuilderBot が付ける）が true を返す物は使わない
 export function cheapBlock(bot) {
-  const items = bot.inventory.items();
+  const items = bot.inventory.items().filter((i) => !bot.keepForBuild?.(i.name));
   for (const n of PILLAR_BLOCKS) { const it = items.find((i) => i.name === n); if (it) return it; }
   return items.find((i) => isPlanks(i.name)) ?? null;
 }
@@ -902,7 +916,7 @@ export async function pillarUp(ctx, height = 2) {
 // 置いたらすぐしゃがみを離して歩き続ける。ずっとしゃがんで橋をかけるより速い。
 // （プレイヤーは体の中心が縁から 0.3 マスはみ出すまで落ちないので、縁の 0.45 マス先まではしゃがまずに歩ける）
 // dx, dz は -1/0/1（どちらか一方だけ）。置いた数を返す
-export async function halfShiftBridge(ctx, { dx, dz, length = 8 }) {
+export async function halfShiftBridge(ctx, { dx, dz, length = 8, pick = null }) {
   const { bot } = ctx;
   let placed = 0;
   // 背中を進む向けに: mineflayer の向き yaw の正面は (-sin, -cos) なので、正面を (-dx, -dz) にする
@@ -926,7 +940,8 @@ export async function halfShiftBridge(ctx, { dx, dz, length = 8 }) {
       if (body.some((b) => !b || b.boundingBox !== 'empty')) break; // 進む先が壁
       const ahead = bot.blockAt(target.offset(0, -1, 0));
       if (!ahead || ahead.boundingBox !== 'block') {
-        const item = cheapBlock(bot);
+        // pick(置くマス): 呼び出し側が足場にするアイテムを選ぶ（足場ブロックを使えるかはマスで決まる）
+        const item = (pick ? pick(target.offset(0, -1, 0)) : null) ?? cheapBlock(bot);
         if (!item) break;
         if (bot.heldItem?.name !== item.name) await bot.equip(item, 'hand');
         // 1. しゃがまずに後ろへ歩き、縁ぎりぎり（中心から 0.45）まで来たらしゃがむ
@@ -1031,8 +1046,10 @@ export async function lightIfDark(ctx) {
   const feet = bot.entity.position.floored();
   const here = bot.blockAt(feet);
   if (!here || here.skyLight > 7 || here.light >= 8) return false;
+  if (bot.keepForBuild?.('torch')) return false; // 建物に付ける松明は使わない
   if (!findItem(bot, 'torch')) {
-    if (count(bot, 'coal') + count(bot, 'charcoal') < 1) return false;
+    // 用意してもらった素材（板材など）で松明を作らない
+    if (bot.keepForBuild || count(bot, 'coal') + count(bot, 'charcoal') < 1) return false;
     try {
       if (count(bot, 'stick') < 1) await craftItem(ctx, 'stick', 4);
       await craftItem(ctx, 'torch', 4);

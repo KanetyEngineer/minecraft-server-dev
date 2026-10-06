@@ -12,7 +12,10 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
     ? (start) => bot.health < 16 && Date.now() - start < 3 * 60_000
     : (start) => !bot.time.isDay && Date.now() - start < 9 * 60_000;
   bot.pathfinder.stop();
-  const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position);
+  // 建築範囲とその真下（BuilderBot が ctx.isBuildPos / isUnderBuild を付ける）は掘らない
+  // （建てた床に穴を開けていた。建物の真下に穴を掘ると、朝に床の下から出られなくなった）
+  const solidSafe = (b) => b && b.boundingBox === 'block' && bot.canDigBlock(b) && !isNextToLiquid(bot, b.position)
+    && !ctx.isBuildPos?.(b.position) && !ctx.isUnderBuild?.(b.position);
   // 足元から 4 段下まで固くて液体の無い場所か（木の上や洞窟の天井では掘らない）
   const diggableAt = (feet) => [1, 2, 3].every((d) => solidSafe(bot.blockAt(feet.offset(0, -d, 0))))
     && bot.blockAt(feet.offset(0, -4, 0))?.boundingBox === 'block';
@@ -41,7 +44,7 @@ export async function shelterForNight(ctx, { untilHealed = false } = {}) {
   const feet = bot.entity.position.floored();
   const cover = feet.offset(0, 2, 0);
   if (bot.blockAt(cover)?.boundingBox !== 'block') {
-    const findCoverItem = () => cheapBlock(bot) ?? bot.inventory.items().find((i) => i.name.endsWith('_log')); // 丸石は最後（cheapBlock の順）
+    const findCoverItem = () => cheapBlock(bot) ?? bot.inventory.items().find((i) => i.name.endsWith('_log') && !bot.keepForBuild?.(i.name)); // 丸石は最後（cheapBlock の順）
     let item = findCoverItem();
     // ふたにするブロックが無ければ、穴の壁（頭の高さ）を 1 つ掘って手に入れる
     if (!item) {

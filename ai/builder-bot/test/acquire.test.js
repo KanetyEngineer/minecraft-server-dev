@@ -41,3 +41,38 @@ test('手持ちにあれば手間は 0', () => {
   const s = fakeSupplier([{ name: 'oak_planks', count: 10 }]);
   assert.equal(s.estimate('oak_planks'), 0);
 });
+
+test('素材を用意してもらうモードでは、採掘・精錬・狩りをしない', () => {
+  const s = fakeSupplier([{ name: 'oak_log', count: 4 }]);
+  s.mode = 'stocked';
+  assert.equal(s.estimate('cobblestone'), Infinity); // 掘らない
+  assert.equal(s.estimate('glass'), Infinity); // 焼かない
+  assert.equal(s.estimate('white_wool'), Infinity); // 羊を狩らない
+  assert.ok(Number.isFinite(s.estimate('oak_planks'))); // 手持ちの原木から板材は作る
+  s.chests.set('0,0,0', { pos: null, items: new Map([['glass', 10]]), free: 26, at: Date.now() });
+  assert.equal(s.estimate('glass'), 0.1); // チェストにあれば取る
+  assert.equal(s.available('glass'), 10);
+});
+
+test('素材を用意してもらうモードでは、建築に使う分の素材をほかのクラフトの材料にしない', () => {
+  const s = fakeSupplier([{ name: 'oak_planks', count: 4 }]);
+  s.mode = 'stocked';
+  s.reserve = (n) => (n === 'oak_planks' ? 4 : 0); // 板材 4 枚はすべて建築に使う
+  assert.equal(s.estimate('stick'), Infinity);
+  s.reserve = (n) => (n === 'oak_planks' ? 2 : 0); // 2 枚余っている
+  assert.ok(Number.isFinite(s.estimate('stick')));
+});
+
+test('足場は、手持ちに土があってもチェストの足場ブロックを先に持っていく', async () => {
+  const items = [{ name: 'dirt', count: 80 }];
+  const s = fakeSupplier(items);
+  s.mode = 'stocked';
+  s.chests.set('0,0,0', { pos: null, items: new Map([['scaffolding', 200]]), free: 26, at: Date.now() });
+  const took = [];
+  s.takeFromChests = async (name, n) => { took.push([name, n]); items.push({ name, count: n }); };
+  assert.equal(await s.ensureScaffold(16), true);
+  assert.deepEqual(took, [['scaffolding', 64]]);
+  // もう足場ブロックを持っていれば取りに行かない
+  assert.equal(await s.ensureScaffold(16), true);
+  assert.equal(took.length, 1);
+});

@@ -39,3 +39,13 @@ test('出来ているかの判定: 種類と大事な性質だけ見る', () => 
   assert.ok(matches(b('oak_stairs', { facing: 'east' }), world('oak_stairs', { facing: 'west' }), { checkProps: false }));
   assert.ok(matches(b('grass_block'), world('dirt', {})));
 });
+
+test('ハーフブロックは、向きを見ないときでも上下・2 枚重ねの違いを見分ける', () => {
+  const target = { name: 'stone_brick_slab', props: { type: 'bottom', waterlogged: 'false' } };
+  const world = (type) => ({ name: 'stone_brick_slab', getProperties: () => ({ type, waterlogged: false }) });
+  assert.ok(matches(target, world('bottom'), { checkProps: false }));
+  assert.ok(!matches(target, world('double'), { checkProps: false }));
+  assert.ok(!matches(target, world('top'), { checkProps: false }));
+  // ハーフブロック以外は今までどおり種類だけ
+  assert.ok(matches({ name: 'oak_stairs', props: { facing: 'north' } }, { name: 'oak_stairs', getProperties: () => ({ facing: 'south' }) }, { checkProps: false }));
+});
