@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { TikTokManager } from './core/tiktok.js';
 import { send, json, readBody, readJson, cleanTikTok } from './core/util.js';
+import { KNOWN_GIFTS, pickRules } from './core/gifts.js';
 import * as defense from './games/defense/index.js';
 import * as clash from './games/clash/index.js';
 import * as anime from './games/anime/index.js';
@@ -142,6 +143,11 @@ function makeCtx(mod) {
     setSignApiKey: (k) => setSignApiKey(k),
     fieldsEdited: () => reconcileFromGame(id),
     tiktokControl: (field, connect) => tiktokControl(id, field, connect),
+    // the game's config with the gift rules of the streamer on that field (their own, if they set any)
+    rules: (field, cfg) => {
+      const own = streamerAt(id, field)?.rules?.[id];
+      return own ? { ...cfg, ...own } : cfg;
+    },
   };
 }
 
@@ -279,6 +285,40 @@ function cleanStreamer(b, existing) {
   return { tiktok: tiktokId, mc, game, field, enabled: b.enabled !== false, note: String(b.note ?? '').trim().slice(0, 60) };
 }
 
+// ------------------------------------------------------------------ gift rules (list + per-streamer)
+const hasRules = (g) => typeof g?.actions === 'function';
+
+// what each gift / follow / share / like does for one streamer (or the game's settings when nobody / no own rules)
+function giftListJson(gameId, s, fieldWanted = 0) {
+  const g = games.get(gameId);
+  const base = pickRules(g.rulesConfig());
+  const own = s?.rules?.[gameId] ?? null;
+  const field = s && s.game === gameId ? s.field : fieldWanted;
+  return {
+    game: { id: g.meta.id, title: g.meta.title, short: g.meta.short, icon: g.meta.icon, fieldWord: g.meta.fieldWord },
+    field,
+    streamer: s ? { id: s.id, tiktok: s.tiktok, mc: s.mc, game: s.game, field: s.field } : null,
+    custom: Boolean(own),
+    rules: { ...base, ...(own ?? {}) },
+    defaults: base,
+    actions: Object.fromEntries(Object.entries(g.actions()).map(([k, a]) => [k, a.label ?? k])),
+    known: KNOWN_GIFTS,
+    overlay: field ? giftOverlayUrl(gameId, field) : '',
+  };
+}
+
+// a streamer's own rules for one game, checked by that game's own config check (unknown actions etc. are refused)
+function cleanRules(gameId, raw) {
+  const mod = MODULES.find((m) => m.meta.id === gameId);
+  const g = games.get(gameId);
+  const merged = { ...g.rulesConfig(), ...pickRules(raw) };
+  return pickRules(mod.validate(merged, baseCtx(mod)));
+}
+
+function giftOverlayUrl(gameId, field) {
+  return `http://127.0.0.1:${hub.hubPort}/gift-list?game=${gameId}&field=${field}`;
+}
+
 // ------------------------------------------------------------------ status
 function overlayUrl(gameId, field) {
   return `http://127.0.0.1:${hub.hubPort}/overlay?game=${gameId}&field=${field}`;
@@ -292,6 +332,8 @@ function streamersJson() {
       status: !s.tiktok ? 'none' : s.enabled === false ? 'disabled' : !assigned(s) ? 'idle' : c?.status ?? 'off',
       detail: c?.detail ?? '', likes: c?.totalLikes ?? 0,
       overlay: assigned(s) ? overlayUrl(s.game, s.field) : '',
+      giftOverlay: assigned(s) && hasRules(games.get(s.game)) ? giftOverlayUrl(s.game, s.field) : '',
+      ownRules: Object.keys(s.rules ?? {}),
     };
   });
 }
@@ -305,7 +347,7 @@ function statusJson() {
       const st = g.status();
       const lp = legacy.get(g.meta.id);
       return {
-        id: g.meta.id, title: g.meta.title, short: g.meta.short, icon: g.meta.icon, fieldWord: g.meta.fieldWord,
+        id: g.meta.id, title: g.meta.title, short: g.meta.short, icon: g.meta.icon, fieldWord: g.meta.fieldWord, hasRules: hasRules(g),
         rcon: st.rcon, rconDetail: st.rconDetail, rconPort: st.port, serverLabel: st.serverLabel ?? '',
         fields: st.fields.map((f) => {
           const s = streamerAt(g.meta.id, f.n);
@@ -381,6 +423,40 @@ async function hubRoute(req, res, url) {
     if (id && games.has(id)) return serveOverlay(res, id, `/g/${id}/`);
     const list = [...games.values()].map((g) => `<li>${g.meta.title}: ${g.fields().map((n) => `<a href="/overlay?game=${g.meta.id}&field=${n}">${g.meta.fieldWord}${n}</a>`).join(' ')}</li>`).join('');
     return send(res, 200, 'text/html; charset=utf-8', `<!doctype html><meta charset="utf-8"><title>OBS オーバーレイ</title><body style="font-family:sans-serif"><h1>OBS 用オーバーレイ</h1><p>/overlay?game=ゲーム&field=番号</p><ul>${list}</ul></body>`);
+  }
+  if (req.method === 'GET' && p === '/gift-list') {
+    return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(path.join(ROOT, 'public', 'gift-list.html')));
+  }
+  if (req.method === 'GET' && p === '/api/gift-list') {
+    const sid = url.searchParams.get('streamer');
+    const s = sid ? hub.streamers.find((x) => x.id === sid) : null;
+    const gameId = url.searchParams.get('game') || s?.game || '';
+    if (sid && !s) return json(res, { ok: false, message: 'その配信者はいません' }, 404);
+    if (!hasRules(games.get(gameId))) return json(res, { ok: false, message: 'そのゲームはありません（ギフトの割り当てがないゲームです）' }, 404);
+    const field = Math.round(Number(url.searchParams.get('field'))) || 0;
+    const who = s ?? streamerAt(gameId, field);
+    return json(res, { ok: true, ...giftListJson(gameId, who, games.get(gameId).fields().includes(field) ? field : 0) });
+  }
+  if (req.method === 'POST' && p === '/api/gift-rules') {
+    const b = await readBody(req);
+    try {
+      const s = hub.streamers.find((x) => x.id === b.streamer);
+      if (!s) throw new Error('その配信者はいません');
+      if (!hasRules(games.get(b.game))) throw new Error('そのゲームはありません');
+      const label = `${streamerLabel(s)} の ${games.get(b.game).meta.short}`;
+      if (b.rules == null) {
+        if (s.rules) delete s.rules[b.game];
+        if (s.rules && !Object.keys(s.rules).length) delete s.rules;
+        log('info', `${label} のギフト割り当てをゲームの設定に戻しました`);
+      } else {
+        s.rules = { ...(s.rules ?? {}), [b.game]: cleanRules(b.game, b.rules) };
+        log('info', `${label} のギフト割り当てを保存しました`);
+      }
+      saveHub();
+      return json(res, { ok: true, ...giftListJson(b.game, s) });
+    } catch (err) {
+      return json(res, { ok: false, message: err.message }, 400);
+    }
   }
   if (req.method === 'GET' && p === '/api/status') return json(res, statusJson());
   if (req.method === 'GET' && p === '/api/streamers') return json(res, { streamers: streamersJson() });

@@ -477,7 +477,7 @@ export function createGame(ctx) {
   }
 
   const onEvent = createEventHandler({
-    log, enqueue, config: () => config, recentGifts,
+    log, enqueue, config: (f) => ctx.rules(f, config), recentGifts,
     addCoins: (n, c) => { if (F[n]) F[n].coins += c; },
     likeState: (n) => F[n] ?? { totalLikes: 0, likeMarks: null },
   });
@@ -685,7 +685,7 @@ export function createGame(ctx) {
         const giftName = String(b.gift || 'テストギフト');
         F[n].coins += coins * repeat;
         log('gift', `[テスト] ${b.name || 'テスト'} → ${giftName} ×${repeat}（${coins * repeat}コイン）`, n);
-        for (const a of actionsForGift(config.giftRules, giftName, coins, repeat)) enqueue(n, a, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
+        for (const a of actionsForGift(ctx.rules(n, config).giftRules, giftName, coins, repeat)) enqueue(n, a, b.name || 'テスト', `${giftName}×${repeat}`, 'test', b.avatar || null);
       }
       return json(res, { ok: true, field: n });
     }
@@ -729,6 +729,8 @@ export function createGame(ctx) {
     },
     onEvent,
     handle,
+    actions: () => ACTIONS,
+    rulesConfig: () => config,
     log,
     resourcePack: () => null,
     status: () => ({

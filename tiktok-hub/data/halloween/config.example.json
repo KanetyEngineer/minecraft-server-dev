@@ -1,0 +1,38 @@
+{
+  "tiktokUsername": "",
+  "signApiKey": "",
+  "rcon": { "host": "127.0.0.1", "port": 25575, "password": "" },
+  "panelPort": 8787,
+  "queue": { "intervalMs": 1500, "maxLength": 40 },
+
+  "giftRules": {
+    "byName": {
+      "Rose": "candy1",
+      "バラ": "candy1",
+      "TikTok": "firework",
+      "Finger Heart": "speed",
+      "指ハート": "speed",
+      "GG": "jumpscare",
+      "Doughnut": "zombies",
+      "ドーナツ": "zombies"
+    },
+    "tiers": [
+      { "minCoins": 1,   "pick": "random", "actions": ["candy1", "bats", "firework"] },
+      { "minCoins": 5,   "pick": "random", "actions": ["speed", "levitate", "jumpscare", "candy3"] },
+      { "minCoins": 20,  "pick": "random", "actions": ["zombies", "ghosts", "thunder", "curse"] },
+      { "minCoins": 100, "pick": "random", "actions": ["horde", "time_plus", "candy_all"] },
+      { "minCoins": 500, "pick": "all",    "actions": ["miniboss", "candy_all"] }
+    ],
+    "repeatSmallUpTo": 5
+  },
+
+  "follow": "firework",
+  "share": "bats",
+  "subscribe": "candy_all",
+  "likes": { "every": 1000, "action": "heal" },
+
+  "chatCommands": { "enabled": false, "cooldownSec": 30, "commands": { "!boo": "jumpscare", "!bat": "bats" } },
+
+  "cooldownSec": { "horde": 20, "miniboss": 60, "time_plus": 30, "curse": 10 },
+  "fallbackAction": "firework"
+}

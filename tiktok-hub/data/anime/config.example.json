@@ -1,0 +1,41 @@
+{
+  "tiktokUsername": "",
+  "signApiKey": "",
+  "rcon": { "host": "127.0.0.1", "port": 25591, "password": "" },
+  "panelPort": 8790,
+  "queue": { "intervalMs": 1500, "maxLength": 40 },
+
+  "giftRules": {
+    "byName": {
+      "Rose": "chidori",
+      "バラ": "chidori",
+      "TikTok": "taiyoken",
+      "GG": "gomu_pistol",
+      "Finger Heart": "rasengan",
+      "指ハート": "rasengan",
+      "Doughnut": "kamehameha",
+      "ドーナツ": "kamehameha",
+      "Hand Hearts": "murasaki",
+      "ハンドハート": "murasaki"
+    },
+    "tiers": [
+      { "minCoins": 1,    "pick": "random", "actions": ["taiyoken", "gomu_pistol", "chidori"] },
+      { "minCoins": 5,    "pick": "random", "actions": ["rasengan", "kienzan", "kage_bunshin", "aka"] },
+      { "minCoins": 20,   "pick": "random", "actions": ["kamehameha", "ao", "amaterasu", "hekireki"] },
+      { "minCoins": 99,   "pick": "random", "actions": ["murasaki", "fukuma", "bijudama"] },
+      { "minCoins": 500,  "pick": "all",    "actions": ["muryokusho"] },
+      { "minCoins": 1000, "pick": "all",    "actions": ["genkidama"] }
+    ],
+    "repeatSmallUpTo": 5
+  },
+
+  "follow": "firework",
+  "share": "senzu",
+  "subscribe": "ouen",
+  "likes": { "every": 500, "action": "senzu" },
+
+  "chatCommands": { "enabled": false, "cooldownSec": 30, "commands": { "!かめはめ波": "kamehameha", "!千鳥": "chidori" } },
+
+  "cooldownSec": { "muryokusho": 30, "genkidama": 30, "fukuma": 15, "murasaki": 10, "bijudama": 10, "kage_bunshin": 10 },
+  "fallbackAction": "firework"
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "dim": "minecraft:overworld",
+    "fn": "crmc:",
+    "obj": "cr",
+    "cfg": "crmc:cfg",
+    "tag": "cr"
+  },
+  {
+    "id": 2,
+    "dim": "crmc:arena2",
+    "fn": "crmc:a2/",
+    "obj": "c2",
+    "cfg": "crmc:cfg2",
+    "tag": "c2"
+  },
+  {
+    "id": 3,
+    "dim": "crmc:arena3",
+    "fn": "crmc:a3/",
+    "obj": "c3",
+    "cfg": "crmc:cfg3",
+    "tag": "c3"
+  },
+  {
+    "id": 4,
+    "dim": "crmc:arena4",
+    "fn": "crmc:a4/",
+    "obj": "c4",
+    "cfg": "crmc:cfg4",
+    "tag": "c4"
+  }
+]
