@@ -33,15 +33,22 @@ const cv = document.getElementById('c');
 const g = cv.getContext('2d');
 
 // gift names in the rules -> one entry per gift (TikTok sends English or Japanese names, the rules list both)
+// d.gifts: rule name -> TikTok's gift { id (picture), name, coins }
 function giftGroups(d) {
   const byName = d.rules.giftRules?.byName ?? {};
   const known = d.known ?? [];
-  const groups = new Map(); // action -> { names: Set, coins }
+  const groups = new Map(); // action -> { keys, names, coins, imgs }
   for (const [name, action] of Object.entries(byName)) {
-    const k = known.find((x) => x.ja === name || x.en === name);
-    const shown = k ? k.ja : name;
-    const grp = groups.get(action) ?? { action, names: [], coins: [] };
-    if (!grp.names.includes(shown)) { grp.names.push(shown); grp.coins.push(k ? k.coins : null); }
+    const cat = d.gifts?.[name];
+    const k = known.find((x) => x.ja === name || x.en === name || (cat && x.en.toLowerCase() === cat.name.toLowerCase()));
+    const key = cat?.id ?? k?.en ?? name;
+    const grp = groups.get(action) ?? { action, keys: [], names: [], coins: [], imgs: [] };
+    if (!grp.keys.includes(key)) {
+      grp.keys.push(key);
+      grp.names.push(k?.ja ?? cat?.name ?? name);
+      grp.coins.push(cat?.coins ?? k?.coins ?? null);
+      if (cat?.id) grp.imgs.push(cat.id);
+    }
     groups.set(action, grp);
   }
   // one row per gift, cheapest first; gifts that do the same thing share a row
@@ -50,8 +57,21 @@ function giftGroups(d) {
     coin: grp.coins.length === 1 && grp.coins[0] ? grp.coins[0] : null,
     sort: Math.min(...grp.coins.map((c) => c ?? 1e9)),
     right: d.actions[grp.action] ?? grp.action,
+    imgs: grp.imgs.slice(0, 3),
   }));
   return rows.sort((a, b) => a.sort - b.sort);
+}
+
+// gift pictures, loaded once through the hub (same origin, so the canvas can still be saved as a PNG)
+const pics = new Map(); // id -> Image (or null when it could not be loaded)
+function loadPics(d) {
+  const ids = Object.values(d.gifts ?? {}).map((x) => x.id).filter((id) => !pics.has(id));
+  return Promise.all(ids.map((id) => new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => { pics.set(id, im); resolve(); };
+    im.onerror = () => { pics.set(id, null); resolve(); };
+    im.src = '/gift-img/' + id;
+  })));
 }
 
 function tierRows(d) {
@@ -135,19 +155,25 @@ function draw(d) {
   const badgeW = Math.max(0, ...secs.flatMap((s) => s.rows.map((r) => (r.coin ? g.measureText(`${r.coin}`).width + S * 1.2 : 0))));
   g.font = font(S);
   const coinW = (c) => (c ? badgeW + S * 0.4 : 0);
-  let leftW = 0;
-  for (const s of secs) for (const r of s.rows) leftW = Math.max(leftW, g.measureText(r.left).width + coinW(r.coin));
-  leftW = Math.min(leftW, (W - pad * 2) * 0.48);
+  // gift pictures in front of the names (as many slots as the row with the most gifts)
+  const pic = Math.round(S * 1.9);
+  const picsIn = (r) => (r.imgs ?? []).filter((id) => pics.get(id));
+  const picSlots = Math.max(0, ...secs.flatMap((s) => s.rows.map((r) => picsIn(r).length)));
+  const picW = (r) => (r.imgs ? picSlots * (pic + S * 0.25) : 0);
+  const preW = (r) => coinW(r.coin) + picW(r);
   const arrowW = S * 1.8;
-  const rightW = W - pad * 2 - leftW - arrowW;
+  for (const s of secs) {
+    s.leftW = Math.min(Math.max(0, ...s.rows.map((r) => g.measureText(r.left).width + preW(r))), (W - pad * 2) * 0.55);
+  }
   let h = pad + Math.round(S * 1.5) + Math.round(S * 0.4);
   for (const s of secs) {
     h += Math.round(S * 1.25) + Math.round(S * 0.2);
+    const leftW = s.leftW;
     for (const r of s.rows) {
       g.font = font(S);
-      r.lines = wrap(r.right, rightW);
-      r.leftLines = wrap(r.left, leftW - coinW(r.coin));
-      r.h = Math.max(r.lines.length, r.leftLines.length) * lh;
+      r.lines = wrap(r.right, W - pad * 2 - leftW - arrowW);
+      r.leftLines = wrap(r.left, leftW - preW(r));
+      r.h = Math.max(Math.max(r.lines.length, r.leftLines.length) * lh, picsIn(r).length ? pic + S * 0.2 : 0);
       h += r.h + Math.round(S * 0.25);
     }
     if (s.note) h += Math.round(S * 1.05);
@@ -174,10 +200,22 @@ function draw(d) {
   for (const s of secs) {
     y += Math.round(S * 0.2) + S * 0.62;
     text(s.head, pad, y, Math.round(S * 0.9), '#25f4ee', 800);
+    const leftW = s.leftW;
     y += S * 0.63;
     for (const r of s.rows) {
-      let yy = y + lh / 2;
+      const mid = (n) => y + (r.h - n * lh) / 2 + lh / 2;
+      let yy = mid(r.leftLines.length);
       let x = pad;
+      if (r.imgs) {
+        picsIn(r).forEach((id, i) => {
+          const im = pics.get(id);
+          const sc = Math.min(pic / im.naturalWidth, pic / im.naturalHeight);
+          const w = im.naturalWidth * sc;
+          const hh = im.naturalHeight * sc;
+          g.drawImage(im, x + i * (pic + S * 0.25) + (pic - w) / 2, y + (r.h - hh) / 2, w, hh);
+        });
+        x += picW(r);
+      }
       if (r.coin) {
         // coin badge
         g.font = font(Math.round(S * 0.75));
@@ -191,8 +229,9 @@ function draw(d) {
         x += cw + S * 0.4;
       }
       r.leftLines.forEach((ln, i) => text(ln, x, yy + i * lh, S, '#ffffff'));
-      text('→', pad + leftW + S * 0.35, yy, S, opt.accent, 800);
-      r.lines.forEach((ln, i) => text(ln, pad + leftW + arrowW, yy + i * lh, S, '#fde68a'));
+      const ry = mid(r.lines.length);
+      text('→', pad + leftW + S * 0.35, y + r.h / 2, S, opt.accent, 800);
+      r.lines.forEach((ln, i) => text(ln, pad + leftW + arrowW, ry + i * lh, S, '#fde68a'));
       y += r.h + Math.round(S * 0.25);
     }
     if (s.note) { text(s.note, pad, y + S * 0.45, Math.round(S * 0.75), '#cbd5e1', 600); y += Math.round(S * 1.05); }
@@ -223,6 +262,7 @@ async function load() {
     const key = JSON.stringify(d);
     if (key === last) return;
     last = key;
+    await loadPics(d);
     draw(d);
   } catch { /* the hub is restarting: keep the last picture */ }
 }

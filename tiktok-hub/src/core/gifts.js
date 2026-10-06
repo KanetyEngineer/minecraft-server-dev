@@ -17,6 +17,6 @@ export const KNOWN_GIFTS = [
   { ja: '指ハート', en: 'Finger Heart', coins: 5 },
   { ja: '香水', en: 'Perfume', coins: 20 },
   { ja: 'ドーナツ', en: 'Doughnut', coins: 30 },
-  { ja: 'ハンドハート', en: 'Hand Hearts', coins: 100 },
+  { ja: 'ハンドハート', en: 'Hand Heart', coins: 100 },
   { ja: 'ギャラクシー', en: 'Galaxy', coins: 1000 },
 ];

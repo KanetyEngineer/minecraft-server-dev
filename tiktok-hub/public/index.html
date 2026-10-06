@@ -58,6 +58,13 @@
   .chips { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
   .chip { background:#232838; border:1px solid var(--line); border-radius:999px; padding:2px 4px 2px 10px; font-size:12px; white-space:nowrap; }
   .chip button { border:0; background:none; padding:0 4px; color:#fca5a5; }
+  .gthumbs { display:flex; gap:2px; min-width:40px; }
+  .gthumbs img { width:36px; height:36px; object-fit:contain; }
+  .gpick { border:1px solid var(--line); border-radius:8px; padding:8px; margin-top:6px; background:#11141c; }
+  .gpick-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:6px; max-height:340px; overflow:auto; margin-top:6px; }
+  .gpick-grid button { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 4px; font-size:11px; line-height:1.2; }
+  .gpick-grid img { width:52px; height:52px; object-fit:contain; }
+  .gpick-grid .c { color:#facc15; }
   .gl-sub { font-size:13px; color:var(--accent2); margin:14px 0 4px; font-weight:700; }
   .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:#232838; border:1px solid var(--line); color:var(--muted); font-weight:400; }
   .tag.own { color:#fde68a; border-color:#a16207; }
@@ -322,6 +329,23 @@ async function saveSign() {
 
 // ------------------------------------------------------------------ gift list + per-streamer gift rules
 let GL = null; // last /api/gift-list
+let GCAT = null; // TikTok's gifts: [{ id, name, coins, ja }]
+async function glCatalog() {
+  if (GCAT) return GCAT;
+  try { GCAT = (await (await fetch('/api/gift-catalog')).json()).gifts ?? []; } catch { GCAT = []; }
+  return GCAT;
+}
+// a gift name as typed in the rules (English or Japanese) -> catalog entry
+function gcatFind(name) {
+  const n = String(name).trim().toLowerCase();
+  if (!n || !GCAT) return null;
+  return GCAT.find((g) => g.name.toLowerCase() === n || (g.ja && g.ja === name.trim())) ?? null;
+}
+const gimg = (g, cls = '') => g ? `<img class="${cls}" src="/gift-img/${g.id}" alt="" title="${esc(g.name)}・${g.coins}コイン" loading="lazy">` : '';
+function thumbs(names) {
+  const seen = new Set();
+  return names.map(gcatFind).filter((g) => g && !seen.has(g.id) && seen.add(g.id)).map((g) => gimg(g)).join('');
+}
 function glInit(listOnly = false) {
   const sel = $('gl-who').value;
   const rulesGames = S.games.filter((g) => g.hasRules);
@@ -351,6 +375,7 @@ async function glLoad() {
   const d = await (await fetch('/api/gift-list?' + p)).json();
   if (!d.ok) { $('gl-edit').innerHTML = `<p class="muted">${esc(d.message)}</p>`; return; }
   GL = d;
+  await glCatalog();
   glRender(d.rules);
   glPreview();
 }
@@ -363,7 +388,7 @@ function glRender(r) {
   $('gl-head').innerHTML = d.streamer
     ? `${esc(who)} の ${esc(d.game.icon + ' ' + d.game.short)} ${d.custom ? '<span class="tag own">この配信者だけの割り当て</span>' : '<span class="tag">ゲームの設定のまま</span>'}`
     : `${esc(d.game.icon + ' ' + d.game.title)} の設定 <span class="tag">配信者が決めていないとき</span>`;
-  $('gl-names').innerHTML = d.known.flatMap((k) => [k.ja, k.en]).filter((x, i, a) => a.indexOf(x) === i).map((n) => `<option value="${esc(n)}">`).join('');
+  $('gl-names').innerHTML = [...d.known.flatMap((k) => [k.ja, k.en]), ...(GCAT ?? []).map((g) => g.name)].filter((x, i, a) => a.indexOf(x) === i).map((n) => `<option value="${esc(n)}">`).join('');
   const ro = !d.streamer;
   // gifts by name: one row per action, all the names it may arrive as
   const groups = [];
@@ -371,7 +396,7 @@ function glRender(r) {
     const g = groups.find((x) => x.action === a);
     if (g) g.names.push(name); else groups.push({ action: a, names: [name] });
   }
-  const giftRow = (g) => `<tr class="gl-gift"><td><input class="gl-names" list="gl-names" value="${esc(g.names.join(', '))}" placeholder="ギフト名（例: バラ, Rose）"></td>
+  const giftRow = (g) => `<tr class="gl-gift"><td style="width:1%"><div class="gthumbs">${thumbs(g.names)}</div></td><td><input class="gl-names" onchange="this.closest('tr').querySelector('.gthumbs').innerHTML = thumbs(this.value.split(/[,、，]/))" list="gl-names" value="${esc(g.names.join(', '))}" placeholder="ギフト名（例: バラ, Rose）"></td>
     <td><select class="gl-act">${actOpts(g.action)}</select></td><td><button class="small del" onclick="this.closest('tr').remove()">×</button></td></tr>`;
   const tierRow = (t) => `<tr class="gl-tier"><td style="width:100px"><input type="number" class="gl-min" min="1" value="${t.minCoins}"></td>
     <td style="width:130px"><select class="gl-pick"><option value="random" ${t.pick !== 'all' ? 'selected' : ''}>どれか1つ</option><option value="all" ${t.pick === 'all' ? 'selected' : ''}>全部</option></select></td>
@@ -387,9 +412,13 @@ function glRender(r) {
     <p class="help">TikTok はギフト名を視聴者のアプリの言語で送ってくるので、日本語と英語の両方を「,」で区切って入れておくと確実です（候補から選べます）。ここにないギフトは下の「コインの段階」で決まります。</p>
     <table class="gl-t"><tbody id="gl-gifts">${groups.map(giftRow).join('')}</tbody></table>
     <div class="row" style="margin-top:6px">
-      <label style="flex:0 0 auto"><select id="gl-known" style="width:auto" onchange="glAddKnown(this)"><option value="">＋ よく使うギフトを追加</option>${d.known.map((k, i) => `<option value="${i}">${esc(k.ja)}（${esc(k.en)}・${k.coins}コイン）</option>`).join('')}</select></label>
-      <button class="small" onclick="glAddGift('')">＋ 行を追加</button>
+      <button class="small primary" onclick="glPicker()">＋ 画像からギフトを選ぶ</button>
+      <button class="small" onclick="glAddGift('')">＋ 名前で行を追加</button>
       <label style="flex:0 0 220px">連続で贈られたときの最大回数<input type="number" id="gl-repeat" min="1" max="50" value="${r.giftRules?.repeatSmallUpTo ?? 5}"></label>
+    </div>
+    <div class="gpick" id="gl-pick" style="display:none">
+      <div class="row"><label style="flex:1 1 200px">さがす（名前・コイン数）<input id="gl-pick-q" placeholder="例: Rose / 1 / ドーナツ" oninput="glPickList()"></label><button class="small" onclick="$('gl-pick').style.display='none'">閉じる</button></div>
+      <div class="gpick-grid" id="gl-pick-grid"></div>
     </div>
     <div class="gl-sub">コインの段階（名前で決めていないギフト）</div>
     <p class="help">ギフトのコインの合計で、届いた一番上の段階のアクションになります。</p>
@@ -417,20 +446,33 @@ function chip(a) {
   return `<span class="chip" data-a="${esc(a)}">${esc(GL.actions[a] ?? a)}<button title="外す" onclick="this.parentNode.remove()">×</button></span>`;
 }
 function glAddGift(names) {
-  $('gl-gifts').insertAdjacentHTML('beforeend', GL_giftRow({ names: names ? [names] : [], action: Object.keys(GL.actions)[0] }));
+  $('gl-gifts').insertAdjacentHTML('beforeend', GL_giftRow({ names: names ? names.split(/,\s*/) : [], action: Object.keys(GL.actions)[0] }));
 }
-function glAddKnown(sel) {
-  const k = GL.known[Number(sel.value)];
-  sel.value = '';
-  if (!k) return;
-  glAddGift(k.ja === k.en ? k.ja : `${k.ja}, ${k.en}`);
+// gift picker: TikTok's gifts with their pictures, cheapest first
+function glPicker() {
+  $('gl-pick').style.display = '';
+  glPickList();
+  $('gl-pick-q').focus();
+}
+function glPickList() {
+  const q = $('gl-pick-q').value.trim().toLowerCase();
+  const list = (GCAT ?? []).filter((g) => !q || g.name.toLowerCase().includes(q) || (g.ja && g.ja.includes(q)) || String(g.coins) === q).slice(0, 200);
+  $('gl-pick-grid').innerHTML = list.map((g) => `<button onclick="glPickAdd('${g.id}')" title="${esc(g.name)}">${gimg(g)}<span>${esc(g.ja || g.name)}</span><span class="c">${g.coins}コイン</span></button>`).join('')
+    || `<p class="muted">${GCAT?.length ? '見つかりません' : 'ギフトの一覧をまだ読み込めていません（ハブがインターネットにつながると読み込みます）'}</p>`;
+}
+function glPickAdd(id) {
+  const g = GCAT.find((x) => x.id === id);
+  if (!g) return;
+  glAddGift(g.ja && g.ja !== g.name ? `${g.ja}, ${g.name}` : g.name);
+  const rows = $('gl-gifts').querySelectorAll('tr');
+  rows[rows.length - 1].scrollIntoView({ block: 'nearest' });
 }
 // read-only summary (the game's own settings)
 function glSummary(r) {
   const a = (x) => esc(GL.actions[x] ?? x);
   const groups = {};
   for (const [n, x] of Object.entries(r.giftRules?.byName ?? {})) (groups[x] ??= []).push(n);
-  const rows = Object.entries(groups).map(([x, ns]) => `<tr><td>${esc(ns.join(', '))}</td><td>${a(x)}</td></tr>`).join('');
+  const rows = Object.entries(groups).map(([x, ns]) => `<tr><td style="width:1%"><div class="gthumbs">${thumbs(ns)}</div></td><td>${esc(ns.join(', '))}</td><td>${a(x)}</td></tr>`).join('');
   const tiers = (r.giftRules?.tiers ?? []).map((t) => `<tr><td>${t.minCoins} コイン以上</td><td>${t.actions.map(a).join(t.pick === 'all' ? ' ＋ ' : ' / ')}${t.pick !== 'all' && t.actions.length > 1 ? ' <span class="muted">のどれか</span>' : ''}</td></tr>`).join('');
   const other = [['フォロー', r.follow], ['シェア', r.share], ['サブスク', r.subscribe]].filter(([, x]) => x).map(([k, x]) => `<tr><td>${k}</td><td>${a(x)}</td></tr>`).join('')
     + (r.likes?.every && r.likes.action ? `<tr><td>いいね ${r.likes.every} ごと</td><td>${a(r.likes.action)}</td></tr>` : '');

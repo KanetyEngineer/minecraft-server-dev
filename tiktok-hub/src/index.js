@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { TikTokManager } from './core/tiktok.js';
 import { send, json, readBody, readJson, cleanTikTok } from './core/util.js';
 import { KNOWN_GIFTS, pickRules } from './core/gifts.js';
+import { createGiftCatalog } from './core/giftcatalog.js';
 import * as defense from './games/defense/index.js';
 import * as clash from './games/clash/index.js';
 import * as anime from './games/anime/index.js';
@@ -257,6 +258,7 @@ function streamerLabel(s) {
 tiktok = new TikTokManager({
   signApiKey: () => hub.signApiKey,
   event: (sid, type, d) => {
+    if (type === 'gift') giftCatalog.learn(d);
     const s = hub.streamers.find((x) => x.id === sid);
     if (!s || !assigned(s)) return;
     games.get(s.game).onEvent(s.field, type, d);
@@ -286,6 +288,7 @@ function cleanStreamer(b, existing) {
 }
 
 // ------------------------------------------------------------------ gift rules (list + per-streamer)
+const giftCatalog = createGiftCatalog({ stateDir: STATE_DIR, log: (k, t) => log(k, t) });
 const hasRules = (g) => typeof g?.actions === 'function';
 
 // what each gift / follow / share / like does for one streamer (or the game's settings when nobody / no own rules)
@@ -303,6 +306,9 @@ function giftListJson(gameId, s, fieldWanted = 0) {
     defaults: base,
     actions: Object.fromEntries(Object.entries(g.actions()).map(([k, a]) => [k, a.label ?? k])),
     known: KNOWN_GIFTS,
+    // every gift name in the rules -> TikTok's gift (picture id, coins), when it is in the catalog
+    gifts: Object.fromEntries([...new Set([...Object.keys(base.giftRules?.byName ?? {}), ...Object.keys(own?.giftRules?.byName ?? {})])]
+      .map((n) => [n, giftCatalog.find(n)]).filter(([, c]) => c).map(([n, c]) => [n, { id: c.id, name: c.name, coins: c.coins }])),
     overlay: field ? giftOverlayUrl(gameId, field) : '',
   };
 }
@@ -427,6 +433,8 @@ async function hubRoute(req, res, url) {
   if (req.method === 'GET' && p === '/gift-list') {
     return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(path.join(ROOT, 'public', 'gift-list.html')));
   }
+  if (req.method === 'GET' && p.startsWith('/gift-img/')) return giftCatalog.serveImage(res, p.slice(10).replace(/\.\w+$/, ''));
+  if (req.method === 'GET' && p === '/api/gift-catalog') return json(res, { gifts: giftCatalog.list() });
   if (req.method === 'GET' && p === '/api/gift-list') {
     const sid = url.searchParams.get('streamer');
     const s = sid ? hub.streamers.find((x) => x.id === sid) : null;
@@ -560,6 +568,7 @@ function bindLegacy() {
 
 // ------------------------------------------------------------------ start
 for (const g of games.values()) g.start();
+giftCatalog.start();
 await pushMirrors();
 syncConnections();
 bindLegacy();
