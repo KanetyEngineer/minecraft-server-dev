@@ -8,7 +8,7 @@ import { parseLitematic } from './building/litematic.js';
 import { Builder } from './building/builder.js';
 import { materialList } from './building/blocks.js';
 import { Supplier } from './building/acquire.js';
-import { attackEntity, ensurePickaxe, pickUpItems, ascendToSurface } from './skills/common.js';
+import { attackEntity, ensurePickaxe, pickUpItems, ascendToSurface, equipCheapestTool } from './skills/common.js';
 import { shelterForNight } from './skills/shelter.js';
 import { gatherFood } from './skills/gather.js';
 import { FOODS as FOOD } from './util/items.js';
@@ -34,7 +34,7 @@ export class Agent {
   constructor({ bot, cfg }) {
     this.bot = bot;
     this.cfg = cfg;
-    this.ctx = { bot, cfg, log, state: {}, signal: null, notify: (msg) => this.sayOnce(msg) };
+    this.ctx = { bot, cfg, log, state: {}, signal: null, notify: (msg) => this.sayOnce(msg), onPathStall: () => this.pathStalled() };
     this.job = null; // { file, origin }
     this.builder = null;
     this.status = '待機中';
@@ -297,6 +297,64 @@ export class Agent {
     }, 5000);
   }
 
+  // 見張り: 埋まった（目や足の高さのマスが、詰まったブロックになった。落ちてきた砂利・自分が置いたブロックなど）ら、
+  // 作業を止めて掘り出す（そのままだと窒息する）
+  watchBurial() {
+    const { bot } = this;
+    this.burialTimer = setInterval(() => {
+      if (!bot.entity || this.buried || bot.isSleeping || bot.isAlive === false) return;
+      const cells = this.bodyBlocks();
+      if (cells.length === 0) return;
+      this.buried = cells;
+      log.warn(`ブロックに埋まった（${cells.map((b) => b.name).join(', ')}）。掘って出る`);
+      this.abort('ブロックに埋まった');
+    }, 500);
+  }
+
+  // 体の中（足と目の高さ）にある、詰まったブロック
+  bodyBlocks() {
+    const { bot } = this;
+    const pos = bot.entity.position;
+    const out = [];
+    for (const dy of [0.1, 1.62]) {
+      const b = bot.blockAt(new Vec3(pos.x, pos.y + dy, pos.z).floored());
+      if (!b || b.boundingBox !== 'block' || b.name === 'bedrock') continue;
+      const full = (b.shapes ?? []).some((s) => s[0] <= 0 && s[1] <= 0 && s[2] <= 0 && s[3] >= 1 && s[4] >= 1 && s[5] >= 1);
+      if (full) out.push(b);
+    }
+    return out;
+  }
+
+  async digOut() {
+    const { bot } = this;
+    try {
+      for (let i = 0; i < 6; i++) {
+        const cells = this.bodyBlocks();
+        if (cells.length === 0) break;
+        for (const b of cells) {
+          await equipCheapestTool(bot, b).catch(() => {});
+          await bot.dig(b, true).catch((e) => log.warn(`掘り出せなかった: ${e.message}`));
+        }
+        await sleep(300);
+      }
+    } finally {
+      this.buried = null;
+    }
+  }
+
+  // 経路探索が中で固まった（経路をひとつも探さないまま時間切れ）。2 回続いたら接続し直して、経路探索を作り直す
+  pathStalled() {
+    const now = Date.now();
+    this.stalls = (this.stalls ?? []).filter((t) => now - t < 5 * 60_000);
+    this.stalls.push(now);
+    log.warn(`経路探索が固まっている（${this.stalls.length} 回目）`);
+    if (this.stalls.length >= 2) {
+      this.stalls = [];
+      log.warn('経路探索が固まったままなので、接続し直す');
+      try { this.bot.quit('経路探索が固まったので接続し直す'); } catch {}
+    }
+  }
+
   // ---------- メインループ ----------
 
   stop() {
@@ -305,6 +363,7 @@ export class Agent {
     clearInterval(this.controlTimer);
     clearInterval(this.stuckTimer);
     clearInterval(this.physicsTimer);
+    clearInterval(this.burialTimer);
     this.abort('終了');
   }
 
@@ -315,6 +374,7 @@ export class Agent {
     this.watchDeath();
     this.watchStuck();
     this.watchPhysics();
+    this.watchBurial();
     this.job = this.loadJob();
     if (!this.job && cfg.buildFile && cfg.buildOrigin) {
       if (cfg.buildOrigin === 'here') for (let i = 0; i < 40 && !bot.entity.onGround; i++) await sleep(250); // 着地を待つ
@@ -326,6 +386,7 @@ export class Agent {
     else log.info(`指示待ち: チャットで「!build 設計図名」と送ってください（受け付ける人: ${cfg.owners.join(', ')}）`);
     let fails = 0;
     while (!this.stopped) {
+      if (this.buried) { await this.settlePending(); await this.digOut(); continue; }
       if (this.threat) { await this.handleThreat(); continue; }
       if (this.deathAt) { await this.recoverDrops(); continue; }
       if (this.job && this.needsHunting()) {
@@ -509,6 +570,13 @@ export class Agent {
       if (got) log.info(`チェストの ${got} を持った`);
     }
     const short = this.builder.shortage();
+    // 高い建物は、登るための仮の足場（土など）をたくさん使う。チェストに足りなければ、目安を伝える
+    const want = this.builder.scaffoldEstimate();
+    const have = this.builder.spareScaffold() + ['dirt', 'coarse_dirt', 'netherrack', 'cobblestone', 'cobbled_deepslate']
+      .filter((n) => !this.builder.needed.has(n)).reduce((a, n) => a + supplier.chestCount(n), 0);
+    if (want > 0 && have < want) {
+      this.sayOnce(`足場用の土（丸石でも可）を ${want} 個ほどチェストに入れておくと、止まらずに建てられます（いま ${have} 個）`);
+    }
     if (supplier.chests.size === 0 && supplier.unreadable === 0) {
       // まだ現場から遠くてチェストが見えていないか、チェストが無い。足りないとは言わない
       this.say('建築現場の近くに素材のチェストが見つかりません。手持ちの分から建て始め、チェストが見つかったら使います');

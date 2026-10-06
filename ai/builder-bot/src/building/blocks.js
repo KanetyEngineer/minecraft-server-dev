@@ -105,11 +105,12 @@ const OPP = { north: 'south', south: 'north', west: 'east', east: 'west', up: 'd
 const YAW = { north: 0, west: Math.PI / 2, south: Math.PI, east: -Math.PI / 2 };
 
 // facing が「プレイヤーが見ている向き」になるもの（それ以外の向き付きブロックは、プレイヤーの方を向く＝見ている向きの逆）
-const FACING_IS_LOOK = /(_stairs|_door|_bed|_fence_gate|^observer|^repeater|^comparator|^lectern$|^end_rod$|^lightning_rod$|_glazed_terracotta$)/;
+const FACING_IS_LOOK = /(_stairs|_door|_bed|_fence_gate|^observer|^repeater|^comparator|^lectern$|_glazed_terracotta$)/;
 
 export { DIRS, OPP };
 
-// 置き方の希望: { look: 'north' など（水平の向き）, pitch: 上下, face: 優先するクリック面（参照ブロックから見た向き）, half }
+// 置き方の希望: { look: 'north' など（見る水平の向き）, vertical: 'up' / 'down'（見る上下の向き）, yaw: 16 方向の向き,
+//                faces: クリックしてよい面（参照ブロックから見た向き）, half: 横の面の上半分・下半分 }
 export function placementHint(b) {
   const p = b.props ?? {};
   const hint = {};
@@ -121,13 +122,15 @@ export function placementHint(b) {
     // 上下の面をクリックしたときは見ている向きの逆が facing
     hint.look = OPP[p.facing];
     hint.faces = p.half === 'top' ? ['down'] : ['up'];
-  } else if (p.facing && /(wall_torch|_wall_sign|_wall_banner|_wall_head|_wall_skull|_wall_fan|ladder|^tripwire_hook$|_button$|^lever$)/.test(b.name)) {
+  } else if (p.facing && /(wall_torch|_wall_sign|_wall_banner|_wall_head|_wall_skull|_wall_fan|ladder|^tripwire_hook$|_button$|^lever$|^end_rod$|^lightning_rod$)/.test(b.name)) {
+    // end_rod・lightning_rod もクリックした面の向きになる
     // 壁に付けるもの: 付けたい壁のブロックの、facing の向きの面をクリックする
     hint.faces = [p.facing];
     if (p.face === 'floor') hint.faces = ['up'];
     if (p.face === 'ceiling') hint.faces = ['down'];
   } else if (p.facing && ['up', 'down'].includes(p.facing)) {
-    hint.pitch = p.facing === 'up' ? (FACING_IS_LOOK.test(b.name) ? -1.4 : 1.4) : (FACING_IS_LOOK.test(b.name) ? 1.4 : -1.4);
+    // 上下を向くもの（ピストン・観察者など）は見ている上下の向きで決まる。観察者は見ている向き、ほかはその逆
+    hint.vertical = FACING_IS_LOOK.test(b.name) ? p.facing : OPP[p.facing];
   } else if (p.facing) {
     hint.look = FACING_IS_LOOK.test(b.name) ? p.facing : OPP[p.facing];
   }

@@ -131,6 +131,7 @@ export class Supplier {
           new Promise((_, rej) => {
             timer = setTimeout(() => {
               try { bot.pathfinder.setGoal(null); } catch {}
+              if (seen.n === 0) this.ctx.onPathStall?.();
               rej(new Error(`チェストに近づけない（${from} から、経路 ${seen.n} 回: ${seen.status} 長さ ${seen.len}、やり直し: ${seen.resets.join('/') || 'なし'}）`));
             }, 30_000);
           }),

@@ -474,11 +474,23 @@ export async function branchMine(ctx, ores, n, y, { length = 60 } = {}) {
 
 export async function pickUpItems(ctx, radius = 8) {
   const { bot } = ctx;
+  const tried = new Set();
   for (let i = 0; i < 10; i++) {
     abortable(ctx);
-    const item = bot.nearestEntity((e) => e.name === 'item' && e.position.distanceTo(bot.entity.position) < radius);
+    const item = bot.nearestEntity((e) => e.name === 'item' && !tried.has(e.id) && e.position.distanceTo(bot.entity.position) < radius);
     if (!item) return;
-    await bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.8)).catch(() => {});
+    tried.add(item.id);
+    // 行けない所に落ちた物（壁の中の隙間など）で止まり続けないよう、1 個 10 秒で打ち切る
+    let timer;
+    try {
+      await Promise.race([
+        bot.pathfinder.goto(new goals.GoalNear(item.position.x, item.position.y, item.position.z, 0.8)).catch(() => {}),
+        new Promise((resolve) => { timer = setTimeout(resolve, 10_000); }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      try { bot.pathfinder.setGoal(null); } catch {}
+    }
     await sleep(250);
   }
 }
