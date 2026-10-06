@@ -194,6 +194,9 @@ export class Builder {
       const b = mv._builder;
       if (!b) return 0;
       if (b.protectedKeys.has(key(block.position))) return Infinity;
+      // 建物の下と周りの地面は、ほかに道が無いときだけ掘る（中庭から城壁の下をくぐって外へ出ようとして、
+      // 中庭や壁ぎわの地面を穴だらけにしていた）。自分で置いた足場は気にせず掘ってよい
+      if (block.position.y < b.origin.y && b.ctx.isUnderBuild?.(block.position) && !b.scaffolds.has(key(block.position))) return 40;
       const t = b.targets.get(key(block.position));
       if (t && matches(t, block, { checkProps: false })) {
         // 道具が無いと何も落とさないブロック（ツルハシの無いときの石レンガなど）も壊さない
@@ -453,8 +456,10 @@ export class Builder {
     }
     if (this.stocked) {
       await this.topUp(stacks).catch((e) => { if (e.name === 'AbortError') throw e; });
-      // 2 段目から上は、登ったり下に支えを作ったりする足場のブロックを持っておく（建築の素材は足場に使わないので）
-      if (this.layer >= 1 && this.spareScaffold() < 16) {
+      // 2 段目から上は、登ったり下に支えを作ったりする足場のブロックを持っておく（建築の素材は足場に使わないので）。
+      // 足場ブロック（scaffolding）がチェストにあるなら、手持ちの土などが足りていても足場ブロックを持っておく
+      const scafLow = !this.needed.has('scaffolding') && count(bot, 'scaffolding') < 16 && this.supplier.chestCount('scaffolding') > 0;
+      if (this.layer >= 1 && (this.spareScaffold() < 16 || scafLow)) {
         await this.supplier.ensureScaffold(32, this.needed).catch((e) => { if (e.name === 'AbortError') throw e; });
       }
     }
@@ -1481,8 +1486,10 @@ export class Builder {
     if (!item) throw new SkillError(`${itemName} を持っていない`);
     // 体が置くマスにはみ出している、または立ち位置のずれで見えないなら、立っているマスの真ん中へ寄る
     const eye = () => bot.entity.position.offset(0, EYE_HEIGHT, 0);
+    const climbing = () => /(ladder|vine)/.test(bot.blockAt(bot.entity.position.floored())?.name ?? '');
     let c = legitPlacement(bot, eye(), orient, candsFor());
-    if (!c || this.overlapsBody(p)) {
+    // はしごにつかまっているときは寄らない（前へ進むと、はしごを登ってしまう）
+    if ((!c || this.overlapsBody(p)) && !climbing()) {
       await this.centerOnBlock();
       c = legitPlacement(bot, eye(), orient, candsFor());
     }
@@ -1491,12 +1498,23 @@ export class Builder {
       throw new SkillError(`ここからは見える面が無い（置けない。いま ${pos.x.toFixed(2)},${pos.y.toFixed(2)},${pos.z.toFixed(2)}、`
         + `面の候補 ${candsFor().map((x) => `${x.ref.name}の${x.face}`).join('/') || 'なし'}）`);
     }
-    if (this.overlapsBody(p)) throw new SkillError('置くマスに自分の体がかかっている');
+    // はしごにつかまったまま登りすぎて、頭が置くマスにかかっているなら、手を離して少しずり落ちてから置く
+    // （はしごの上では止まっていられず、登りすぎた高さのまま置こうとして「体がかかっている」で何度も断られた）
+    if (this.overlapsBody(p) && climbing()) {
+      bot.clearControlStates();
+      for (let i = 0; i < 30 && this.overlapsBody(p) && climbing(); i++) await bot.waitForTicks(1);
+      bot.setControlState('sneak', true);
+      c = legitPlacement(bot, eye(), orient, candsFor());
+      if (!c) { bot.setControlState('sneak', false); throw new SkillError('はしごからずり落ちたら、置く面が見えなくなった'); }
+    }
+    if (this.overlapsBody(p)) { bot.setControlState('sneak', false); throw new SkillError('置くマスに自分の体がかかっている'); }
+    // 足場ブロックは、しゃがんで置くとクリックした面の側に付く（しゃがまないと、足場ブロックの上をクリックしたときに横へ伸びる）。
+    // はしごの上では、しゃがんで止まる（しゃがまないと、置くまでのあいだにずり落ちる）
+    const forceSneak = itemName === 'scaffolding' || climbing();
+    if (forceSneak) bot.setControlState('sneak', true);
     await bot.equip(item, 'hand');
     this.selfPlacing = true;
-    // 足場ブロックは、しゃがんで置くとクリックした面の側に付く（しゃがまないと、足場ブロックの上をクリックしたときに横へ伸びる）
-    const forceSneak = itemName === 'scaffolding';
-    if (forceSneak) { bot.setControlState('sneak', true); await bot.waitForTicks(1).catch(() => {}); }
+    if (forceSneak) await bot.waitForTicks(1).catch(() => {});
     try {
       await this.withSneak(async () => {
         // クリックする点を見る。向きをサーバーに送り終わってから置く（送る前に置くと、向きが前のままになった）
@@ -1511,10 +1529,37 @@ export class Builder {
     await sleep(60);
   }
 
+  // 建物の周りに残っている足場ブロック（scaffolding）を、片付ける足場に加える。
+  // 足場ブロックは、サーバーがしゃがんでいないと見なすと、クリックした所ではなく横や上へずらして置かれるので、
+  // 置いた場所を覚え損ねて、お城の城壁の上に 2 個残っていた
+  findStrayScaffolding() {
+    const { bot } = this;
+    const sb = bot.registry.blocksByName.scaffolding;
+    if (!sb) return;
+    const o = this.origin;
+    const m = 6;
+    let found = 0;
+    for (let x = o.x - m; x < o.x + this.size.x + m; x++) {
+      for (let z = o.z - m; z < o.z + this.size.z + m; z++) {
+        for (let y = o.y - m; y < o.y + this.size.y + m; y++) {
+          const p = new Vec3(x, y, z);
+          const st = bot.world.getBlockStateId(p);
+          if (st === undefined || st < sb.minStateId || st > sb.maxStateId) continue;
+          const k = key(p);
+          if (this.targets.get(k)?.name === 'scaffolding' || this.scaffolds.has(k)) continue;
+          this.addScaffold(k);
+          found++;
+        }
+      }
+    }
+    if (found) this.log.info(`覚えていなかった足場ブロック ${found} 個も片付ける`);
+  }
+
   // 仮の足場を片付ける。柱ごとにまとめて高い柱から、柱の上に立てたら足元を掘りながら降りる
   // （上から 1 個ずつ掘っていたら、高い所に取り残されて、降りるために建てた壁を壊していた）
   async cleanupScaffolds() {
     const { bot } = this;
+    this.findStrayScaffolding();
     for (let pass = 0; pass < 3; pass++) {
       const list = [...this.scaffolds].map((k) => { const [x, y, z] = k.split(',').map(Number); return new Vec3(x, y, z); })
         .filter((p) => { const t = this.targets.get(key(p)); const b = bot.blockAt(p); return b && b.boundingBox === 'block' && !(t && matches(t, b, { checkProps: false })); });

@@ -306,6 +306,11 @@ export class Supplier {
   async ensureScaffold(n, needed = new Set()) {
     const { bot } = this;
     const have = () => SCAFFOLD_BLOCKS.reduce((s, x) => s + (needed.has(x) ? 0 : count(bot, x)), 0);
+    // チェストに足場ブロック（scaffolding）があれば、手持ちに土などがあっても先にそれを持っていく
+    // （移動中に掘った土が手持ちにあると足場ブロックを取りに行かず、お城では足場のほとんどを土で積んでいた）
+    if (!needed.has('scaffolding') && count(bot, 'scaffolding') < n && this.chestCount('scaffolding') > 0) {
+      await this.takeFromChests('scaffolding', Math.max(n, 64) - count(bot, 'scaffolding'));
+    }
     if (have() >= n) return true;
     const spare = SCAFFOLD_BLOCKS.filter((x) => !needed.has(x));
     await this.takeAnyFromChests(spare, n - have());

@@ -62,3 +62,17 @@ test('素材を用意してもらうモードでは、建築に使う分の素�
   s.reserve = (n) => (n === 'oak_planks' ? 2 : 0); // 2 枚余っている
   assert.ok(Number.isFinite(s.estimate('stick')));
 });
+
+test('足場は、手持ちに土があってもチェストの足場ブロックを先に持っていく', async () => {
+  const items = [{ name: 'dirt', count: 80 }];
+  const s = fakeSupplier(items);
+  s.mode = 'stocked';
+  s.chests.set('0,0,0', { pos: null, items: new Map([['scaffolding', 200]]), free: 26, at: Date.now() });
+  const took = [];
+  s.takeFromChests = async (name, n) => { took.push([name, n]); items.push({ name, count: n }); };
+  assert.equal(await s.ensureScaffold(16), true);
+  assert.deepEqual(took, [['scaffolding', 64]]);
+  // もう足場ブロックを持っていれば取りに行かない
+  assert.equal(await s.ensureScaffold(16), true);
+  assert.equal(took.length, 1);
+});
