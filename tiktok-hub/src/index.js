@@ -1,4 +1,4 @@
-// SharyTech TikTok Hub: every game's TikTok LIVE link in one app.
+// SharyTech Hub: every game's TikTok LIVE link in one app.
 //   TikTok LIVE (one connection per streamer) ──> hub ──> the streamer's game + field ──(RCON)──> that game's server
 // One panel at http://127.0.0.1:8800/ (game tabs, streamers page, status). Each game keeps its own panel, API and
 // OBS overlay under /g/<game>/ , and the hub also answers on each game's old port (8787-8790) so OBS sources and
@@ -410,7 +410,7 @@ function statusJson() {
 const PANEL_INJECT_HEAD = '<script>window.OVL_BASE = location.origin + location.pathname.replace(/[^/]*$/, \'\');</script>';
 function panelBanner() {
   return `<div id="hub-banner" style="background:#0f172a;color:#cbd5e1;border-bottom:1px solid #334155;padding:6px 18px;font:13px 'Yu Gothic UI',Meiryo,sans-serif">` +
-    `SharyTech TikTok Hub の一部です。配信者の割り当て・ほかのゲームは <a style="color:#7dd3fc" href="http://127.0.0.1:${hub.hubPort}/" target="_top">ハブのパネル（http://127.0.0.1:${hub.hubPort}/）</a></div>` +
+    `SharyTech Hub の一部です。配信者の割り当て・ほかのゲームは <a style="color:#7dd3fc" href="http://127.0.0.1:${hub.hubPort}/" target="_top">ハブのパネル（http://127.0.0.1:${hub.hubPort}/）</a></div>` +
     '<script>if (window.top !== window) document.getElementById(\'hub-banner\').remove();</script>';
 }
 

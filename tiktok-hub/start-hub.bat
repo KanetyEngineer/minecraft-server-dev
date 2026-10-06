@@ -1,8 +1,8 @@
 @echo off
-rem SharyTech TikTok Hub (panel http://127.0.0.1:8800/)
+rem SharyTech Hub (panel http://127.0.0.1:8800/)
 chcp 65001 >nul
 cd /d "%~dp0"
-title SharyTech TikTok Hub
+title SharyTech Hub
 if not exist node_modules (
   echo 初回のみ必要なライブラリをインストールします...
   call npm install

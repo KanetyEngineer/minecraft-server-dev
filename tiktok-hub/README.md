@@ -1,4 +1,4 @@
-# SharyTech TikTok Hub（全ゲームの TikTok LIVE 連携アプリ）
+# SharyTech Hub（全ゲームの TikTok LIVE 連携アプリ）
 
 TikTok LIVE のギフト・フォロー・シェア・いいね・コメントを、SharyTech のマイクラゲームの演出に変えるアプリです。
 前はゲームごとに別のアプリ（ディフェンス 8788 / クラロワ 8789 / アニメ埋め立て 8790 / ハロウィン 8787）でしたが、これ1つにまとめました。

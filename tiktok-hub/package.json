@@ -1,7 +1,7 @@
 {
-  "name": "sharytech-tiktok-hub",
-  "version": "1.2.0",
-  "description": "SharyTech TikTok Hub: TikTok LIVE gifts -> every SharyTech Minecraft game (RCON), one app",
+  "name": "sharytech-hub",
+  "version": "1.2.1",
+  "description": "SharyTech Hub: TikTok LIVE gifts -> every SharyTech Minecraft game (RCON), one app",
   "main": "src/index.js",
   "type": "module",
   "private": true,
