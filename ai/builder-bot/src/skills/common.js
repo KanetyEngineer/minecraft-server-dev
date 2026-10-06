@@ -915,7 +915,7 @@ export async function pillarUp(ctx, height = 2) {
 // 置いたらすぐしゃがみを離して歩き続ける。ずっとしゃがんで橋をかけるより速い。
 // （プレイヤーは体の中心が縁から 0.3 マスはみ出すまで落ちないので、縁の 0.45 マス先まではしゃがまずに歩ける）
 // dx, dz は -1/0/1（どちらか一方だけ）。置いた数を返す
-export async function halfShiftBridge(ctx, { dx, dz, length = 8 }) {
+export async function halfShiftBridge(ctx, { dx, dz, length = 8, pick = null }) {
   const { bot } = ctx;
   let placed = 0;
   // 背中を進む向けに: mineflayer の向き yaw の正面は (-sin, -cos) なので、正面を (-dx, -dz) にする
@@ -939,7 +939,8 @@ export async function halfShiftBridge(ctx, { dx, dz, length = 8 }) {
       if (body.some((b) => !b || b.boundingBox !== 'empty')) break; // 進む先が壁
       const ahead = bot.blockAt(target.offset(0, -1, 0));
       if (!ahead || ahead.boundingBox !== 'block') {
-        const item = cheapBlock(bot);
+        // pick(置くマス): 呼び出し側が足場にするアイテムを選ぶ（足場ブロックを使えるかはマスで決まる）
+        const item = (pick ? pick(target.offset(0, -1, 0)) : null) ?? cheapBlock(bot);
         if (!item) break;
         if (bot.heldItem?.name !== item.name) await bot.equip(item, 'hand');
         // 1. しゃがまずに後ろへ歩き、縁ぎりぎり（中心から 0.45）まで来たらしゃがむ

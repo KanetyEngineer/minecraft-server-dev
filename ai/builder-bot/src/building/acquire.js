@@ -49,7 +49,8 @@ const huntable = (name) => name === 'white_wool' || (!name.endsWith('_wool') && 
 const UNIT_COST = { have: 0, chest: 0.1, natural: 1, naturalFar: 4, ore: 3, mob: 3 };
 
 // 足場にしてよい安いブロック（チェストから借りるときに選ぶ順）
-export const SCAFFOLD_BLOCKS = ['dirt', 'coarse_dirt', 'netherrack', 'cobblestone', 'cobbled_deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'stone'];
+// 足場ブロック（scaffolding）があれば最初に使う（下を壊すと上までまとめて崩れるので、片付けが速い）
+export const SCAFFOLD_BLOCKS = ['scaffolding', 'dirt', 'coarse_dirt', 'netherrack', 'cobblestone', 'cobbled_deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'stone'];
 // 中身を読める入れ物（設置したシュルカーボックスも開ける）
 const CONTAINER_RE = /^(chest|trapped_chest|barrel|(\w+_)?shulker_box)$/;
 

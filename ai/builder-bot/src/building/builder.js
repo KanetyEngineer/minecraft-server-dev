@@ -870,7 +870,7 @@ export class Builder {
         await this.dig(b);
       }
       if (this.spareScaffold() < 1 && this.stocked) await this.supplier.ensureScaffold(8, this.needed).catch(() => {});
-      if ((await pillarUp(this.ctx, 1)) === 0) return false;
+      if ((await this.pillarUp(1)) === 0) return false;
     }
     return feet().y >= targetY - 1;
   }
@@ -943,7 +943,7 @@ export class Builder {
         // 経路が見つからないと、着いていなくても goto が終わることがあるので確かめる（違う所に柱を積んでいた）
         if (!bot.entity.position.floored().equals(base)) throw new Error(`柱の場所へ行けない（いま ${bot.entity.position.floored()}）`);
         await this.centerOnBlock();
-        await pillarUp(this.ctx, h);
+        await this.pillarUp(h);
         await bot.waitForTicks(4);
         if (ok(bot.entity.position.floored())) return true;
         this.log.warn(`柱で登りきれなかった（いま ${bot.entity.position.floored()}）`);
@@ -984,7 +984,7 @@ export class Builder {
     this.log.info(`(${key(p)}) が見える所まで、足場を ${k} マス横に伸ばす`);
     try {
       await this.centerOnBlock();
-      await halfShiftBridge(this.ctx, { dx, dz, length: k });
+      await halfShiftBridge(this.ctx, { dx, dz, length: k, pick: (q) => this.pickScaffold(q) });
     } catch (e) {
       if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
       this.log.warn(`足場を伸ばせなかった: ${e.message}`);
@@ -1107,7 +1107,7 @@ export class Builder {
         }
         if (!bot.entity.position.floored().equals(base)) throw new Error(`柱の場所へ行けない（いま ${bot.entity.position.floored()}）`);
         await this.centerOnBlock();
-        await pillarUp(this.ctx, h);
+        await this.pillarUp(h);
         await bot.waitForTicks(4);
         if (bot.entity.position.floored().y >= level) return true;
         this.log.warn(`柱で登りきれなかった（いま ${bot.entity.position.floored()}）`);
@@ -1156,7 +1156,7 @@ export class Builder {
     this.log.info(`(${key(p)}) の下に支えが無いので、仮の足場を ${column.length} 段積む`);
     for (const c of column.reverse()) {
       abortable(this.ctx);
-      const item = this.pickScaffold() ?? (await this.scaffoldItem());
+      const item = this.pickScaffold(c) ?? (await this.scaffoldItem());
       if (!item) throw new SkillError('足場にするブロックが無い');
       await this.placeAt(c, { name: item.name, props: {} }, item.name);
       this.addScaffold(key(c));
@@ -1177,14 +1177,14 @@ export class Builder {
       if (!nb || nb.boundingBox !== 'empty' || /(water|lava)/.test(nb.name)) continue;
       const t = this.targets.get(key(n));
       if (t && !this.done(t)) continue; // まだ置いていない設計図のマスは使わない
-      const item = this.pickScaffold();
+      const item = this.pickScaffold(n);
       if (!item) break;
       if (placeCandidates(bot, n, { name: item.name, props: {} }).length === 0) continue;
       opts.push({ n, score: (this.inBox(n) ? 5 : 0) + (t ? 10 : 0) });
     }
     opts.sort((a, b) => a.score - b.score);
     for (const { n } of opts.slice(0, 2)) {
-      const item = this.pickScaffold() ?? (await this.scaffoldItem());
+      const item = this.pickScaffold(n) ?? (await this.scaffoldItem());
       if (!item) return false;
       try {
         this.log.info(`(${key(p)}) を付けるため、横の (${key(n)}) に仮の足場を置く`);
@@ -1224,15 +1224,64 @@ export class Builder {
   }
 
   // 足場にする手持ちのブロック。素材を用意してもらったときは、建築に使う物を避ける
-  pickScaffold() {
-    if (!this.stocked) return cheapBlock(this.bot);
+  // at: 足場を置くマス。足場ブロック（scaffolding）は、真下に支えがあるか、横の足場ブロックが柱から 4 マス以内のときだけ使う
+  // （支えの無い所に置くと、足場ブロックは落ちてしまう）
+  pickScaffold(at = null) {
     const items = this.bot.inventory.items();
+    const okScaf = !at || this.canUseScaffolding(at);
     for (const n of SCAFFOLD_BLOCKS) {
       if (this.needed.has(n)) continue;
+      if (n === 'scaffolding' && !okScaf) continue;
       const it = items.find((i) => i.name === n);
       if (it) return it;
     }
-    return null;
+    return this.stocked ? null : cheapBlock(this.bot);
+  }
+
+  canUseScaffolding(q) {
+    const { bot } = this;
+    const below = bot.blockAt(q.offset(0, -1, 0));
+    if (below && below.boundingBox === 'block') return true;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => {
+      const n = bot.blockAt(q.offset(dx, 0, dz));
+      return n?.name === 'scaffolding' && Number(n.getProperties?.().distance ?? 7) <= 4;
+    });
+  }
+
+  // 真下に足場を置きながら跳んで h 段上がる（柱上り）。足場ブロックのときは、しゃがんで置く
+  // （しゃがまずに足場ブロックの上面をクリックすると、上ではなく横へ伸びてしまう）
+  async pillarUp(h) {
+    const { bot } = this;
+    let placed = 0;
+    for (let i = 0; i < h; i++) {
+      abortable(this.ctx);
+      const feet = bot.entity.position.floored();
+      const item = this.pickScaffold(feet) ?? (await this.scaffoldItem());
+      if (!item) break;
+      const below = bot.blockAt(feet.offset(0, -1, 0));
+      if (!below || below.boundingBox !== 'block') break;
+      const head = bot.blockAt(feet.offset(0, 2, 0));
+      if (head && head.boundingBox === 'block') break; // 頭の上がふさがっている
+      await bot.equip(item, 'hand');
+      const sneak = item.name === 'scaffolding';
+      if (sneak) { bot.setControlState('sneak', true); await bot.waitForTicks(1).catch(() => {}); }
+      await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+      bot.setControlState('jump', true);
+      try {
+        await bot.waitForTicks(6);
+        this.selfPlacing = false;
+        await bot.placeBlock(bot.blockAt(feet.offset(0, -1, 0)), new Vec3(0, 1, 0));
+        placed++;
+      } catch {
+        // 置けなかったら打ち切り
+      } finally {
+        bot.setControlState('jump', false);
+        if (sneak) bot.setControlState('sneak', false);
+      }
+      await bot.waitForTicks(6).catch(() => {});
+      if (bot.entity.position.floored().y <= feet.y) break;
+    }
+    return placed;
   }
 
   async scaffoldItem() {
@@ -1256,10 +1305,61 @@ export class Builder {
     for (const n of names) await this.supplier.depositToChests(n, count(bot, n));
   }
 
+  // 設計図の 1 マスを置く。置けなかったとき・向きが違ったときは、その場で（次のマスへ移る前に）置き直す
   async placeTarget(t) {
     const { bot } = this;
     const it = itemFor(bot.registry, t);
     if (!it || count(bot, it.item) <= 0) return;
+    const p = t.pos;
+    const aborted = (e) => e.name === 'AbortError' || this.ctx.signal?.aborted;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      abortable(this.ctx);
+      if (count(bot, it.item) <= 0) break;
+      try {
+        await this.placeOnce(t, it);
+      } catch (e) {
+        if (aborted(e) || e.deferred) throw e;
+        lastErr = e;
+        // サーバーの返事が遅れただけで、実は置けていることがある
+        await bot.waitForTicks(4).catch(() => {});
+        if (!matches(t, bot.blockAt(p), { checkProps: false })) {
+          if (attempt < 2) this.log.info(`(${key(p)}) を置けなかったので、その場で置き直す（${e.message}）`);
+          continue;
+        }
+      }
+      await bot.waitForTicks(2).catch(() => {});
+      const now = bot.blockAt(p);
+      if (matches(t, now)) { this.placed++; return; }
+      if (matches(t, now, { checkProps: false })) {
+        // 種類は合っているが向きが違う: 掘って、もう一度置く（最後まで合わなければそのままにする）。
+        // 掘ると何も落とさないもの（ガラスなど）は掘らない
+        if (attempt < 2 && !FRAGILE.test(t.name)) {
+          this.log.info(`(${key(p)}) の ${t.name} の向きが違うので、その場で置き直す`);
+          try {
+            await this.reach(p, { dig: true });
+            await equipCheapestTool(bot, now).catch(() => {});
+            await this.dig(bot.blockAt(p));
+            await bot.waitForTicks(4).catch(() => {});
+            await pickUpItems(this.ctx, 4).catch(() => {});
+            continue;
+          } catch (e) {
+            if (aborted(e)) throw e;
+          }
+        }
+        this.placed++;
+        this.orientationOff++;
+        return;
+      }
+      // 置いたはずなのに無い（サーバーに断られた・落ちた）: もう一度
+      if (attempt < 2) this.log.info(`(${key(p)}) に置いたはずの ${t.name} が無いので、その場で置き直す`);
+    }
+    if (lastErr && !matches(t, bot.blockAt(p), { checkProps: false })) throw lastErr;
+  }
+
+  // 1 回置いてみる（違うブロックをどける・支えを作る・置く・2 枚重ね）
+  async placeOnce(t, it) {
+    const { bot } = this;
     const p = t.pos;
     // 違うブロックがあればどける（仮の足場・地形・間違えて置いた物）
     const cur = bot.blockAt(p);
@@ -1291,6 +1391,7 @@ export class Builder {
       // 落ち葉など、上書きできると思っていたものに断られたら、掘ってから置き直す
       const still = /the block is still (\w+)/.exec(e.message)?.[1];
       if (!still || isAirName(still)) throw e;
+      await this.reach(p, { dig: true });
       const b = bot.blockAt(p);
       await equipCheapestTool(bot, b).catch(() => {});
       await this.dig(b);
@@ -1300,11 +1401,6 @@ export class Builder {
     // 半ブロック 2 枚重ね
     if (t.props?.type === 'double' && t.name.endsWith('_slab') && bot.blockAt(p)?.getProperties?.().type !== 'double') {
       await this.placeAt(p, { ...t, props: { ...t.props, type: 'top' } }, it.item, { onto: true }).catch(() => {});
-    }
-    const now = bot.blockAt(p);
-    if (matches(t, now, { checkProps: false })) {
-      this.placed++;
-      if (!matches(t, now)) this.orientationOff++;
     }
   }
 
@@ -1340,6 +1436,9 @@ export class Builder {
     if (this.overlapsBody(p)) throw new SkillError('置くマスに自分の体がかかっている');
     await bot.equip(item, 'hand');
     this.selfPlacing = true;
+    // 足場ブロックは、しゃがんで置くとクリックした面の側に付く（しゃがまないと、足場ブロックの上をクリックしたときに横へ伸びる）
+    const forceSneak = itemName === 'scaffolding';
+    if (forceSneak) { bot.setControlState('sneak', true); await bot.waitForTicks(1).catch(() => {}); }
     try {
       await this.withSneak(async () => {
         // クリックする点を見る。向きをサーバーに送り終わってから置く（送る前に置くと、向きが前のままになった）
@@ -1349,6 +1448,7 @@ export class Builder {
       });
     } finally {
       this.selfPlacing = false;
+      if (forceSneak) bot.setControlState('sneak', false);
     }
     await sleep(60);
   }
@@ -1370,8 +1470,33 @@ export class Builder {
         cols.get(k).push(p);
       }
       const order = [...cols.values()].map((ps) => ps.sort((a, b) => b.y - a.y)).sort((a, b) => b[0].y - a[0].y);
+      // 足場ブロック（scaffolding）の柱は、いちばん下を壊すと上までまとめて崩れる。地面から下だけ壊して、落ちた物を拾う
       for (const col of order) {
         abortable(this.ctx);
+        const bottom = col[col.length - 1];
+        if (bot.blockAt(bottom)?.name !== 'scaffolding') continue;
+        const me = bot.entity.position.floored();
+        if (me.x === bottom.x && me.z === bottom.z && me.y > bottom.y) await this.descendOwnPillar().catch(() => {}); // 自分が乗っている柱は崩さない
+        try {
+          await this.reach(bottom, { dig: true });
+          const f = bot.entity.position.floored();
+          if (f.x === bottom.x && f.z === bottom.z && f.y > bottom.y) continue;
+          await this.dig(bot.blockAt(bottom));
+          await bot.waitForTicks(10).catch(() => {});
+          this.log.info(`足場ブロックの柱 (${key(bottom)}) の下を壊して崩した`);
+        } catch (e) {
+          if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e;
+        }
+      }
+      for (const k of [...this.scaffolds]) {
+        const [x, y, z] = k.split(',').map(Number);
+        const b = bot.blockAt(new Vec3(x, y, z));
+        if (b && b.boundingBox !== 'block') this.dropScaffold(k);
+      }
+      await pickUpItems(this.ctx, 10).catch(() => {});
+      for (const col of order) {
+        abortable(this.ctx);
+        if (!col.some((q) => this.scaffolds.has(key(q)))) continue;
         const top = col[0];
         // 高い柱は、上に立って足元を掘りながら降りる
         if (col.length >= 3) await this.digDownColumn(top).catch((e) => { if (e.name === 'AbortError' || this.ctx.signal?.aborted) throw e; });

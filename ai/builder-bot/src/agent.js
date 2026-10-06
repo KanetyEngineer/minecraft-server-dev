@@ -572,10 +572,10 @@ export class Agent {
     const short = this.builder.shortage();
     // 高い建物は、登るための仮の足場（土など）をたくさん使う。チェストに足りなければ、目安を伝える
     const want = this.builder.scaffoldEstimate();
-    const have = this.builder.spareScaffold() + ['dirt', 'coarse_dirt', 'netherrack', 'cobblestone', 'cobbled_deepslate']
+    const have = this.builder.spareScaffold() + ['scaffolding', 'dirt', 'coarse_dirt', 'netherrack', 'cobblestone', 'cobbled_deepslate']
       .filter((n) => !this.builder.needed.has(n)).reduce((a, n) => a + supplier.chestCount(n), 0);
     if (want > 0 && have < want) {
-      this.sayOnce(`足場用の土（丸石でも可）を ${want} 個ほどチェストに入れておくと、止まらずに建てられます（いま ${have} 個）`);
+      this.sayOnce(`足場ブロック（無ければ土や丸石）を ${want} 個ほどチェストに入れておくと、止まらずに建てられます（いま ${have} 個）`);
     }
     if (supplier.chests.size === 0 && supplier.unreadable === 0) {
       // まだ現場から遠くてチェストが見えていないか、チェストが無い。足りないとは言わない
