@@ -108,6 +108,17 @@ MaLiLib が入っていると、Litematica などと同じ形式の設定画面�
 
 設定画面ではオブザーバー警告のモード、建築計画 HUD の表示と行数、共有地点を地図に全部出すかどうかを変えられます。ホットキーは `config/solariatweaks-malilib.json` に保存されます。MaLiLib がない場合は、バニラの操作設定に「建築計画を開く」「オブザーバー警告の切り替え」「建築計画 HUD の表示切り替え」が出ます。
 
+### 7. 配信用の OBS オーバーレイ（サーバー）
+サーバー全体の採掘数（TotalBlockMine）などの統計を、OBS のブラウザソースに出す小さな Web サーバー。サーバー側だけで動き、数字は順位表と同じ（ボットを除く、オフラインの人も含む）。
+
+- OP（権限レベル3）が `/overlay on [ポート]` で開始（既定 8770）。次の起動からも自動で開く。`/overlay off` で停止
+- `/overlay` で URL を表示。`http://<サーバーのIP>:8770/` を開くと、項目・プレイヤー・色・大きさ・順位の人数を選んで URL を作れる（プレビュー付き）
+- そのまま使うなら `http://<サーバーのIP>:8770/overlay`（サーバー全体の採掘数）。約1秒ごとに更新し、増えるとカウントアップと「+N」を出す
+- URL のパラメータ: `c`（項目、例 `mined`・`mined:diamond_ore`・`playtime`）、`player`（その人の数）、`top`（順位の人数）、`title`（`none` で見出しなし）、`unit`、`size`、`color`・`accent`（16進）、`align`（left/center/right）、`panel=1`（半透明の背景）、`interval`（ミリ秒）
+- JSON は `/api?c=mined&top=5`、項目一覧は `/api/criteria`
+- 鯖の外から見るにはポートの開放が必要。案内に出す住所は `/overlay address <ホスト:ポート>` で変えられる（`-` で自動に戻す）
+- 設定は `config/solariatweaks-overlay.json`（`bind` で待ち受けるアドレスも変えられる）
+
 ## 依存
 - 必須: Fabric API
 - 任意: Xaero's Minimap と World Map（共有地点）、Syncmatica（建築計画）、Litematica（誤設置警告）、Chest Tracker（記憶の表示）、MaLiLib 0.27.19 以上（設定画面とホットキー）、Mod Menu
