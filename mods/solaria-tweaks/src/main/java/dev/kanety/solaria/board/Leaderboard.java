@@ -317,6 +317,17 @@ public final class Leaderboard {
         return sum;
     }
 
+    /** One player's value of a criterion (0 if unknown). */
+    public long value(UUID uuid, Criterion c) {
+        PlayerStats ps = stats.get(uuid);
+        return ps == null ? 0 : ps.get(c);
+    }
+
+    /** Last known name of a player. */
+    public String nameOf(UUID uuid) {
+        return saved.names.get(uuid.toString());
+    }
+
     /** Players (not bots) the leaderboard knows statistics for. */
     public int playerCount() {
         int n = 0;

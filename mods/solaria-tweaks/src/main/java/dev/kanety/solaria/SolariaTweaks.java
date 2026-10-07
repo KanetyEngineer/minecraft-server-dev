@@ -4,6 +4,8 @@ import dev.kanety.solaria.board.Leaderboard;
 import dev.kanety.solaria.board.LeaderboardCommand;
 import dev.kanety.solaria.net.BuildSyncPayload;
 import dev.kanety.solaria.net.WaypointSyncPayload;
+import dev.kanety.solaria.overlay.OverlayCommand;
+import dev.kanety.solaria.overlay.OverlayServer;
 import dev.kanety.solaria.plan.BuildCommand;
 import dev.kanety.solaria.plan.BuildManager;
 import dev.kanety.solaria.waypoint.SharedWaypoints;
@@ -35,13 +37,16 @@ public class SolariaTweaks implements ModInitializer {
             BuildCommand.register(dispatcher);
             WaypointCommand.register(dispatcher);
             LeaderboardCommand.register(dispatcher);
+            OverlayCommand.register(dispatcher);
         });
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             BuildManager.start(server);
             SharedWaypoints.start(server);
             Leaderboard.start(server);
+            OverlayServer.start(server);
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            OverlayServer.stop();
             BuildManager.stop();
             SharedWaypoints.stop();
             Leaderboard.stop();
