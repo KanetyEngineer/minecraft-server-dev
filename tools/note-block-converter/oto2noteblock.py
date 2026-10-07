@@ -184,6 +184,18 @@ def load_midi(path: str, mode: str) -> list[Note]:
     return notes
 
 
+def suggest_speed(path: str):
+    """テンポが 1 つの MIDI なら、8 分音符がちょうど整数のレッドストーンティックになる速さを返す。"""
+    import mido
+    tempos = {m.tempo for tr in mido.MidiFile(path).tracks for m in tr if m.type == "set_tempo"} or {500000}
+    if len(tempos) != 1:
+        return None
+    bpm = 60_000_000 / tempos.pop()
+    eighth = 60 / bpm / 2 * 10  # 8 分音符の長さ（レッドストーンティック）
+    n = max(1, round(eighth))
+    return bpm, eighth / n
+
+
 def audio_to_midi(path: str, out_mid: str, args) -> str:
     try:
         from basic_pitch import ICASSP_2022_MODEL_PATH
@@ -738,6 +750,7 @@ def main(argv=None):
     ap.add_argument("-o", "--out", help="出力先（拡張子なし）。既定は入力と同じ場所・同じ名前")
     ap.add_argument("--mc", default="26.2", help="Minecraft のバージョン（26.2 / 1.21.11 / 1.19.4 など、設計図のデータ版に使う）")
     ap.add_argument("--max-lanes", type=int, default=12, help="同時に鳴らす最大の音数（= レーン数）。既定 12")
+    ap.add_argument("--fit-tempo", action="store_true", help="MIDI のテンポに合わせて速さを少し変え、リズムを等間隔にする")
     ap.add_argument("--speed", type=float, default=1.0, help="再生速度の倍率。0.8 で遅く、1.2 で速く")
     ap.add_argument("--row-length", type=int, default=0, help="この長さで上に折り返す（0 = 一直線）。長い曲は 64 などがおすすめ")
     ap.add_argument("--instruments", default="auto", help="auto（MIDI の音色から）/ pitch（高さだけで bass・harp・bell）/ single:harp など")
@@ -761,6 +774,15 @@ def main(argv=None):
         ext = ".mid"
     if ext in (".mid", ".midi"):
         notes = load_midi(src, args.instruments)
+        fit = suggest_speed(src)
+        if fit:
+            bpm, sp = fit
+            if args.fit_tempo:
+                args.speed = sp
+                print(f"テンポ {bpm:.0f} BPM を 0.1 秒の刻みに合わせ、速さ {sp:.3f} 倍で作ります")
+            elif abs(sp - args.speed) > 0.005:
+                print(f"ヒント: テンポ {bpm:.0f} BPM は 0.1 秒の刻みに合わずリズムが少しよれます。"
+                      f"--fit-tempo（速さ {sp:.3f} 倍）で等間隔になります")
     elif ext == ".nbs":
         notes = load_nbs(src)
     else:
