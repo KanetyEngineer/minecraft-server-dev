@@ -1,0 +1,52 @@
+name: solaria-carpet
+on:
+  push:
+    paths: ['mods/solaria-carpet/**', '.github/workflows/solaria-carpet.yml']
+  pull_request:
+    paths: ['mods/solaria-carpet/**', '.github/workflows/solaria-carpet.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: current }
+      - name: Build
+        working-directory: mods/solaria-carpet
+        run: set -o pipefail; gradle --no-daemon build 2>&1 | tee /tmp/build.log
+      - name: Mixin target warnings
+        if: always()
+        run: grep -iE "mixin|cannot find|unable to locate|no refMap" /tmp/build.log || echo "none"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solaria-carpet
+          path: mods/solaria-carpet/build/libs/*.jar
+      - name: Publish jars to solaria-dist branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p /tmp/dist
+          JAR=$(ls mods/solaria-carpet/build/libs/*.jar | grep -v sources | head -1)
+          cp "$JAR" /tmp/dist/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin solaria-dist || true
+          if git rev-parse --verify origin/solaria-dist >/dev/null 2>&1; then
+            git switch -C solaria-dist origin/solaria-dist
+          else
+            git switch --orphan solaria-dist
+          fi
+          git clean -fdxq
+          rm -f solaria-carpet-*.jar
+          cp -r /tmp/dist/* .
+          echo "solaria-carpet built from ${GITHUB_SHA} on ${GITHUB_REF_NAME}" > BUILD-carpet.txt
+          git add -A && git commit -qm "solaria-carpet build ${GITHUB_SHA::7}"
+          # both workflows publish here; retry on a race with the other one
+          for i in 1 2 3 4 5; do
+            git push origin solaria-dist && break
+            sleep $((i * 3)); git fetch origin solaria-dist && git rebase origin/solaria-dist
+          done

@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.kanety.solariacarpet.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "HoneyBlockMixin",
+    "ProjectileMixin",
+    "ProjectileUtilMixin",
+    "ThrowableProjectileMixin",
+    "ServerChunkCacheMixin",
+    "ThreadedLevelLightEngineMixin",
+    "AbstractVillagerMixin",
+    "AbstractVillagerAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
