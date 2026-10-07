@@ -38,6 +38,12 @@ Java 版向け。調べた結果と、自作した変換ツール **oto2notebloc
    ```
    pip install basic-pitch[onnx]
    ```
+   Python 3.11 以上で上がエラーになる時は、次の順で入れます（実機の Python 3.12 で確認済み）:
+   ```
+   pip install --no-deps basic-pitch==0.4.0
+   pip install onnxruntime librosa mir-eval pretty-midi "resampy<0.4.3" scikit-learn scipy typing-extensions "numpy<2" "setuptools<81"
+   ```
+   tensorflow が無いという警告が出ますが動きます。
    うまく入らない時は、https://basicpitch.spotify.com/ に音声を入れて MIDI をダウンロードし、その .mid を使えば同じことができます。
 
 ### 変換する
@@ -90,6 +96,7 @@ python oto2noteblock.py 曲.mid --row-length 64 --rcon 127.0.0.1:25575 --rcon-pa
 
 ## 確認したこと
 
-- 試験用の MIDI（和音・ベース・ドラム・休み入り、80 秒、922 音）と、それを音にした MP3 で変換し、どちらも全部の音ブロックが予定どおりの順番と間隔で鳴ることを、装置の配線をたどる計算（`simcheck.py`）で確認。一直線と折り返し、40 レーンでも同じ。
-- .litematic は litemapy、.schem は NBT として読み込めることを確認。
-- 実際の 26.2 の鯖での試験と、Litematica での読み込みの結果は下に追記します。
+- 実際の 26.2 の鯖（PC、バニラ 26.2）に RCON で設置し、ボタンを押して各音ブロックが鳴ったゲームティックを記録（`ingame_test.py`）。30 秒の試験曲（312 音、和音・ベース・ドラム・休み入り）で、折り返し（33×30×18）と一直線（223×3×17）の両方とも 312 個すべてが鳴り、間隔のずれは 0。
+- その曲を音声（WAV）にして入れた場合も、Basic Pitch で 297 音の MIDI になり、装置にして 297 個すべてが予定どおり鳴った。
+- 配線をたどる計算（`simcheck.py`）でも、80 秒・922 音の曲と 40 レーンの曲で同じ結果。
+- .litematic は litemapy、.schem は NBT として読み込めることを確認。Litematica・WorldEdit での実際の貼り付けはまだ試していません。

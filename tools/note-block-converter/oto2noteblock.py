@@ -188,9 +188,10 @@ def audio_to_midi(path: str, out_mid: str, args) -> str:
     try:
         from basic_pitch import ICASSP_2022_MODEL_PATH
         from basic_pitch.inference import predict
-    except ImportError:
+    except ImportError as e:
         sys.exit(
-            "音声ファイルを MIDI にするには basic-pitch が必要です（README の「音声から変換」参照）。\n"
+            f"音声ファイルを MIDI にするには basic-pitch が必要です（読み込めなかったもの: {e}）。\n"
+            "README の「準備」の手順で入れてください。pkg_resources が無いと出たら pip install \"setuptools<81\"。\n"
             "または https://basicpitch.spotify.com/ で MIDI にしてから、その .mid を入れてください。"
         )
     model = ICASSP_2022_MODEL_PATH
@@ -727,6 +728,11 @@ AUDIO_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".aiff", 
 
 
 def main(argv=None):
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(encoding="utf-8")  # Windows のコンソール（cp932）で文字化けしないように
+        except Exception:
+            pass
     ap = argparse.ArgumentParser(description="音源を Minecraft の音ブロック演奏装置に変換します。")
     ap.add_argument("input", help=".mid / .midi / .nbs / 音声（mp3, wav など）")
     ap.add_argument("-o", "--out", help="出力先（拡張子なし）。既定は入力と同じ場所・同じ名前")

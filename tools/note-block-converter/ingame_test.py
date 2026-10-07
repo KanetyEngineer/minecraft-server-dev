@@ -3,6 +3,7 @@
 前もって鯖のワールドに記録用データパックを入れておく必要があるので、手順は 2 段階:
   1) python ingame_test.py prepare 曲.mid --world <鯖のworldフォルダ> --origin X Y Z [変換オプション]
      → world/datapacks/nbtest を書く。鯖を起動（起動中なら /reload）。
+     /datapack list で nbtest が無効なら /datapack enable "file/nbtest"。
   2) python ingame_test.py run 曲.mid --rcon 127.0.0.1:25616 --rcon-password PW --origin X Y Z [変換オプション]
      → 設置・スタート・記録の読み出し・判定。
 """
