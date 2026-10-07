@@ -1,7 +1,8 @@
 """実際の鯖で確かめる（開発用）: RCON で装置を置き、各音ブロックが鳴ったゲームティックを記録して予定と比べる。
 
 前もって鯖のワールドに記録用データパックを入れておく必要があるので、手順は 2 段階:
-  1) python ingame_test.py prepare 曲.mid --world <鯖のworldフォルダ> --origin X Y Z [変換オプション]
+  1) python ingame_test.py prepare 曲.mid --world <鯖のworldフォルダ> --origin X Y Z [--pack-format N] [変換オプション]
+     （1.19.4 は --pack-format 12）
      → world/datapacks/nbtest を書く。鯖を起動（起動中なら /reload）。
      /datapack list で nbtest が無効なら /datapack enable "file/nbtest"。
   2) python ingame_test.py run 曲.mid --rcon 127.0.0.1:25616 --rcon-password PW --origin X Y Z [変換オプション]
@@ -34,20 +35,25 @@ def main():
     origin = tuple(int(v) for v in take("--origin", 3))
     if mode == "prepare":
         wdir = take("--world")
+        fmt = int(take("--pack-format")) if "--pack-format" in rest else 99
         b, slots, world = build(rest, origin)
         d = os.path.join(wdir, "datapacks", "nbtest")
-        os.makedirs(os.path.join(d, "data", "nbtest", "function"), exist_ok=True)
-        os.makedirs(os.path.join(d, "data", "minecraft", "tags", "function"), exist_ok=True)
+        os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "pack.mcmeta"), "w") as f:
-            json.dump({"pack": {"description": "note block timing test", "pack_format": 99, "min_format": 1, "max_format": 999, "supported_formats": [1, 999]}}, f)
-        with open(os.path.join(d, "data", "minecraft", "tags", "function", "tick.json"), "w") as f:
-            json.dump({"values": ["nbtest:tick"]}, f)
-        with open(os.path.join(d, "data", "nbtest", "function", "tick.mcfunction"), "w") as f:
-            f.write("scoreboard objectives add nb dummy\n")
-            for i, (p, _) in enumerate(b.notes_at):
-                x, y, z = world(p)
-                f.write(f"execute unless score #n{i} nb matches 0.. if block {x} {y} {z} minecraft:note_block[powered=true] "
-                        f"store result score #n{i} nb run time query gametime\n")
+            json.dump({"pack": {"description": "note block timing test", "pack_format": fmt, "min_format": 1, "max_format": 999, "supported_formats": [1, 999]}}, f)
+        lines = ["scoreboard objectives add nb dummy\n"]
+        for i, (p, _) in enumerate(b.notes_at):
+            x, y, z = world(p)
+            lines.append(f"execute unless score #n{i} nb matches 0.. if block {x} {y} {z} minecraft:note_block[powered=true] "
+                         f"store result score #n{i} nb run time query gametime\n")
+        # 1.21 からフォルダ名が単数形になったので両方に置く
+        for fn, tg in (("function", "function"), ("functions", "functions")):
+            os.makedirs(os.path.join(d, "data", "nbtest", fn), exist_ok=True)
+            os.makedirs(os.path.join(d, "data", "minecraft", "tags", tg), exist_ok=True)
+            with open(os.path.join(d, "data", "minecraft", "tags", tg, "tick.json"), "w") as f:
+                json.dump({"values": ["nbtest:tick"]}, f)
+            with open(os.path.join(d, "data", "nbtest", fn, "tick.mcfunction"), "w") as f:
+                f.writelines(lines)
         print("データパックを書きました:", d)
         return
     rcon = take("--rcon"); pw = take("--rcon-password")

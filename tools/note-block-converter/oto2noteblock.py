@@ -569,7 +569,7 @@ def write_litematic(path, b: Build, name, author, desc, data_version):
         "PendingFluidTicks": Tag(NBT.LIST, [], NBT.COMPOUND),
     }
     root = {
-        "Version": I(7),
+        "Version": I(7 if data_version >= 3837 else 6),  # Litematica は 1.20.5 から形式 7
         "SubVersion": I(1),
         "MinecraftDataVersion": I(data_version),
         "Metadata": C({
@@ -723,7 +723,7 @@ def place_rcon(b: Build, rcon_addr, password, origin, keep_loaded):
 
 
 # ---------------------------------------------------------------------------
-DATA_VERSIONS = {"26.2": 4903, "1.21.11": 4671, "1.21.4": 4189, "1.21.1": 3955, "1.20.4": 3700, "1.20.1": 3465}
+DATA_VERSIONS = {"26.2": 4903, "1.21.11": 4671, "1.21.4": 4189, "1.21.1": 3955, "1.20.4": 3700, "1.20.1": 3465, "1.19.4": 3337}
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".aiff", ".aif"}
 
 
@@ -736,7 +736,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="音源を Minecraft の音ブロック演奏装置に変換します。")
     ap.add_argument("input", help=".mid / .midi / .nbs / 音声（mp3, wav など）")
     ap.add_argument("-o", "--out", help="出力先（拡張子なし）。既定は入力と同じ場所・同じ名前")
-    ap.add_argument("--mc", default="26.2", help="Minecraft のバージョン（26.2 / 1.21.11 など、設計図のデータ版に使う）")
+    ap.add_argument("--mc", default="26.2", help="Minecraft のバージョン（26.2 / 1.21.11 / 1.19.4 など、設計図のデータ版に使う）")
     ap.add_argument("--max-lanes", type=int, default=12, help="同時に鳴らす最大の音数（= レーン数）。既定 12")
     ap.add_argument("--speed", type=float, default=1.0, help="再生速度の倍率。0.8 で遅く、1.2 で速く")
     ap.add_argument("--row-length", type=int, default=0, help="この長さで上に折り返す（0 = 一直線）。長い曲は 64 などがおすすめ")
