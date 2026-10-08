@@ -752,7 +752,7 @@ SOUND_PRESETS = {
         "harp": [("minecraft:block.note_block.harp", 1.0, None), ("minecraft:block.note_block.pling", 0.25, None)],
     },
 }
-PACK_FORMATS = {"1.19.4": 12, "1.20.1": 15, "1.20.4": 26, "1.21.1": 48, "1.21.4": 61, "1.21.11": 94, "26.2": 99}
+PACK_FORMATS = {"1.19.4": 12, "1.20.1": 15, "1.20.4": 26, "1.21.1": 48, "1.21.4": 61, "1.21.11": 94, "26.2": 107}
 
 
 def load_sound_map(spec: str) -> dict:
@@ -878,9 +878,12 @@ def write_datapack(path, notes: list[Note], name: str, args):
     for k, v in tags.items():
         files[f"data/minecraft/tags/{tdir}/{k}.json"] = json.dumps({"values": v})
     pf = PACK_FORMATS.get(args.mc, 99)
-    files["pack.mcmeta"] = json.dumps({"pack": {
-        "description": f"{name} ({fmt_t(total_sec)}) /function {ns}:play",
-        "pack_format": pf, "supported_formats": [pf, 999], "min_format": pf, "max_format": 999}}, ensure_ascii=False)
+    meta = {"description": f"{name} ({fmt_t(total_sec)}) /function {ns}:play", "pack_format": pf}
+    if pf >= 82:  # 1.21.9 から supported_formats は使えず min/max_format を書く
+        meta.update(min_format=pf, max_format=999)
+    else:
+        meta.update(supported_formats=[pf, 999])
+    files["pack.mcmeta"] = json.dumps({"pack": meta}, ensure_ascii=False)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for k, v in sorted(files.items()):
             z.writestr(k, v)
