@@ -15,6 +15,7 @@ const env = { PASS, STRIPE_SECRET_KEY: "sk_test_x", ADMIN_TOKEN: "tok", PRODUCT_
 const UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
 const sessions = {};
 const prices = [];
+const itemPrices = [];
 let webhookUpdates = 0;
 const subs = {};
 const canceled = [];
@@ -27,6 +28,7 @@ globalThis.fetch = async (url, init = {}) => {
   assert.equal(init.headers.authorization, "Bearer sk_test_x");
   const p = Object.fromEntries(new URLSearchParams(init.body || ""));
   if (url.endsWith("/products")) return Response.json({ id: `prod_${++n}` });
+  if (url.endsWith("/prices") && !p["recurring[interval]"]) { itemPrices.push(Number(p.unit_amount)); return Response.json({ id: `price_item_${p.unit_amount}_${++n}` }); }
   if (url.endsWith("/prices")) {
     assert.equal(p["recurring[interval]"], "month");
     prices.push(Number(p.unit_amount));
@@ -34,6 +36,13 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if (url.endsWith("/webhook_endpoints")) { assert.equal(p["enabled_events[3]"], "customer.subscription.deleted"); assert.equal(p["enabled_events[4]"], "charge.refunded"); return Response.json({ id: "we_1", secret: "whsec_test" }); }
   if (url.endsWith("/webhook_endpoints/we_1")) { webhookUpdates++; return Response.json({ id: "we_1" }); }
+  if (url.endsWith("/checkout/sessions") && init.method === "POST" && p.mode === "payment") {
+    assert.equal(p["metadata[item]"], "koma-battle");
+    assert.match(p.success_url, /\/download\?session_id=\{CHECKOUT_SESSION_ID\}$/);
+    const id = `cs_test_${++n}`;
+    sessions[id] = { id, url: `https://checkout.stripe.com/c/pay/${id}`, mode: "payment", status: "open", payment_status: "unpaid", metadata: { item: "koma-battle" }, payment_intent: null };
+    return Response.json(sessions[id]);
+  }
   if (url.endsWith("/checkout/sessions") && init.method === "POST") {
     assert.equal(p.mode, "subscription");
     assert.equal(p["subscription_data[metadata][mc_uuid]"], UUID);
@@ -51,7 +60,7 @@ globalThis.fetch = async (url, init = {}) => {
   }
   const del = url.match(/\/subscriptions\/(sub_\w+)$/);
   if (del && init.method === "DELETE") { subs[del[1]].status = "canceled"; canceled.push(del[1]); return Response.json(subs[del[1]]); }
-  const m = url.match(/\/checkout\/sessions\/(cs_\w+)$/);
+  const m = url.match(/\/checkout\/sessions\/(cs_\w+)(\?|$)/);
   if (m) return Response.json(sessions[m[1]]);
   throw new Error("unexpected fetch " + url);
 };
@@ -81,6 +90,8 @@ assert.equal(setup.plans.complete.amount, 8000);
 assert.equal(setup.plans.halloween.amount, 1500);
 assert.equal(Object.keys(setup.plans).length, 6);
 assert.deepEqual(prices, [8000, 1500, 1500, 1500, 1500, 1500]);
+assert.deepEqual(itemPrices, [2000]);
+assert.equal(setup.items["koma-battle"].amount, 2000);
 const home = await (await call("/?plan=clash-royale")).text();
 assert.match(home, /8,000円/);
 assert.match(home, /1,500円/);
@@ -90,6 +101,7 @@ assert.match(home, /billing\.stripe\.com/);
 // 2回目のセットアップは webhook を作らず、イベントを入れ替える
 await call("/admin/setup", { method: "POST", headers: admin, body: JSON.stringify({ plans: { halloween: 1200 } }) });
 assert.equal(webhookUpdates, 1);
+assert.deepEqual(itemPrices, [2000], "作ってある買い切り商品は作り直さない");
 r = await call("/admin/setup", { method: "POST", headers: admin, body: JSON.stringify({ plans: { nope: 100 } }) });
 assert.equal(r.status, 400);
 
@@ -170,4 +182,41 @@ await call("/api/players?full=1", { headers: admin });
 assert.equal(lists, before + 1);
 
 assert.match(await (await call("/legal")).text(), /1か月ごとの自動更新/);
+
+// ---------- 買い切りのダウンロード（コマバトル） ----------
+const files = { "/koma-battle/koma-battle-rpg-1.0.1.zip.001": "AAA", "/koma-battle/koma-battle-rpg-1.0.1.zip.002": "BB", "/koma-battle/koma-battle-rpg-1.0.1.zip.003": "C" };
+env.ASSETS = { fetch: async (req) => { const b = files[new URL(req.url).pathname]; return b ? new Response(b, { headers: { "content-length": String(b.length) } }) : new Response("", { status: 404 }); } };
+const bp = await (await call("/buy?item=koma-battle")).text();
+assert.match(bp, /2,000円/);
+assert.match(bp, /返品・返金はできません/);
+assert.match(decodeURIComponent((await call("/buy", { method: "POST", body: form({ item: "koma-battle" }) })).headers.get("location")), /同意/);
+r = await call("/buy", { method: "POST", body: form({ item: "koma-battle", agree: "1" }) });
+assert.equal(r.status, 303);
+const ks = sessions[r.headers.get("location").split("/").pop()];
+// 未払いではリンクを出さない
+assert.match(await (await call(`/download?session_id=${ks.id}`)).text(), /ダウンロードできません/);
+assert.match(await (await call(`/download?session_id=cs_bad'x`)).text(), /ダウンロードできません/);
+// 支払い済み → 署名付きリンク → 分割をつなげて返す
+sessions[ks.id] = { ...ks, status: "complete", payment_status: "paid", payment_intent: { latest_charge: { id: "ch_k", refunded: false, disputed: false } } };
+const dl = await (await call(`/download?session_id=${ks.id}`)).text();
+const link = dl.match(/href="(\/file\/[^"]+)"/)[1].replaceAll("&amp;", "&");
+r = await call(link);
+assert.equal(r.status, 200);
+assert.equal(await r.text(), "AAABBC");
+assert.equal(r.headers.get("content-length"), "6");
+assert.match(r.headers.get("content-disposition"), /koma-battle-rpg-1\.0\.1\.zip/);
+// 署名なし・改ざん・期限切れは拒否。アセットへの直接アクセスも Worker が 404
+assert.equal((await call("/file/koma-battle/x.zip")).status, 403);
+assert.equal((await call(link.replace(/sig=./, "sig=0"))).status, 403);
+assert.equal((await call(link.replace(/exp=\d+/, "exp=1000"))).status, 403);
+assert.equal((await call("/koma-battle/koma-battle-rpg-1.0.1.zip.001")).status, 404);
+// 返金・チャージバックされたら出さない
+sessions[ks.id].payment_intent.latest_charge.refunded = true;
+assert.match(await (await call(`/download?session_id=${ks.id}`)).text(), /ダウンロードできません/);
+// 分割していないファイルならそのまま
+files["/koma-battle/koma-battle-rpg-1.0.1.zip"] = "WHOLE";
+assert.equal(await (await call(link)).text(), "WHOLE");
+// 月額の webhook の流れに買い切りの完了が来ても名簿は変わらない
+await hook("checkout.session.completed", { ...sessions[ks.id], mode: "payment" });
+assert.deepEqual(await list(), []);
 console.log("worker: all tests passed");

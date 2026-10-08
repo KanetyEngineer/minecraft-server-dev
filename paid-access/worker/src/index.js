@@ -6,12 +6,17 @@
 // KV (PASS):
 //   p:<plan>:<uuid> → {"uuid","name","plan","sub","status","since","mode","note"}
 //   sub:<id>        → "<plan>:<uuid>"（解約・支払い失敗のときに消すため）
-//   cfg:<mode>      → {"currency","webhookId","webhookSecret","plans":{"<plan>":{"priceId","amount"}}}（mode は test / live）
+//   cfg:<mode>      → {"currency","webhookId","webhookSecret","plans":{"<plan>":{"priceId","amount"}},"items":{"<item>":{"priceId","amount"}}}（mode は test / live）
 //   idx:players     → [{"uuid","name","games":["<game>",…]}]（契約者の一覧。p: を足し引きするたびに書き直す）
 //
 // KV の無料枠は list・書き込み・削除が合わせて 1日1000回しかないので、sync が毎回 list すると枠が尽きる。
 // sync は普段 idx:players を1回読むだけにし、取りこぼしの直しとして ?full=1（list して一覧を作り直す）をたまに呼ぶ
-// Secrets: STRIPE_SECRET_KEY（sk_test_… か sk_live_…）, ADMIN_TOKEN（PC の sync と管理用）
+//
+// 買い切りのダウンロード商品（ITEMS）: /buy?item=<id> で Stripe Checkout（一回払い）→ /download?session_id=… で、
+// 支払い済みで返金・チャージバックされていなければ、期限付きの署名を付けたリンクを出す。
+// ファイルはこの Worker の静的アセット（private/<id>/、run_worker_first で直接は出さない）に置き、/file/<id> で署名を確かめてから返す。
+// 分割したファイル（<file>.001, .002 …）はつなげて1つのファイルとして返す。KV は使わない（Stripe の Checkout セッションが購入の記録）
+// Secrets: STRIPE_SECRET_KEY（sk_test_… か sk_live_…）, ADMIN_TOKEN（PC の sync と管理用。ダウンロードリンクの署名にも使う）
 // Vars: SITE_URL, GAMES_URL, PRODUCT_NAME, PORTAL_URL（Stripe のカスタマーポータルのログインリンク）, SELLER_*（特定商取引法の表記）
 
 const STRIPE = "https://api.stripe.com/v1";
@@ -31,6 +36,13 @@ const DEFAULT_AMOUNT = { complete: 8000, game: 1500 };
 const ACTIVE = new Set(["active", "trialing", "past_due"]);
 const EVENTS = ["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "charge.refunded", "charge.dispute.created"];
 
+// 買い切りのダウンロード商品。file はダウンロードしたときのファイル名で、private/<id>/ に同じ名前（分割なら .001 から）で置く
+const ITEMS = [
+  { id: "koma-battle", name: "コマバトル RPG", desc: "Minecraft のコマバトル RPG（ダウンロード版・買い切り）", amount: 2000, file: "koma-battle-rpg-1.0.1.zip" },
+];
+const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+const LINK_HOURS = 24;
+
 const gamesOf = (plan) => (plan === COMPLETE.id ? GAMES.map((g) => g.id) : [plan]);
 
 export default {
@@ -42,6 +54,10 @@ export default {
       if (req.method === "GET" && url.pathname === "/success") return page(env, await success(env, url));
       if (req.method === "GET" && url.pathname === "/legal") return page(env, legal(env));
       if (req.method === "GET" && url.pathname === "/check") return await check(env, url);
+      if (req.method === "GET" && url.pathname === "/buy") return page(env, await buyPage(env, url));
+      if (req.method === "POST" && url.pathname === "/buy") return await buy(req, env, url);
+      if (req.method === "GET" && url.pathname === "/download") return page(env, await download(env, url));
+      if (req.method === "GET" && url.pathname.startsWith("/file/")) return await file(env, url);
       if (req.method === "POST" && url.pathname === "/webhook") return await webhook(req, env);
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/admin/")) {
         if (!authorized(req, env)) return json({ error: "unauthorized" }, 401);
@@ -178,13 +194,13 @@ ${row("運営責任者", env.SELLER_MANAGER || env.SELLER_NAME || ask)}
 ${row("所在地", env.SELLER_ADDRESS || ask)}
 ${row("電話番号", env.SELLER_PHONE || ask)}
 ${row("メールアドレス", env.SELLER_EMAIL || ask)}
-${row("販売価格", "プランごとに申し込みページに表示（月額・税込）")}
+${row("販売価格", "参加券はプランごとに申し込みページに表示（月額・税込）。ダウンロード商品はその商品の購入ページに表示（税込）")}
 ${row("商品代金以外の必要料金", "インターネット接続料金・通信料金はお客様の負担となります")}
 ${row("支払方法", "クレジットカードほか Stripe が対応する方法")}
-${row("支払時期", "申し込み時に初月分、以後は毎月の更新日に自動で請求")}
-${row("引渡時期", "決済完了後すぐ（通常1分以内に該当するゲーム鯖のホワイトリストへ登録）")}
-${row("契約期間・解約", "1か月ごとの自動更新。解約はいつでもでき、支払い済みの期間の終わりまで利用できます。日割りの返金はありません")}
-${row("返品・キャンセル", "デジタルサービスの性質上、支払い済みの期間の返金はお受けできません。ただしサービスを提供できない場合は個別に対応します")}
+${row("支払時期", "参加券は申し込み時に初月分、以後は毎月の更新日に自動で請求。ダウンロード商品は購入時に一括")}
+${row("引渡時期", "参加券は決済完了後すぐ（通常1分以内に該当するゲーム鯖のホワイトリストへ登録）。ダウンロード商品は決済完了後すぐにダウンロードページを表示")}
+${row("契約期間・解約", "参加券は1か月ごとの自動更新。解約はいつでもでき、支払い済みの期間の終わりまで利用できます。日割りの返金はありません")}
+${row("返品・キャンセル", "デジタルサービス・デジタルコンテンツの性質上、支払い済みの期間やダウンロード商品の返品・返金はお受けできません。ただしサービスを提供できない場合は個別に対応します")}
 ${row("動作環境", "Minecraft: Java Edition の正規アカウント（各ゲームが指定する版）")}
 </table>
 <p class="small">NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.</p>
@@ -198,6 +214,120 @@ async function check(env, url) {
   const games = new Set(prof ? (await playerOf(env, prof.uuid))?.games || [] : []);
   const rows = GAMES.map((g) => `<li>${esc(g.name)}: ${games.has(g.id) ? "契約中（入れます）" : `未契約（<a href="/?plan=${g.id}&name=${encodeURIComponent(name)}#${g.id}">申し込む</a>）`}</li>`);
   return page(env, `<h1>契約の確認</h1><div class="card"><p>${esc(prof?.name || name)}</p><ul>${rows.join("")}</ul><p><a href="/">参加券のページへ</a></p></div>`);
+}
+
+// ---------- 買い切りのダウンロード商品 ----------
+
+async function buyPage(env, url) {
+  const item = ITEM[url.searchParams.get("item")];
+  if (!item) return `<h1>商品が見つかりません</h1><p><a href="${esc(env.GAMES_URL)}">SharyTech Games へ</a></p>`;
+  const cfg = await config(env);
+  const c = cfg?.items?.[item.id];
+  const err = url.searchParams.get("error");
+  return `
+<h1>${esc(item.name)}</h1>
+<p class="lead">${esc(item.desc)}</p>
+${mode(env) === "test" ? `<p class="test">テストモードです。実際のお金は動きません（カード 4242 4242 4242 4242）。</p>` : ""}
+${err ? `<p class="err">${esc(err)}</p>` : ""}
+<div class="card complete">
+  <div class="price">${c ? yen(c.amount, cfg.currency) : "準備中"}<span>（税込・買い切り）</span></div>
+  <ul class="small">
+    <li>支払いが終わるとすぐにダウンロードのページが開きます。そのページをブックマークしておくと、あとから何度でもダウンロードできます</li>
+    <li>デジタルコンテンツのため、購入後の返品・返金はできません</li>
+  </ul>
+  <form method="post" action="/buy">
+    <input type="hidden" name="item" value="${item.id}">
+    <label class="agree"><input type="checkbox" name="agree" value="1" required> <a href="/legal">特定商取引法に基づく表記</a>と、購入後の返品・返金はできないことに同意します</label>
+    <button ${c ? "" : "disabled"}>購入する（Stripe）</button>
+  </form>
+</div>`;
+}
+
+async function buy(req, env, url) {
+  const form = await req.formData();
+  const item = ITEM[String(form.get("item") || "")];
+  if (!item) return Response.redirect(`${url.origin}/buy`, 303);
+  const back = (msg) => Response.redirect(`${url.origin}/buy?item=${item.id}&error=${encodeURIComponent(msg)}`, 303);
+  if (!form.get("agree")) return back("表記と返品の条件への同意が必要です");
+  const price = (await config(env))?.items?.[item.id];
+  if (!price) return back(`${item.name} はまだ準備中です`);
+  const s = await stripe(env, "POST", "/checkout/sessions", {
+    mode: "payment",
+    "line_items[0][price]": price.priceId,
+    "line_items[0][quantity]": "1",
+    locale: "ja",
+    "metadata[item]": item.id,
+    "payment_intent_data[metadata][item]": item.id,
+    "payment_intent_data[description]": item.name,
+    success_url: `${url.origin}/download?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${url.origin}/buy?item=${item.id}`,
+  });
+  return Response.redirect(s.url, 303);
+}
+
+/** 支払い済みで、返金・チャージバックされていない購入なら商品を返す。 */
+async function purchased(env, id) {
+  if (!/^cs_[A-Za-z0-9_]+$/.test(id)) return null;
+  const s = await stripe(env, "GET", `/checkout/sessions/${id}?expand[]=payment_intent.latest_charge`);
+  const item = ITEM[s.metadata?.item];
+  if (!item || s.mode !== "payment" || s.status !== "complete" || s.payment_status !== "paid") return null;
+  const ch = s.payment_intent?.latest_charge;
+  if (ch && typeof ch === "object" && (ch.refunded || ch.disputed)) return null;
+  return item;
+}
+
+async function download(env, url) {
+  const id = url.searchParams.get("session_id") || "";
+  const item = await purchased(env, id);
+  if (!item) return `<h1>ダウンロードできません</h1><div class="card"><p>支払いが確認できませんでした。支払いの直後なら、少し待ってからこのページを開き直してください。</p><p class="small">困ったときは Discord SharyTech でお知らせください。</p></div>`;
+  const exp = Math.floor(Date.now() / 1000) + LINK_HOURS * 3600;
+  const sig = await linkSig(env, item.id, exp);
+  return `
+<h1>ご購入ありがとうございます</h1>
+<div class="card">
+  <p><b>${esc(item.name)}</b></p>
+  <p><a class="btn" href="/file/${item.id}/${encodeURIComponent(item.file)}?exp=${exp}&sig=${sig}">ダウンロード（${esc(item.file)}）</a></p>
+  <p class="small">このページをブックマークしておくと、あとから何度でもダウンロードできます（ボタンのリンクは${LINK_HOURS}時間で切れるので、切れたらこのページを開き直してください）。このページのアドレスはほかの人に教えないでください。</p>
+</div>`;
+}
+
+async function file(env, url) {
+  const [, , id] = url.pathname.split("/");
+  const item = ITEM[id];
+  const exp = Number(url.searchParams.get("exp"));
+  if (!item || !(exp > Date.now() / 1000) || !timingSafeEqual(url.searchParams.get("sig") || "", await linkSig(env, item.id, exp))) {
+    return page(env, `<h1>リンクの期限が切れています</h1><div class="card"><p>購入したときのダウンロードページを開き直してください。</p></div>`, 403);
+  }
+  if (!env.ASSETS) return new Response("not configured", { status: 500 });
+  const get = (name) => env.ASSETS.fetch(new Request(`${url.origin}/${item.id}/${name}`));
+  // 分割していないファイルがあればそれを、無ければ .001 から順につなげて返す
+  let parts = [];
+  const whole = await get(item.file);
+  if (whole.ok) parts = [whole];
+  else {
+    for (let i = 1; i < 1000; i++) {
+      const r = await get(`${item.file}.${String(i).padStart(3, "0")}`);
+      if (!r.ok) break;
+      parts.push(r);
+    }
+  }
+  if (!parts.length) return new Response("file not found", { status: 404 });
+  const headers = { "content-type": "application/zip", "content-disposition": `attachment; filename="${item.file}"`, "cache-control": "private, no-store" };
+  const sizes = parts.map((r) => Number(r.headers.get("content-length")));
+  if (sizes.every((n) => n > 0)) headers["content-length"] = String(sizes.reduce((a, b) => a + b, 0));
+  if (parts.length === 1) return new Response(parts[0].body, { headers });
+  const { readable, writable } = new TransformStream();
+  (async () => {
+    for (const r of parts) await r.body.pipeTo(writable, { preventClose: true });
+    await writable.close();
+  })().catch((e) => writable.abort(e));
+  return new Response(readable, { headers });
+}
+
+async function linkSig(env, item, exp) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(`download:${env.ADMIN_TOKEN}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${item}|${exp}`));
+  return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function page(env, body, status = 200) {
@@ -375,6 +505,7 @@ async function reindex(env, uuid, name) {
 
 // プランごとの月額の商品・価格と webhook を Stripe に作って KV に保存する。
 // body: {} で既定（コンプリート 8000円・各ゲーム 1500円）。{"plans":{"complete":8000,"halloween":1500}} で書いたプランだけ作り直す
+// 買い切りの商品は、まだ無いものを既定の値段で作る。{"items":{"koma-battle":2000}} で書いた商品を作り直す
 async function setup(req, env, url) {
   const b = await req.json().catch(() => ({}));
   const currency = String(b.currency || "jpy");
@@ -390,6 +521,17 @@ async function setup(req, env, url) {
     const price = await stripe(env, "POST", "/prices", { product: product.id, unit_amount: String(Number(amount)), currency, "recurring[interval]": "month" });
     cfg.plans[id] = { priceId: price.id, amount: Number(amount) };
   }
+  cfg.items = cfg.items || {};
+  const items = b.items && typeof b.items === "object"
+    ? b.items
+    : Object.fromEntries(ITEMS.filter((i) => !cfg.items[i.id]).map((i) => [i.id, i.amount]));
+  for (const [id, amount] of Object.entries(items)) {
+    const it = ITEM[id];
+    if (!it || !(Number(amount) > 0)) return json({ error: `bad item or amount: ${id}` }, 400);
+    const product = await stripe(env, "POST", "/products", { name: it.name, description: it.desc });
+    const price = await stripe(env, "POST", "/prices", { product: product.id, unit_amount: String(Number(amount)), currency });
+    cfg.items[id] = { priceId: price.id, amount: Number(amount) };
+  }
   const events = {};
   EVENTS.forEach((e, i) => (events[`enabled_events[${i}]`] = e));
   if (!cfg.webhookId) {
@@ -403,7 +545,7 @@ async function setup(req, env, url) {
   cfg.currency = currency;
   for (const k of ["priceId", "amount", "games"]) delete cfg[k];
   await env.PASS.put(`cfg:${mode(env)}`, JSON.stringify(cfg));
-  return json({ mode: mode(env), currency, plans: cfg.plans, webhookId: cfg.webhookId });
+  return json({ mode: mode(env), currency, plans: cfg.plans, items: cfg.items, webhookId: cfg.webhookId });
 }
 
 // 手動で入れる・外す（配信者の招待やテスト用）。body: {"name":"kanetyyy","plan":"halloween","note":"..."}。plan を省くと complete

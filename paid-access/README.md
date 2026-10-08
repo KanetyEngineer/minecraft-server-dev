@@ -42,6 +42,23 @@ PC の sync/sync.js ──┘ 30秒ごとに /api/players（uuid・名前・入�
 
 テスト: `npm test`（Stripe と Mojang は偽物）
 
+### 買い切りのダウンロード商品（コマバトル RPG 2,000円）
+
+| パス | 内容 |
+| --- | --- |
+| `/buy?item=koma-battle` | 購入ページ（返品不可への同意）→ Stripe Checkout（一回払い） |
+| `/download?session_id=…` | 支払い済みで、返金・チャージバックされていなければ、24時間有効の署名付きリンクを出す。ブックマークすれば何度でも開き直せる |
+| `/file/koma-battle/<ファイル名>?exp=&sig=` | 署名を確かめて、`private/koma-battle/` のファイル（分割なら `.001` からつなげて1つ）を返す |
+
+商品は `src/index.js` の `ITEMS`。ファイルは `worker/private/<商品id>/` に置く（git には入れない。Cloudflare の静的アセットは1ファイル 25MiB までなので、大きいものは `<ファイル名>.001`, `.002` … に分割）。`run_worker_first` なので、置いたファイルは署名なしでは取れない。購入の記録は Stripe の Checkout セッションだけで、KV は使わない。
+
+入れ方（PC の `paid-access\worker` で）:
+
+1. ファイルを `private\koma-battle\` にコピー（`koma-battle-rpg-1.0.1.zip.001` 〜 `.003`）
+2. `npx wrangler deploy`
+3. `{"plans":{}}` で `/admin/setup` を呼ぶ（月額の価格は作り直さず、まだ無い買い切り商品だけ作る）
+4. games.sharytech.com のダウンロードのリンクを `https://pass.sharytech.com/buy?item=koma-battle` に変え、games-site の公開フォルダからコマバトルのファイルを外す
+
 ## sync/（PC で常時動かす）
 
 `config.example.json` を `config.json` にコピーし、`token`（ADMIN_TOKEN）、各鯖のフォルダ・RCON ポート・パスワードを書いて `start-sync.bat`。

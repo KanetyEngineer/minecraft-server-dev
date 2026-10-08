@@ -10,6 +10,13 @@ routes = [{ pattern = "pass.sharytech.com", custom_domain = true }]
 binding = "PASS"
 id = "ab8d813bdc74433eb23443621b44c127"
 
+# 買い切りのダウンロード商品のファイル（private/<商品id>/<ファイル名> か、分割なら <ファイル名>.001 …）。
+# run_worker_first で、どのアクセスもまず Worker を通り、署名付きのリンクでしか出さない。ファイルは大きいので git には入れない
+[assets]
+directory = "./private"
+binding = "ASSETS"
+run_worker_first = true
+
 [vars]
 PRODUCT_NAME = "SharyTech Games 参加券"
 SITE_URL = "https://pass.sharytech.com"
