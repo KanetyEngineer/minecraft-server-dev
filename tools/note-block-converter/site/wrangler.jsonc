@@ -1,0 +1,8 @@
+{
+  // soundblock.sharytech.com: 音源→音ブロック変換ツール oto2noteblock の配布ページ（静的ページだけ、Cloudflare Workers の assets）
+  // 配布の zip は `python tools/build.py`（隣の oto2noteblock フォルダから作る）、公開は `npx wrangler deploy`
+  "name": "sharytech-soundblock",
+  "compatibility_date": "2026-10-08",
+  "assets": { "directory": "./public", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "soundblock.sharytech.com", "custom_domain": true }]
+}
