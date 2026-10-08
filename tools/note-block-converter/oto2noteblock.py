@@ -192,7 +192,7 @@ def suggest_speed(path: str, per_sec: int = 10):
         return None
     bpm = 60_000_000 / tempos.pop()
     eighth = 60 / bpm / 2 * per_sec  # 8 分音符の長さ（ティック）
-    n = max(1, round(eighth))
+    n = max(1, math.ceil(eighth - 1e-6))  # 少し遅くする方に合わせる（速くはしない）
     return bpm, eighth / n
 
 
@@ -936,10 +936,6 @@ def main(argv=None):
         ext = ".mid"
     if ext in (".mid", ".midi"):
         notes = load_midi(src, args.instruments)
-        args.dp_speed = args.speed
-        fit20 = suggest_speed(src, 20)
-        if fit20 and args.fit_tempo:
-            args.dp_speed = fit20[1]
         fit = suggest_speed(src)
         if fit:
             bpm, sp = fit
@@ -954,8 +950,7 @@ def main(argv=None):
     else:
         sys.exit(f"対応していない形式です: {ext}")
 
-    if not hasattr(args, "dp_speed"):
-        args.dp_speed = args.speed
+    args.dp_speed = args.speed  # 装置とデータパックで同じ長さにする（0.1 秒刻みに合えば 0.05 秒刻みにも合う）
     slots, dropped = quantize(notes, args.speed, args.max_lanes, args.min_velocity)
     dv = DATA_VERSIONS.get(args.mc)
     if dv is None:
