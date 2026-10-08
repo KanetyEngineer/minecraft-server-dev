@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oto2noteblock | 音源を音ブロック演奏に変換</title>
+<meta name="description" content="MIDI・音声・.nbs を、Minecraft Java 版の音ブロック演奏装置の設計図（.litematic / .schem）や、ゲーム内の音と演出付きで鳴らすデータパックに変換。1.19.4〜26.2 対応。ブラウザだけで変換できます。無料。">
+<meta property="og:title" content="oto2noteblock | 音源を音ブロック演奏に変換">
+<meta property="og:description" content="MIDI・音声から音ブロック装置の設計図と、コマンドで鳴らすデータパックを。1.19.4〜26.2 対応、ブラウザで変換。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://soundblock.sharytech.com/">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
+<style>
+  :root {
+    --bg: #0b0d16; --bg2: #121524; --card: #181c2f; --line: #2a3050;
+    --text: #eef1fa; --muted: #9ba3c2; --accent: #f59e0b; --wood: #a16207; --cyan: #22e3f0; --green: #86efac; --red: #fca5a5;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; line-height: 1.75; }
+  a { color: var(--cyan); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--bg2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: .9em; word-break: break-all; }
+  pre { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(11,13,22,.88); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 18px; height: 56px; overflow-x: auto; white-space: nowrap; }
+  nav .logo { font-weight: 800; text-decoration: none; margin-right: auto; color: var(--text); }
+  nav .logo b { color: var(--accent); }
+  nav a.l { color: var(--muted); text-decoration: none; font-size: 14px; }
+  nav a.l:hover { color: var(--text); }
+  header.hero { border-bottom: 1px solid var(--line);
+    background: radial-gradient(ellipse at 85% 20%, rgba(245,158,11,.18), transparent 55%), radial-gradient(ellipse at 5% 95%, rgba(34,227,240,.14), transparent 55%); }
+  .hero .wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: center; padding-top: 52px; padding-bottom: 52px; }
+  @media (max-width: 860px) { .hero .wrap { grid-template-columns: 1fr; } }
+  .badge { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 13px; background: var(--bg2); }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.25; margin: 14px 0 10px; }
+  h1 .a { color: var(--accent); } h1 .c { color: var(--cyan); }
+  .lead { color: var(--muted); font-size: 17px; margin: 0 0 22px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 10px; text-decoration: none; font-weight: 700; border: 1px solid var(--line); color: var(--text); background: var(--card); cursor: pointer; font-size: 15px; font-family: inherit; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+  .btn:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  /* 音ブロックの絵 */
+  .roll { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: 0 18px 50px rgba(245,158,11,.12); }
+  .roll .grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; }
+  .roll .grid i { aspect-ratio: 1; border-radius: 3px; background: var(--bg2); }
+  .roll .grid i.n { background: linear-gradient(135deg, #b45309, #78350f); box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); animation: pop 2.4s infinite; }
+  .roll .grid i.r { background: #7f1d1d; }
+  .roll .cap { color: var(--muted); font-size: 13px; margin-top: 10px; text-align: center; }
+  @keyframes pop { 0%, 100% { filter: none; } 6% { filter: brightness(1.8) drop-shadow(0 0 6px #fbbf24); } 20% { filter: none; } }
+  @media (prefers-reduced-motion: reduce) { .roll .grid i.n { animation: none; } }
+  section { padding: 54px 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: clamp(22px, 3.4vw, 30px); margin: 0 0 6px; }
+  h3 { font-size: 18px; margin: 26px 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .card .ic { font-size: 28px; }
+  .card h3 { margin: 6px 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  ol.steps { padding-left: 22px; } ol.steps li { margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .note { background: var(--bg2); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 14px; color: var(--muted); font-size: 14px; margin: 14px 0; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 700; }
+  details p { color: var(--muted); margin: 8px 0 0; font-size: 15px; }
+  footer { padding: 30px 0 50px; color: var(--muted); font-size: 13px; }
+  /* 変換 */
+  .conv { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .conv { grid-template-columns: 1fr; } }
+  .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px 16px; text-align: center; background: var(--bg2); cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--accent); background: rgba(245,158,11,.08); }
+  .drop .big { font-size: 34px; }
+  .drop .fn { font-weight: 700; margin-top: 6px; word-break: break-all; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  @media (max-width: 480px) { .opts { grid-template-columns: 1fr; } }
+  .opts label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 4px; }
+  .opts label.chk { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+  .opts .full { grid-column: 1 / -1; }
+  .opts fieldset { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 12px; margin: 4px 0 0; }
+  .opts legend { color: var(--muted); font-size: 13px; padding: 0 6px; }
+  .opts fieldset .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  @media (max-width: 480px) { .opts fieldset .row { grid-template-columns: 1fr; } }
+  select, input[type=number], input[type=text] { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 15px; font-family: inherit; width: 100%; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .fmt { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  #status { color: var(--muted); font-size: 14px; margin: 10px 0 0; min-height: 1.5em; }
+  #log { max-height: 240px; overflow: auto; white-space: pre-wrap; margin: 12px 0 0; display: none; }
+  #log .err { color: var(--red); }
+  #outs { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  #outs a { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); text-decoration: none; color: var(--text); word-break: break-all; }
+  #outs a span { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #outs a:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#"><b>oto2</b>noteblock</a>
+  <a class="l" href="#convert">ブラウザで変換</a>
+  <a class="l" href="#windows">Windows 版</a>
+  <a class="l" href="#howto">使い方</a>
+  <a class="l" href="#options">オプション</a>
+  <a class="l" href="#faq">よくある質問</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="badge">無料・Minecraft Java 版 1.19.4〜26.2</span>
+    <h1>好きな曲を<br><span class="a">音ブロック</span>で<span class="c">鳴らそう</span></h1>
+    <p class="lead">MIDI や音声ファイルを入れるだけで、音ブロック演奏装置の設計図（Litematica・WorldEdit）と、ゲーム内の音や演出付きでコマンドから鳴らすデータパックができます。</p>
+    <div class="btns">
+      <a class="btn primary" href="#convert">ブラウザで変換する</a>
+      <a class="btn" href="#windows">Windows 版をダウンロード</a>
+    </div>
+    <p class="meta">ブラウザ版は、ファイルをどこにも送らずにあなたのパソコンの中だけで変換します。</p>
+  </div>
+  <div class="roll" aria-hidden="true">
+    <div class="grid" id="roll"></div>
+    <div class="cap">反復装置 → 音ブロック → 反復装置 … の列を、同時に鳴る音の数だけ並べます</div>
+  </div>
+</div></header>
+
+<section id="features"><div class="wrap">
+  <h2>できること</h2>
+  <p class="sub">入れたファイルから、目的に合わせて 5 種類のファイルを作ります。</p>
+  <div class="cards">
+    <div class="card"><div class="ic">🧱</div><h3>装置の設計図</h3><p><code>.litematic</code>（Litematica）と <code>.schem</code>（WorldEdit）。スタートボタン 1 つで全部の列が同時に鳴ります。長い曲は箱形に折り返せます。</p></div>
+    <div class="card"><div class="ic">✨</div><h3>コマンド版データパック</h3><p>装置なしで <code>/function</code> から再生。0.05 秒刻みで鳴り、音の強弱、ゲーム内の音の重ね、音符のパーティクルや花火の演出付き。</p></div>
+    <div class="card"><div class="ic">🎼</div><h3>Note Block Studio 用 .nbs</h3><p>試聴や手直しに。直した .nbs をもう一度入れれば、そのまま装置にできます。</p></div>
+    <div class="card"><div class="ic">🎤</div><h3>音声からも</h3><p>MP3・WAV などは、Spotify の採譜 AI「Basic Pitch」で楽譜にしてから変換します（Windows 版）。</p></div>
+    <div class="card"><div class="ic">🎯</div><h3>実機で確かめ済み</h3><p>バニラ 1.19.4 と 26.2 の鯖で、全部の音ブロック・全部のコマンドが予定どおりのタイミングで鳴ることを確認しています。</p></div>
+    <div class="card"><div class="ic">🎚️</div><h3>リズムのよれを直す</h3><p>レッドストーンは 0.1 秒刻み。テンポが合わない曲は、少しだけ速さを変えてリズムを等間隔にできます（<code>--fit-tempo</code>）。</p></div>
+  </div>
+</div></section>
+
+<section id="convert"><div class="wrap">
+  <h2>ブラウザで変換</h2>
+  <p class="sub">MIDI（.mid）か Note Block Studio の .nbs を入れてください。インストールは要りません。</p>
+  <div class="conv">
+    <div class="panel">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="ファイルを選ぶ">
+        <div class="big">🎵</div>
+        <div>ここにファイルをドロップ<br><small style="color:var(--muted)">またはクリックして選ぶ（.mid / .midi / .nbs）</small></div>
+        <div class="fn" id="fname"></div>
+      </div>
+      <input type="file" id="file" accept=".mid,.midi,.nbs,audio/*" hidden>
+      <div class="note" id="audioNote" style="display:none">音声ファイル（MP3・WAV など）はブラウザでは楽譜にできません。<a href="https://basicpitch.spotify.com/" target="_blank" rel="noopener">Basic Pitch</a> で MIDI にしてから入れるか、<a href="#windows">Windows 版</a>に直接入れてください。</div>
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn primary" id="run" disabled>変換する</button>
+      </div>
+      <p id="status">準備中…</p>
+      <pre id="log"></pre>
+      <ul id="outs"></ul>
+    </div>
+    <div class="panel">
+      <div class="opts">
+        <label>Minecraft のバージョン
+          <select id="o-mc">
+            <option>26.2</option><option>1.21.11</option><option>1.21.4</option><option>1.21.1</option><option>1.20.4</option><option>1.20.1</option><option>1.19.4</option>
+          </select></label>
+        <label>楽器の決め方
+          <select id="o-inst">
+            <option value="auto">MIDI の音色から</option>
+            <option value="pitch">高さだけ（ベース・ハープ・ベル）</option>
+          </select></label>
+        <label>折り返す長さ（0 で一直線）
+          <input type="number" id="o-row" value="64" min="0" max="512"></label>
+        <label>同時に鳴らす最大の音数
+          <input type="number" id="o-lanes" value="12" min="1" max="64"></label>
+        <label class="chk full"><input type="checkbox" id="o-fit"> テンポを 0.1 秒刻みに合わせる（速い曲のリズムのよれを直す）</label>
+        <div class="full">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:4px">作るファイル</div>
+          <div class="fmt">
+            <label class="chk"><input type="checkbox" class="o-fmt" value="litematic" checked> .litematic</label>
+            <label class="chk"><input type="checkbox" class="o-fmt" value="schem" checked> .schem</label>
+            <label class="chk"><input type="checkbox" class="o-fmt" value="nbs" checked> .nbs</label>
+            <label class="chk"><input type="checkbox" class="o-fmt" value="mcfunction" checked> 設置用 .mcfunction</label>
+            <label class="chk"><input type="checkbox" class="o-fmt" value="datapack" checked> データパック</label>
+          </div>
+        </div>
+        <fieldset>
+          <legend>データパック（コマンド版）</legend>
+          <div class="row">
+            <label>音
+              <select id="o-sounds">
+                <option value="note">音ブロックの音だけ</option>
+                <option value="game">ゲーム内の音を重ねる</option>
+              </select></label>
+            <label>演出
+              <select id="o-effects">
+                <option value="none">なし</option>
+                <option value="basic" selected>ふつう</option>
+                <option value="full">多め</option>
+              </select></label>
+            <label>名前（英小文字・数字・_）
+              <input type="text" id="o-dpid" placeholder="例: mysong（空なら自動）" maxlength="16" pattern="[a-z0-9_]*"></label>
+            <label class="chk" style="align-self:end"><input type="checkbox" id="o-loop"> 繰り返す</label>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section id="windows"><div class="wrap">
+  <h2>Windows 版</h2>
+  <p class="sub">音声ファイル（MP3・WAV など）から変換したい時や、曲をまとめて変換したい時に。ドラッグ＆ドロップで使えます。</p>
+  <div class="btns">
+    <a class="btn primary" id="dl" href="downloads/oto2noteblock-1.0.0-windows.zip" download>Windows 版をダウンロード（zip）</a>
+  </div>
+  <p class="meta" id="dlmeta">v1.0.0</p>
+  <ol class="steps">
+    <li><a href="https://www.python.org/downloads/" target="_blank" rel="noopener">Python</a>（3.10 以上）を入れる。インストールの最初の画面で <b>「Add python.exe to PATH」にチェック</b>を入れてください。</li>
+    <li>zip を展開し、<code>setup.bat</code> をダブルクリック。音声も変換したい時は、途中の質問に <code>Y</code>（約 300MB ダウンロード）。</li>
+    <li>曲のファイルを <code>convert_26.2.bat</code> か <code>convert_1.19.4.bat</code> にドラッグ＆ドロップ。曲と同じフォルダに設計図などができます。</li>
+  </ol>
+  <div class="note">ほかのバージョンや細かい設定は、同じフォルダでコマンドから使えます。例: <code>venv\Scripts\python oto2noteblock.py 曲.mid --mc 1.21.11 --fit-tempo</code>（オプションは<a href="#options">下の表</a>）。</div>
+</div></section>
+
+<section id="howto"><div class="wrap">
+  <h2>使い方</h2>
+  <h3>装置を建てる（.litematic）</h3>
+  <ol class="steps">
+    <li>できた <code>曲名.litematic</code> を、Minecraft のフォルダの <code>schematics</code> に入れる。</li>
+    <li>Litematica のメニュー（<code>M</code> キー）→「Load Schematics」で読み込み、平らな場所に置く。クリエイティブなら設置の手助け（Easy Place など）を使うと早いです。</li>
+    <li>設計図の角（いちばん手前・左）にある<b>ボタン</b>を押すと演奏が始まります。</li>
+  </ol>
+  <div class="note">音ブロックの真上は空気にしておいてください。長い曲は近くのチャンクが読み込まれている間しか鳴らないので、折り返し（箱形）がおすすめです。WorldEdit なら <code>曲名.schem</code> を <code>//schem load</code> で。</div>
+  <h3>コマンドで鳴らす（データパック）</h3>
+  <ol class="steps">
+    <li><code>曲名_datapack.zip</code> を、ワールドのフォルダの <code>datapacks</code> にそのまま入れる（展開しない）。</li>
+    <li>ゲームで <code>/reload</code>（鯖ならコンソールでも可）。</li>
+    <li><code>/function 名前:play</code> で自分に、<code>/function 名前:play_all</code> で全員に流す。<code>/function 名前:stop</code> で止める。</li>
+  </ol>
+  <div class="note">「名前」は変換のときに表示されます（例: <code>mysong:play</code>）。日本語の曲名だと <code>song_1a2b3c</code> のような名前になるので、上の「名前」の欄で決めておくと覚えやすいです。</div>
+  <h3>設置用 .mcfunction</h3>
+  <p><code>曲名_place.mcfunction</code> は、データパックの関数として実行すると、実行した人の足元を角にして装置を組み立てます。</p>
+</div></section>
+
+<section id="options"><div class="wrap">
+  <h2>オプション（Windows 版・コマンド）</h2>
+  <p class="sub"><code>python oto2noteblock.py 曲.mid [オプション]</code></p>
+  <div class="scroll"><table>
+    <tr><th>オプション</th><th>意味</th></tr>
+    <tr><td><code>--mc 1.19.4</code></td><td>バージョン（既定 26.2。ほか 1.21.11、1.21.4、1.21.1、1.20.4、1.20.1、1.19.4）</td></tr>
+    <tr><td><code>--row-length 64</code></td><td>64 ブロックごとに上へ折り返して箱形に（0 で一直線）</td></tr>
+    <tr><td><code>--max-lanes 12</code></td><td>同時に鳴らす音の最大数。多いほど原曲に近いが装置が太くなる（1 列 3 ブロック幅）</td></tr>
+    <tr><td><code>--fit-tempo</code></td><td>テンポを 0.1 秒刻みに合わせ、リズムのよれを直す（例: 179 BPM → 約 150 BPM）</td></tr>
+    <tr><td><code>--speed 0.9</code></td><td>速さの倍率</td></tr>
+    <tr><td><code>--instruments pitch</code></td><td>楽器を高さだけで決める。<code>single:bell</code> で全部同じ楽器</td></tr>
+    <tr><td><code>--min-velocity 40</code></td><td>弱い音を捨てる（音声から作って雑音が多い時に）</td></tr>
+    <tr><td><code>--onset 0.7</code></td><td>音声解析で音の出だしを厳しく（音が多すぎる時は上げる）</td></tr>
+    <tr><td><code>--formats litematic,datapack</code></td><td>作るファイルを選ぶ（litematic, schem, nbs, mcfunction, datapack）</td></tr>
+    <tr><td><code>--sounds game</code></td><td>データパックで、音ブロックの音にゲーム内の音を重ねる。自分の対応表 .json も指定可</td></tr>
+    <tr><td><code>--effects full</code></td><td>データパックの演出（none / basic / full）</td></tr>
+    <tr><td><code>--stage X Y Z</code></td><td>データパックを、聞く人の位置ではなく決まった場所から鳴らす（<code>--stage-volume 4</code> で 64 ブロック先まで）</td></tr>
+    <tr><td><code>--loop</code></td><td>データパックで、最後まで行ったら繰り返す</td></tr>
+    <tr><td><code>--dp-id mysong</code></td><td>データパックの名前（<code>/function mysong:play</code>）</td></tr>
+    <tr><td><code>--rcon 127.0.0.1:25575 --rcon-password PW --origin X Y Z</code></td><td>鯖に RCON で直接建てる</td></tr>
+  </table></div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2>よくある質問</h2>
+  <details><summary>音が多すぎる・外れている</summary><p>音声から作った時に起きやすいです。歌入りの曲より、楽器のソロやピアノの耳コピ音源が向いています。<code>曲名.nbs</code> を Note Block Studio で開いて、いらない音を消してから入れ直すときれいになります。</p></details>
+  <details><summary>リズムが少しよれる</summary><p>音ブロックはレッドストーンの 0.1 秒刻みでしか鳴らせません。「テンポを 0.1 秒刻みに合わせる」（<code>--fit-tempo</code>）を使うと等間隔になります。データパック版は 0.05 秒刻みなので、よれが小さくなります。</p></details>
+  <details><summary>音が途中で止まる</summary><p>装置が長すぎて、遠くのチャンクが読み込まれていないためです。折り返し（箱形）にするか、データパック版を使ってください。</p></details>
+  <details><summary>データパックが有効にならない</summary><p><code>/datapack list</code> で確かめ、「使える」側にあれば <code>/datapack enable "file/ファイル名.zip"</code> で有効にしてください。バージョンは変換のときに合わせたものを使ってください。</p></details>
+  <details><summary>ブラウザ版でファイルは送られる？</summary><p>送られません。Python（Pyodide）をブラウザに読み込み、あなたのパソコンの中だけで変換します。</p></details>
+</div></section>
+
+<footer><div class="wrap">
+  oto2noteblock · <a href="https://games.sharytech.com/">SharyTech</a> · Minecraft は Mojang Studios の商標です。このツールは Mojang・Microsoft とは関係ありません。
+</div></footer>
+
+<script>
+// ヒーローの絵（音ブロックと反復装置の列）
+(() => {
+  const g = document.getElementById("roll");
+  const rows = [[1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0],[0,1,0,0,1,0,0,1,0,1,0,0,1,0,0,1],[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]];
+  rows.forEach((r) => r.forEach((v, i) => {
+    const c = document.createElement("i");
+    if (v) { c.className = "n"; c.style.animationDelay = (i * 0.15) + "s"; } else if (i % 2) c.className = "r";
+    g.appendChild(c);
+  }));
+})();
+
+// 変換
+const $ = (id) => document.getElementById(id);
+const worker = new Worker("worker.js");
+let file = null, busy = false, ready = false, urls = [];
+const status = (t) => { $("status").textContent = t; };
+const canRun = () => { $("run").disabled = !(ready && file && !busy && !/\.(mp3|wav|flac|ogg|m4a|aac|opus|aiff?)$/i.test(file.name)); };
+
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === "status") status(m.text);
+  else if (m.type === "ready") { ready = true; status(file ? "準備できました。「変換する」を押してください。" : "準備できました。ファイルを入れてください。"); canRun(); }
+  else if (m.type === "fatal") status("読み込みに失敗しました: " + m.text + "（ページを読み込み直してください）");
+  else if (m.type === "log") {
+    const log = $("log"); log.style.display = "block";
+    const s = document.createElement("span"); if (m.err) s.className = "err";
+    s.textContent = m.text.replaceAll("/work/out/", "").replaceAll("/work/in/", "") + "\n"; log.appendChild(s); log.scrollTop = log.scrollHeight;
+  } else if (m.type === "done") {
+    busy = false; canRun();
+    const outs = $("outs"); outs.innerHTML = "";
+    urls.forEach(URL.revokeObjectURL); urls = [];
+    for (const f of m.files) {
+      const url = URL.createObjectURL(new Blob([f.bytes])); urls.push(url);
+      const li = document.createElement("li"); const a = document.createElement("a");
+      a.href = url; a.download = f.name;
+      const n = document.createElement("b"); n.textContent = f.name;
+      const sz = document.createElement("span"); sz.textContent = f.bytes.length < 1024 ? f.bytes.length + " B" : (f.bytes.length / 1024).toFixed(1) + " KB";
+      a.append(n, sz); li.appendChild(a); outs.appendChild(li);
+    }
+    status(m.code === 0 && m.files.length ? `できました（${m.files.length} 個）。名前を押すとダウンロードします。` : "変換できませんでした。上のメッセージを見てください。");
+  }
+};
+
+function pick(f) {
+  file = f;
+  $("fname").textContent = f ? f.name : "";
+  const audio = f && /\.(mp3|wav|flac|ogg|m4a|aac|opus|aiff?)$/i.test(f.name);
+  $("audioNote").style.display = audio ? "block" : "none";
+  if (ready && f && !audio) status("「変換する」を押してください。");
+  canRun();
+}
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+$("file").addEventListener("change", (e) => pick(e.target.files[0] || null));
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); });
+
+$("run").addEventListener("click", async () => {
+  if (!file || busy) return;
+  const dpid = $("o-dpid").value.trim();
+  if (dpid && !/^[a-z0-9_]{1,16}$/.test(dpid)) { status("データパックの名前は英小文字・数字・_ の 16 文字までにしてください。"); return; }
+  const fmts = [...document.querySelectorAll(".o-fmt:checked")].map((c) => c.value);
+  if (!fmts.length) { status("作るファイルを 1 つ以上選んでください。"); return; }
+  const args = ["--mc", $("o-mc").value, "--row-length", String(+$("o-row").value || 0), "--max-lanes", String(Math.max(1, +$("o-lanes").value || 12)),
+    "--instruments", $("o-inst").value, "--formats", fmts.join(","), "--sounds", $("o-sounds").value, "--effects", $("o-effects").value];
+  if ($("o-fit").checked) args.push("--fit-tempo");
+  if ($("o-loop").checked) args.push("--loop");
+  if (dpid) args.push("--dp-id", dpid);
+  busy = true; canRun();
+  $("log").innerHTML = ""; $("outs").innerHTML = "";
+  status("変換中…（長い曲は数十秒かかります）");
+  const data = await file.arrayBuffer();
+  worker.postMessage({ id: Date.now(), name: file.name, data, args }, [data]);
+});
+
+// zip の大きさ
+fetch("downloads/latest.json", { cache: "no-cache" }).then((r) => r.ok ? r.json() : null).then((j) => {
+  if (!j) return;
+  $("dl").href = "downloads/" + j.file;
+  $("dlmeta").textContent = `v${j.version} · ${(j.size / 1024).toFixed(0)} KB · Windows 10/11`;
+}).catch(() => {});
+</script>
+</body>
+</html>

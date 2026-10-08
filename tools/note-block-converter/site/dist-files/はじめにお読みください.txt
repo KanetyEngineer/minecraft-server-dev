@@ -1,0 +1,24 @@
+oto2noteblock - 音源を Minecraft の音ブロック演奏装置・データパックに変換するツール
+https://soundblock.sharytech.com/
+
+■ 準備（最初の 1 回だけ）
+1. Python 3.10 以上を入れる: https://www.python.org/downloads/
+   インストールの最初の画面で「Add python.exe to PATH」にチェックを入れてください。
+2. setup.bat をダブルクリック。必要な部品（mido）を入れます。
+   MP3 や WAV などの音声も変換したい時は、途中の質問に Y と答えてください（約 300MB ダウンロード）。
+
+■ 変換する
+曲のファイル（.mid / .nbs / .mp3 / .wav など）を、
+  convert_26.2.bat   … 26.2 の鯖・ワールド用
+  convert_1.19.4.bat … 1.19.4 の鯖・ワールド用
+のどちらかにドラッグ＆ドロップします。いくつかまとめて落とせます。
+曲と同じフォルダに、次のファイルができます。
+  曲名.litematic          Litematica で貼り付ける設計図
+  曲名.schem              WorldEdit 用の設計図
+  曲名.nbs                Note Block Studio で試聴・手直し
+  曲名_place.mcfunction   コマンドで設置する関数
+  曲名_datapack.zip       装置なしでコマンドで鳴らすデータパック（ゲーム内の音・演出付き）
+
+ほかのバージョン（1.21.11 / 1.21.4 / 1.21.1 / 1.20.4 / 1.20.1）や細かい設定は、
+README.md の「よく使うオプション」を見て、コマンドで実行してください。例:
+  venv\Scripts\python oto2noteblock.py 曲.mid --mc 1.21.11 --fit-tempo

@@ -1,0 +1,6 @@
+/py/*
+  Cache-Control: no-cache
+/worker.js
+  Cache-Control: no-cache
+/downloads/latest.json
+  Cache-Control: no-cache
