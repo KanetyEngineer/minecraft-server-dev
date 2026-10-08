@@ -21,6 +21,7 @@ const GAMES = [
   { id: "tiktok-defense", name: "TikTok Defense", desc: "銃でウェーブを守り抜くディフェンス（Fabric 26.1.2＋専用 MOD パック）" },
   { id: "clash-royale", name: "Clash Royale MC", desc: "AI や友達とタワーを攻め合う対戦" },
   { id: "anime-umetate", name: "アニメ技 埋め立て", desc: "アニメの技で妨害される埋め立てチャレンジ" },
+  { id: "attack-on-titan", name: "巨人討伐", desc: "立体機動で巨人を倒す討伐マップ" },
 ];
 const COMPLETE = { id: "complete", name: "コンプリートプラン", desc: "上の全ゲームに入れます（ゲームが増えたら追加料金なしで含まれます）" };
 const PLANS = [COMPLETE, ...GAMES];

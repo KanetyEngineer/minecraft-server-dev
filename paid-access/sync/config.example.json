@@ -7,6 +7,7 @@
     { "id": "halloween",      "dir": "C:/Users/kanek/Documents/ClaudeCode/halloween-map/server",      "rconPort": 25575, "rconPassword": "", "enforce": false },
     { "id": "tiktok-defense", "dir": "C:/Users/kanek/Documents/ClaudeCode/tiktok-defense/server",     "rconPort": 25584, "rconPassword": "", "enforce": false },
     { "id": "clash-royale",   "dir": "C:/Users/kanek/Documents/ClaudeCode/clash-royale-mc/server",    "rconPort": 25581, "rconPassword": "", "enforce": false },
-    { "id": "anime-umetate",  "dir": "C:/Users/kanek/Documents/ClaudeCode/anime-umetate/server",      "rconPort": 25591, "rconPassword": "", "enforce": false }
+    { "id": "anime-umetate",  "dir": "C:/Users/kanek/Documents/ClaudeCode/anime-umetate/server",      "rconPort": 25591, "rconPassword": "", "enforce": false },
+    { "id": "attack-on-titan", "dir": "（巨人討伐の鯖フォルダ。公開のときに足す）",                    "rconPort": 25651, "rconPassword": "", "enforce": false }
   ]
 }

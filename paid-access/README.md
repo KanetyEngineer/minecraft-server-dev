@@ -1,6 +1,6 @@
 # 参加券（Stripe の月額サブスクリプション → ホワイトリスト）
 
-games.sharytech.com のゲーム鯖（ハロウィン・TikTok Defense・Clash Royale MC・アニメ技 埋め立て）を、月額の参加券を契約中の人だけ入れるようにする仕組み。Kanety SMP は対象外で、今まで通り誰でも入れる。
+games.sharytech.com のゲーム鯖（ハロウィン・TikTok Defense・Clash Royale MC・アニメ技 埋め立て・巨人討伐）を、月額の参加券を契約中の人だけ入れるようにする仕組み。Kanety SMP は対象外で、今まで通り誰でも入れる。
 
 プランは各ゲーム（既定 月1,500円）と、全ゲームのコンプリートプラン（既定 月8,000円）。制限もゲームごとにかける（sync の `enforce` とロビーの `paid` を行き先ごとに）。
 
@@ -35,6 +35,8 @@ PC の sync/sync.js ──┘ 30秒ごとに /api/players（uuid・名前・入�
 5. `npx wrangler deploy`
 6. `curl -X POST https://pass.sharytech.com/admin/setup -H "Authorization: Bearer <ADMIN_TOKEN>" -d "{}"`
 7. Stripe の 設定 → Billing → カスタマーポータル を有効にし、ログインリンクを `wrangler.toml` の `PORTAL_URL` に書いて再デプロイ（利用者が自分で解約・カード変更できるように）
+
+ゲームを足すときは `worker/src/index.js` の `GAMES` に足して（id はロビーの行き先と sync の `servers[].id` に揃える）デプロイし、`{"plans":{"<id>":1500}}` で setup を呼ぶ。コンプリートには自動で含まれる。
 
 本番に切り替えるときは 4 で `sk_live_…` を入れ直して 6・7 をもう一度（テストと本番で設定は別々に保存される）。返金するときは Stripe で返金したうえでサブスクリプションも「今すぐキャンセル」する（キャンセルで名簿から外れる）。
 

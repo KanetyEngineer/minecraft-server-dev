@@ -68,8 +68,8 @@ let r = await call("/admin/setup", { method: "POST", headers: admin, body: "{}" 
 const setup = await r.json();
 assert.equal(setup.plans.complete.amount, 8000);
 assert.equal(setup.plans.halloween.amount, 1500);
-assert.equal(Object.keys(setup.plans).length, 5);
-assert.deepEqual(prices, [8000, 1500, 1500, 1500, 1500]);
+assert.equal(Object.keys(setup.plans).length, 6);
+assert.deepEqual(prices, [8000, 1500, 1500, 1500, 1500, 1500]);
 const home = await (await call("/?plan=clash-royale")).text();
 assert.match(home, /8,000円/);
 assert.match(home, /1,500円/);
@@ -103,18 +103,18 @@ assert.match(chk, /Clash Royale MC: 未契約/);
 const s2 = await buy("complete");
 sessions[s2.id] = paid(s2);
 assert.match(await (await call(`/success?session_id=${s2.id}`)).text(), /全ゲーム/);
-assert.deepEqual((await list())[0].games, ["halloween", "tiktok-defense", "clash-royale", "anime-umetate"]);
+assert.deepEqual((await list())[0].games, ["halloween", "tiktok-defense", "clash-royale", "anime-umetate", "attack-on-titan"]);
 // コンプリート契約中は単品を買わせない
 assert.match(await loc({ name: "Notch", plan: "anime-umetate", agree: "1" }), /コンプリートプランを契約中/);
 
 // 支払いの再試行中（past_due）は入れたまま、unpaid になったら外れる
 await hook("customer.subscription.updated", sub(s2, "past_due"));
-assert.equal((await list())[0].games.length, 4);
+assert.equal((await list())[0].games.length, 5);
 await hook("customer.subscription.updated", sub(s2, "unpaid"));
 assert.deepEqual((await list())[0].games, ["halloween"]);
 // 支払いが戻ったら復活
 await hook("customer.subscription.updated", sub(s2, "active"));
-assert.equal((await list())[0].games.length, 4);
+assert.equal((await list())[0].games.length, 5);
 
 // コンプリートを解約（期間が終わって deleted）→ ハロウィンだけ残る
 await hook("customer.subscription.deleted", sub(s2, "canceled"));
