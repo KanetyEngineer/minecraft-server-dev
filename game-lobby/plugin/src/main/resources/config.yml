@@ -8,6 +8,11 @@
 lobby-name: "<gold><bold>GAME LOBBY</bold></gold>"
 lobby-address: "stamina-proves.tun.ply.gg"
 
+# 参加券。paid: true の行き先は、paid-players.txt（paid-access/sync が書く）に載っている人と OP だけ転送する。
+# ファイルが無い間は誰も止めない。載っていない人には pass-url の購入ページを案内する
+pass-url: "https://pass.sharytech.com/"
+paid-list-file: "paid-players.txt"
+
 destinations:
   halloween:
     name: "<gradient:#ff7a00:#b000ff><bold>Halloween Night</bold></gradient>"

@@ -1,0 +1,12 @@
+{
+  "api": "https://pass.sharytech.com",
+  "token": "ADMIN_TOKEN と同じ文字列",
+  "intervalSeconds": 30,
+  "lobbyPaidFile": "C:/Users/kanek/Documents/ClaudeCode/game-lobby/server/plugins/GameLobby/paid-players.txt",
+  "servers": [
+    { "id": "halloween",      "dir": "C:/Users/kanek/Documents/ClaudeCode/halloween-map/server",      "rconPort": 25575, "rconPassword": "", "enforce": false },
+    { "id": "tiktok-defense", "dir": "C:/Users/kanek/Documents/ClaudeCode/tiktok-defense/server",     "rconPort": 25584, "rconPassword": "", "enforce": false },
+    { "id": "clash-royale",   "dir": "C:/Users/kanek/Documents/ClaudeCode/clash-royale-mc/server",    "rconPort": 25581, "rconPassword": "", "enforce": false },
+    { "id": "anime-umetate",  "dir": "C:/Users/kanek/Documents/ClaudeCode/anime-umetate/server",      "rconPort": 25591, "rconPassword": "", "enforce": false }
+  ]
+}

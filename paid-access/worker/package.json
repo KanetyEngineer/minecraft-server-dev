@@ -1,0 +1,13 @@
+{
+  "name": "sharytech-pass",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
