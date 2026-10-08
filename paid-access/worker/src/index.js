@@ -1,20 +1,36 @@
-// SharyTech Games の参加券（Stripe 決済）を受け付ける Cloudflare Worker。
-// 決済が終わったプレイヤーを KV に記録し、PC の sync スクリプトが /api/players を読んで各ゲーム鯖のホワイトリストに入れる。
+// SharyTech Games の参加券（Stripe の月額サブスクリプション）を受け付ける Cloudflare Worker。
+// 契約中のプレイヤーを KV に記録し、PC の sync スクリプトが /api/players を読んで、そのゲーム鯖のホワイトリストに入れる。
+//
+// プラン: ゲームごと（id は sync の servers[].id・ロビーの行き先 id と同じ）と、全ゲームの "complete"。
 //
 // KV (PASS):
-//   p:<uuid>      → {"uuid","name","paidAt","session","pi","amount","mode","note"}
-//   pi:<id>       → uuid（返金・チャージバックのときに消すため）
-//   cfg:<mode>    → {"priceId","amount","currency","webhookId","webhookSecret"}（mode は test / live）
-//   idx:players   → [{"uuid","name"}]（購入者の一覧。p:<uuid> を足し引きするたびに書き直す）
+//   p:<plan>:<uuid> → {"uuid","name","plan","sub","status","since","mode","note"}
+//   sub:<id>        → "<plan>:<uuid>"（解約・支払い失敗のときに消すため）
+//   cfg:<mode>      → {"currency","webhookId","webhookSecret","plans":{"<plan>":{"priceId","amount"}}}（mode は test / live）
+//   idx:players     → [{"uuid","name","games":["<game>",…]}]（契約者の一覧。p: を足し引きするたびに書き直す）
 //
 // KV の無料枠は list・書き込み・削除が合わせて 1日1000回しかないので、sync が毎回 list すると枠が尽きる。
 // sync は普段 idx:players を1回読むだけにし、取りこぼしの直しとして ?full=1（list して一覧を作り直す）をたまに呼ぶ
 // Secrets: STRIPE_SECRET_KEY（sk_test_… か sk_live_…）, ADMIN_TOKEN（PC の sync と管理用）
-// Vars: SITE_URL, GAMES_URL, PRODUCT_NAME, SELLER_*（特定商取引法の表記）
+// Vars: SITE_URL, GAMES_URL, PRODUCT_NAME, PORTAL_URL（Stripe のカスタマーポータルのログインリンク）, SELLER_*（特定商取引法の表記）
 
 const STRIPE = "https://api.stripe.com/v1";
 const NAME_RE = /^[A-Za-z0-9_]{3,16}$/;
-const EVENTS = ["checkout.session.completed", "checkout.session.async_payment_succeeded", "charge.refunded", "charge.dispute.created"];
+const GAMES = [
+  { id: "halloween", name: "Halloween Night", desc: "カボチャ王の夜をめぐる配布マップ（3〜4人向け）" },
+  { id: "tiktok-defense", name: "TikTok Defense", desc: "銃でウェーブを守り抜くディフェンス（Fabric 26.1.2＋専用 MOD パック）" },
+  { id: "clash-royale", name: "Clash Royale MC", desc: "AI や友達とタワーを攻め合う対戦" },
+  { id: "anime-umetate", name: "アニメ技 埋め立て", desc: "アニメの技で妨害される埋め立てチャレンジ" },
+];
+const COMPLETE = { id: "complete", name: "コンプリートプラン", desc: "上の全ゲームに入れます（ゲームが増えたら追加料金なしで含まれます）" };
+const PLANS = [COMPLETE, ...GAMES];
+const PLAN = Object.fromEntries(PLANS.map((p) => [p.id, p]));
+const DEFAULT_AMOUNT = { complete: 8000, game: 1500 };
+// この状態のあいだは入れる。past_due（支払いの再試行中）は猶予として入れたままにする
+const ACTIVE = new Set(["active", "trialing", "past_due"]);
+const EVENTS = ["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
+
+const gamesOf = (plan) => (plan === COMPLETE.id ? GAMES.map((g) => g.id) : [plan]);
 
 export default {
   async fetch(req, env) {
@@ -58,76 +74,95 @@ function yen(amount, currency) {
 async function home(env, url) {
   const cfg = await config(env);
   const err = url.searchParams.get("error");
-  const price = cfg ? yen(cfg.amount, cfg.currency) : "準備中";
+  const sel = PLAN[url.searchParams.get("plan")] ? url.searchParams.get("plan") : "";
+  const name = esc(url.searchParams.get("name") || "");
+  const card = (p) => {
+    const c = cfg?.plans?.[p.id];
+    return `
+<div class="card${sel === p.id ? " sel" : ""}${p.id === COMPLETE.id ? " complete" : ""}" id="${p.id}">
+  <h2>${esc(p.name)}</h2>
+  <p class="small">${esc(p.desc)}</p>
+  <div class="price">${c ? yen(c.amount, cfg.currency) : "準備中"}<span> / 月（税込・自動更新）</span></div>
+  <form method="post" action="/checkout">
+    <input type="hidden" name="plan" value="${p.id}">
+    <label>Minecraft Java 版のユーザー名
+      <input name="name" required pattern="[A-Za-z0-9_]{3,16}" maxlength="16" autocomplete="off" placeholder="例: kanetyyy" value="${name}">
+    </label>
+    <label class="agree"><input type="checkbox" name="agree" value="1" required> <a href="/legal">特定商取引法に基づく表記</a>と、毎月自動で更新され、解約はいつでもでき次の更新日から止まることに同意します</label>
+    <button ${c ? "" : "disabled"}>${esc(p.name)} を申し込む（Stripe）</button>
+  </form>
+</div>`;
+  };
+  const order = sel ? [PLAN[sel], ...PLANS.filter((p) => p.id !== sel)] : PLANS;
   return `
 <h1>${esc(env.PRODUCT_NAME)}</h1>
-<p class="lead">ゲームロビーからハロウィン・ナイト、TikTok Defense、Clash Royale MC、アニメ技 埋め立てに入るための参加券です。</p>
-<div class="card">
-  <div class="price">${price}<span>（買い切り・税込）</span></div>
-  <ul>
-    <li>1回の購入で、上の4つのゲーム鯖にずっと入れます</li>
-    <li>決済が終わると1分ほどで自動的にホワイトリストに入ります</li>
-    <li>Kanety SMP は今まで通り無料です（参加券は要りません）</li>
-    <li>Minecraft Java 版の正規アカウントが必要です</li>
-  </ul>
-  ${mode(env) === "test" ? `<p class="test">テストモードです。実際のお金は動きません（カード 4242 4242 4242 4242）。</p>` : ""}
-  ${err ? `<p class="err">${esc(err)}</p>` : ""}
-  <form method="post" action="/checkout">
-    <label>Minecraft Java 版のユーザー名
-      <input name="name" required pattern="[A-Za-z0-9_]{3,16}" maxlength="16" autocomplete="off" placeholder="例: kanetyyy" value="${esc(url.searchParams.get("name") || "")}">
-    </label>
-    <label class="agree"><input type="checkbox" name="agree" value="1" required> <a href="/legal">特定商取引法に基づく表記</a>と、デジタル商品のため購入後の返金は原則できないことに同意します</label>
-    <button ${cfg ? "" : "disabled"}>購入へ進む（Stripe）</button>
-  </form>
-  <p class="small">購入済みか確かめる: <a href="/check?name=">/check?name=ユーザー名</a></p>
-</div>`;
+<p class="lead">ゲームロビーから入るゲーム鯖の月額参加券です。遊びたいゲームだけ、または全ゲームのコンプリートプランを選べます。</p>
+<ul class="small">
+  <li>申し込むと1分ほどで、そのゲーム鯖のホワイトリストに自動で入ります</li>
+  <li>毎月自動で更新されます。解約すると、支払い済みの期間が終わった時点で入れなくなります</li>
+  <li>Kanety SMP は今まで通り無料です（参加券は要りません）</li>
+  <li>Minecraft Java 版の正規アカウントが必要です</li>
+</ul>
+${mode(env) === "test" ? `<p class="test">テストモードです。実際のお金は動きません（カード 4242 4242 4242 4242）。</p>` : ""}
+${err ? `<p class="err">${esc(err)}</p>` : ""}
+${order.map(card).join("")}
+<p class="small"><a href="/check">契約中か確かめる</a>${env.PORTAL_URL ? ` · <a href="${esc(env.PORTAL_URL)}">解約・カードの変更（Stripe）</a>` : ""}</p>`;
 }
 
 async function checkout(req, env, url) {
   const form = await req.formData();
   const name = String(form.get("name") || "").trim();
-  const back = (msg) => Response.redirect(`${url.origin}/?error=${encodeURIComponent(msg)}&name=${encodeURIComponent(name)}`, 303);
-  if (!form.get("agree")) return back("表記と返金の条件への同意が必要です");
+  const plan = String(form.get("plan") || "");
+  const back = (msg) => Response.redirect(`${url.origin}/?error=${encodeURIComponent(msg)}&name=${encodeURIComponent(name)}&plan=${encodeURIComponent(plan)}`, 303);
+  if (!PLAN[plan]) return back("プランを選んでください");
+  if (!form.get("agree")) return back("表記と自動更新の条件への同意が必要です");
   if (!NAME_RE.test(name)) return back("ユーザー名は英数字と _ の3〜16文字です");
   const cfg = await config(env);
-  if (!cfg) return back("まだ販売の準備中です");
+  const price = cfg?.plans?.[plan];
+  if (!price) return back(`${PLAN[plan].name} はまだ準備中です`);
   const prof = await mojang(name);
   if (!prof) return back(`「${name}」という Java 版のアカウントが見つかりませんでした`);
-  if (await env.PASS.get(`p:${prof.uuid}`)) return back(`${prof.name} さんは購入済みです。そのままゲームに入れます`);
+  if (await env.PASS.get(`p:${plan}:${prof.uuid}`)) return back(`${prof.name} さんは ${PLAN[plan].name} を契約中です`);
+  if (plan !== COMPLETE.id && (await env.PASS.get(`p:${COMPLETE.id}:${prof.uuid}`))) return back(`${prof.name} さんはコンプリートプランを契約中なので、${PLAN[plan].name} にも入れます`);
 
-  const s = await stripe(env, "POST", "/checkout/sessions", {
-    mode: "payment",
-    "line_items[0][price]": cfg.priceId,
+  const meta = { mc_uuid: prof.uuid, mc_name: prof.name, plan };
+  const params = {
+    mode: "subscription",
+    "line_items[0][price]": price.priceId,
     "line_items[0][quantity]": "1",
     client_reference_id: prof.uuid,
-    "metadata[mc_uuid]": prof.uuid,
-    "metadata[mc_name]": prof.name,
-    "payment_intent_data[metadata][mc_uuid]": prof.uuid,
-    "payment_intent_data[metadata][mc_name]": prof.name,
-    "payment_intent_data[description]": `${env.PRODUCT_NAME} (${prof.name})`,
     locale: "ja",
     success_url: `${url.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${url.origin}/?name=${encodeURIComponent(prof.name)}`,
-  });
+    cancel_url: `${url.origin}/?name=${encodeURIComponent(prof.name)}&plan=${plan}#${plan}`,
+  };
+  for (const [k, v] of Object.entries(meta)) {
+    params[`metadata[${k}]`] = v;
+    params[`subscription_data[metadata][${k}]`] = v;
+  }
+  params["subscription_data[description]"] = `${env.PRODUCT_NAME} ${PLAN[plan].name} (${prof.name})`;
+  const s = await stripe(env, "POST", "/checkout/sessions", params);
   return Response.redirect(s.url, 303);
 }
 
 async function success(env, url) {
   const id = url.searchParams.get("session_id") || "";
   let name = "";
+  let plan = null;
   if (/^cs_[A-Za-z0-9_]+$/.test(id)) {
     const s = await stripe(env, "GET", `/checkout/sessions/${id}`);
     name = s.metadata?.mc_name || "";
+    plan = PLAN[s.metadata?.plan] || null;
     // webhook より先に戻ってきたときのため、支払い済みならここでも登録する
-    if (s.payment_status === "paid") await record(env, s);
+    if (s.status === "complete" && s.payment_status === "paid") await recordSession(env, s);
   }
+  const what = plan ? (plan.id === COMPLETE.id ? "全ゲーム" : plan.name) : "";
   return `
-<h1>ご購入ありがとうございます</h1>
+<h1>お申し込みありがとうございます</h1>
 <div class="card">
-  <p>${name ? `<b>${esc(name)}</b> さんを` : ""}ホワイトリストに登録しました。1分ほどで各ゲーム鯖に反映されます。</p>
+  <p>${name ? `<b>${esc(name)}</b> さんを` : ""}${what ? `${esc(what)} の` : ""}ホワイトリストに登録しました。1分ほどでゲーム鯖に反映されます。</p>
   <p>ゲームロビーに入って、遊びたいゲームのゲートに乗ってください。</p>
   <p><a class="btn" href="${esc(env.GAMES_URL)}">入り方を見る（games.sharytech.com）</a></p>
-  <p class="small">入れないときは Discord SharyTech でお知らせください。</p>
+  <p class="small">解約やカードの変更は ${env.PORTAL_URL ? `<a href="${esc(env.PORTAL_URL)}">こちら（Stripe）</a>から` : "Stripe から届くメールのリンクから"}できます。入れないときは Discord SharyTech でお知らせください。</p>
 </div>`;
 }
 
@@ -142,12 +177,13 @@ ${row("運営責任者", env.SELLER_MANAGER || env.SELLER_NAME || ask)}
 ${row("所在地", env.SELLER_ADDRESS || ask)}
 ${row("電話番号", env.SELLER_PHONE || ask)}
 ${row("メールアドレス", env.SELLER_EMAIL || ask)}
-${row("販売価格", "購入ページに表示（税込）")}
+${row("販売価格", "プランごとに申し込みページに表示（月額・税込）")}
 ${row("商品代金以外の必要料金", "インターネット接続料金・通信料金はお客様の負担となります")}
 ${row("支払方法", "クレジットカードほか Stripe が対応する方法")}
-${row("支払時期", "購入手続きの完了時")}
-${row("引渡時期", "決済完了後すぐ（通常1分以内にホワイトリストへ登録）")}
-${row("返品・キャンセル", "デジタル商品の性質上、購入後の返金・キャンセルはお受けできません。ただしサービスを提供できない場合は個別に対応します")}
+${row("支払時期", "申し込み時に初月分、以後は毎月の更新日に自動で請求")}
+${row("引渡時期", "決済完了後すぐ（通常1分以内に該当するゲーム鯖のホワイトリストへ登録）")}
+${row("契約期間・解約", "1か月ごとの自動更新。解約はいつでもでき、支払い済みの期間の終わりまで利用できます。日割りの返金はありません")}
+${row("返品・キャンセル", "デジタルサービスの性質上、支払い済みの期間の返金はお受けできません。ただしサービスを提供できない場合は個別に対応します")}
 ${row("動作環境", "Minecraft: Java Edition の正規アカウント（各ゲームが指定する版）")}
 </table>
 <p class="small">NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.</p>
@@ -156,10 +192,11 @@ ${row("動作環境", "Minecraft: Java Edition の正規アカウント（各ゲ
 
 async function check(env, url) {
   const name = String(url.searchParams.get("name") || "").trim();
-  if (!NAME_RE.test(name)) return page(env, `<h1>購入確認</h1><div class="card"><form><input name="name" placeholder="ユーザー名" required> <button>確認</button></form></div>`);
+  if (!NAME_RE.test(name)) return page(env, `<h1>契約の確認</h1><div class="card"><form><input name="name" placeholder="ユーザー名" required> <button>確認</button></form></div>`);
   const prof = await mojang(name);
-  const ok = prof && (await env.PASS.get(`p:${prof.uuid}`));
-  return page(env, `<h1>購入確認</h1><div class="card"><p>${esc(prof?.name || name)}: ${ok ? "購入済みです（ゲーム鯖に入れます）" : "まだ購入されていません"}</p><p><a href="/">参加券のページへ</a></p></div>`);
+  const games = new Set(prof ? (await playerOf(env, prof.uuid))?.games || [] : []);
+  const rows = GAMES.map((g) => `<li>${esc(g.name)}: ${games.has(g.id) ? "契約中（入れます）" : `未契約（<a href="/?plan=${g.id}&name=${encodeURIComponent(name)}#${g.id}">申し込む</a>）`}</li>`);
+  return page(env, `<h1>契約の確認</h1><div class="card"><p>${esc(prof?.name || name)}</p><ul>${rows.join("")}</ul><p><a href="/">参加券のページへ</a></p></div>`);
 }
 
 function page(env, body, status = 200) {
@@ -174,7 +211,7 @@ main{max-width:640px;margin:0 auto;padding:32px 16px}h1{font-size:24px;margin:0 
 label{display:block;margin:14px 0}input[name=name]{display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:16px}
 .agree{font-size:14px}button,.btn{display:inline-block;background:var(--accent);color:#000;border:0;border-radius:8px;padding:12px 20px;font-size:16px;font-weight:700;cursor:pointer;text-decoration:none}
 button[disabled]{opacity:.5;cursor:default}a{color:var(--accent)}.small{font-size:13px;color:var(--muted)}
-.err{color:#f87171}.test{color:#facc15;font-size:14px}.legal{border-collapse:collapse;width:100%;font-size:14px}
+.sel{border-color:var(--accent)}h2{font-size:20px;margin:0}.sel,.complete{border-color:var(--accent)}h2{font-size:20px;margin:0}.err{color:#f87171}.test{color:#facc15;font-size:14px}.legal{border-collapse:collapse;width:100%;font-size:14px}
 .legal th,.legal td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}.legal th{white-space:nowrap;color:var(--muted)}
 footer{margin-top:32px;font-size:12px;color:var(--muted)}</style></head><body><main>${body}
 <footer><a href="/legal">特定商取引法に基づく表記</a> · <a href="${esc(env.GAMES_URL)}">SharyTech Games</a><br>NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.</footer>
@@ -192,29 +229,45 @@ async function webhook(req, env) {
   }
   const ev = JSON.parse(body);
   const o = ev.data.object;
-  if (ev.type === "checkout.session.completed" || ev.type === "checkout.session.async_payment_succeeded") {
-    if (o.payment_status === "paid") await record(env, o);
-  } else if (ev.type === "charge.refunded" || ev.type === "charge.dispute.created") {
-    // 全額返金とチャージバックのときだけ外す（一部返金はそのまま）
-    const full = ev.type === "charge.dispute.created" || o.amount_refunded >= o.amount;
-    const uuid = o.payment_intent && (await env.PASS.get(`pi:${o.payment_intent}`));
-    if (full && uuid) await removePlayer(env, uuid);
+  if (ev.type === "checkout.session.completed") {
+    if (o.mode === "subscription" && o.payment_status === "paid") await recordSession(env, o);
+  } else if (ev.type.startsWith("customer.subscription.")) {
+    // 解約（期間の終わり）・支払い失敗で止まったら外す。再開したら戻す
+    if (ev.type !== "customer.subscription.deleted" && ACTIVE.has(o.status)) await recordSubscription(env, o);
+    else await dropSubscription(env, o.id);
   }
   return json({ received: true });
 }
 
-async function record(env, s) {
-  const uuid = s.metadata?.mc_uuid;
-  if (!uuid) return;
-  const pi = typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id;
-  const prev = await env.PASS.get(`p:${uuid}`, "json");
-  if (prev?.session === s.id) return;
-  await env.PASS.put(`p:${uuid}`, JSON.stringify({
-    uuid, name: s.metadata.mc_name, paidAt: new Date((s.created || Date.now() / 1000) * 1000).toISOString(),
-    session: s.id, pi: pi || null, amount: s.amount_total, mode: s.livemode ? "live" : "test",
+async function recordSession(env, s) {
+  const sub = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
+  if (!sub) return;
+  await recordSubscription(env, { id: sub, status: "active", metadata: s.metadata, livemode: s.livemode, created: s.created });
+}
+
+async function recordSubscription(env, sub) {
+  const { mc_uuid: uuid, mc_name: name, plan } = sub.metadata || {};
+  if (!uuid || !PLAN[plan]) return;
+  const key = `p:${plan}:${uuid}`;
+  const prev = await env.PASS.get(key, "json");
+  if (prev?.sub === sub.id && prev.status === sub.status) return;
+  await env.PASS.put(key, JSON.stringify({
+    uuid, name, plan, sub: sub.id, status: sub.status, since: prev?.since || new Date((sub.created || Date.now() / 1000) * 1000).toISOString(),
+    mode: sub.livemode ? "live" : "test",
   }));
-  if (pi) await env.PASS.put(`pi:${pi}`, uuid);
-  await indexPlayer(env, uuid, s.metadata.mc_name);
+  if (prev?.sub !== sub.id) await env.PASS.put(`sub:${sub.id}`, `${plan}:${uuid}`);
+  if (!prev) await reindex(env, uuid, name);
+}
+
+async function dropSubscription(env, subId) {
+  const ref = await env.PASS.get(`sub:${subId}`);
+  if (!ref) return;
+  const [plan, uuid] = ref.split(":");
+  const rec = await env.PASS.get(`p:${plan}:${uuid}`, "json");
+  // 同じプランを契約し直した後に古い契約の終了が届いたときは消さない
+  if (rec && rec.sub === subId) await env.PASS.delete(`p:${plan}:${uuid}`);
+  await env.PASS.delete(`sub:${subId}`);
+  await reindex(env, uuid, rec?.name);
 }
 
 async function verify(body, header, secret) {
@@ -245,18 +298,24 @@ function authorized(req, env) {
 async function players(env, full) {
   if (!full) {
     const idx = await env.PASS.get("idx:players", "json");
-    if (Array.isArray(idx)) return idx;
+    if (Array.isArray(idx) && idx.every((p) => Array.isArray(p.games))) return idx;
   }
-  const out = [];
+  const by = new Map();
   let cursor;
   do {
     const r = await env.PASS.list({ prefix: "p:", cursor });
     for (const k of r.keys) {
+      const [, plan, uuid] = k.name.split(":");
+      if (!PLAN[plan] || !uuid) continue;
       const v = await env.PASS.get(k.name, "json");
-      if (v) out.push({ uuid: v.uuid, name: v.name });
+      if (!v) continue;
+      const p = by.get(uuid) || { uuid, name: v.name, games: [] };
+      p.games = [...new Set([...p.games, ...gamesOf(plan)])];
+      by.set(uuid, p);
     }
     cursor = r.list_complete ? undefined : r.cursor;
   } while (cursor);
+  const out = [...by.values()];
   await writeIndex(env, out);
   return out;
 }
@@ -267,53 +326,79 @@ async function writeIndex(env, list) {
   if (old !== text) await env.PASS.put("idx:players", text);
 }
 
-async function indexPlayer(env, uuid, name) {
-  const idx = (await env.PASS.get("idx:players", "json")) || [];
-  await writeIndex(env, [...idx.filter((p) => p.uuid !== uuid), { uuid, name }]);
+async function playerOf(env, uuid) {
+  return (await players(env, false)).find((p) => p.uuid === uuid) || null;
 }
 
-async function removePlayer(env, uuid) {
-  await env.PASS.delete(`p:${uuid}`);
-  const idx = (await env.PASS.get("idx:players", "json")) || [];
-  await writeIndex(env, idx.filter((p) => p.uuid !== uuid));
+/** p:<plan>:<uuid> を読み直して、その人の idx:players の行を作り直す（list を使わない）。 */
+async function reindex(env, uuid, name) {
+  const games = new Set();
+  for (const p of PLANS) {
+    const v = await env.PASS.get(`p:${p.id}:${uuid}`, "json");
+    if (v) {
+      name = v.name;
+      gamesOf(p.id).forEach((g) => games.add(g));
+    }
+  }
+  const idx = (await players(env, false)).filter((p) => p.uuid !== uuid);
+  if (games.size) idx.push({ uuid, name, games: GAMES.map((g) => g.id).filter((g) => games.has(g)) });
+  await writeIndex(env, idx);
 }
 
-// 商品・価格・webhook を Stripe に作って KV に保存する。body: {"amount":500,"currency":"jpy"}。価格を変えるときも同じ呼び出しで新しい価格を作る
+// プランごとの月額の商品・価格と webhook を Stripe に作って KV に保存する。
+// body: {} で既定（コンプリート 8000円・各ゲーム 1500円）。{"plans":{"complete":8000,"halloween":1500}} で書いたプランだけ作り直す
 async function setup(req, env, url) {
   const b = await req.json().catch(() => ({}));
-  const amount = Number(b.amount || 500);
   const currency = String(b.currency || "jpy");
+  const want = b.plans && typeof b.plans === "object"
+    ? b.plans
+    : Object.fromEntries(PLANS.map((p) => [p.id, p.id === COMPLETE.id ? DEFAULT_AMOUNT.complete : DEFAULT_AMOUNT.game]));
   const cfg = (await config(env)) || {};
-  const product = await stripe(env, "POST", "/products", { name: env.PRODUCT_NAME, description: "ハロウィン・ナイト / TikTok Defense / Clash Royale MC / アニメ技 埋め立て に入れる参加券（買い切り）" });
-  const price = await stripe(env, "POST", "/prices", { product: product.id, unit_amount: String(amount), currency });
+  cfg.plans = cfg.plans || {};
+  for (const [id, amount] of Object.entries(want)) {
+    const p = PLAN[id];
+    if (!p || !(Number(amount) > 0)) return json({ error: `bad plan or amount: ${id}` }, 400);
+    const product = await stripe(env, "POST", "/products", { name: `${env.PRODUCT_NAME}（${p.name}）`, description: p.desc });
+    const price = await stripe(env, "POST", "/prices", { product: product.id, unit_amount: String(Number(amount)), currency, "recurring[interval]": "month" });
+    cfg.plans[id] = { priceId: price.id, amount: Number(amount) };
+  }
+  const events = {};
+  EVENTS.forEach((e, i) => (events[`enabled_events[${i}]`] = e));
   if (!cfg.webhookId) {
-    const params = { url: `${url.origin}/webhook`, description: "SharyTech Games pass" };
-    EVENTS.forEach((e, i) => (params[`enabled_events[${i}]`] = e));
-    const wh = await stripe(env, "POST", "/webhook_endpoints", params);
+    const wh = await stripe(env, "POST", "/webhook_endpoints", { url: `${url.origin}/webhook`, description: "SharyTech Games pass", ...events });
     cfg.webhookId = wh.id;
     cfg.webhookSecret = wh.secret;
+  } else {
+    // 前の版（買い切り）で作った webhook の受け取るイベントを月額用に入れ替える
+    await stripe(env, "POST", `/webhook_endpoints/${cfg.webhookId}`, events);
   }
-  Object.assign(cfg, { priceId: price.id, amount, currency });
+  cfg.currency = currency;
+  for (const k of ["priceId", "amount", "games"]) delete cfg[k];
   await env.PASS.put(`cfg:${mode(env)}`, JSON.stringify(cfg));
-  return json({ mode: mode(env), priceId: cfg.priceId, amount, currency, webhookId: cfg.webhookId });
+  return json({ mode: mode(env), currency, plans: cfg.plans, webhookId: cfg.webhookId });
 }
 
-// 手動で入れる・外す（返金の手作業や配信者の招待用）。body: {"name":"kanetyyy","note":"..."}
+// 手動で入れる・外す（配信者の招待やテスト用）。body: {"name":"kanetyyy","plan":"halloween","note":"..."}。plan を省くと complete
 async function grant(req, env) {
   const b = await req.json();
+  const plan = b.plan || COMPLETE.id;
+  if (!PLAN[plan]) return json({ error: "unknown plan" }, 400);
   const prof = await mojang(String(b.name || ""));
   if (!prof) return json({ error: "unknown player" }, 404);
-  await env.PASS.put(`p:${prof.uuid}`, JSON.stringify({ uuid: prof.uuid, name: prof.name, paidAt: new Date().toISOString(), session: null, pi: null, amount: 0, mode: "manual", note: b.note || "" }));
-  await indexPlayer(env, prof.uuid, prof.name);
-  return json({ granted: prof });
+  await env.PASS.put(`p:${plan}:${prof.uuid}`, JSON.stringify({ uuid: prof.uuid, name: prof.name, plan, sub: null, status: "manual", since: new Date().toISOString(), mode: "manual", note: b.note || "" }));
+  await reindex(env, prof.uuid, prof.name);
+  return json({ granted: prof, plan });
 }
 
+// 手で入れた分を外す（Stripe の契約は Stripe で解約する）。plan を省くと全部
 async function revoke(req, env) {
   const b = await req.json();
+  if (b.plan && !PLAN[b.plan]) return json({ error: "unknown plan" }, 400);
   const prof = await mojang(String(b.name || ""));
   if (!prof) return json({ error: "unknown player" }, 404);
-  await removePlayer(env, prof.uuid);
-  return json({ revoked: prof });
+  for (const p of b.plan ? [PLAN[b.plan]] : PLANS) await env.PASS.delete(`p:${p.id}:${prof.uuid}`);
+  await reindex(env, prof.uuid, prof.name);
+  return json({ revoked: prof, plan: b.plan || "all" });
 }
 
 // ---------- helpers ----------

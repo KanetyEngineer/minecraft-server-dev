@@ -88,8 +88,11 @@ public final class GameLobby extends JavaPlugin implements Listener {
 
     // ---------- 参加券（paid: true の行き先は購入者だけ通す） ----------
 
-    /** UUIDs of players who bought the pass; written by paid-access/sync/sync.js. Null until the file exists (then nobody is blocked). */
-    private volatile java.util.Set<UUID> paidPlayers;
+    /**
+     * Destinations each player subscribes to; written by paid-access/sync/sync.js as "uuid id,id" per line
+     * (a line with only the uuid means every destination). Null until the file exists (then nobody is blocked).
+     */
+    private volatile Map<UUID, java.util.Set<String>> paidPlayers;
     private long paidStamp = -1;
 
     private void loadPaid() {
@@ -102,34 +105,37 @@ public final class GameLobby extends JavaPlugin implements Listener {
             return;
         }
         try {
-            java.util.Set<UUID> set = new java.util.HashSet<>();
+            Map<UUID, java.util.Set<String>> map = new HashMap<>();
             for (String line : java.nio.file.Files.readAllLines(f.toPath())) {
-                line = line.trim();
-                if (!line.isEmpty()) {
-                    try {
-                        set.add(UUID.fromString(line));
-                    } catch (IllegalArgumentException ignored) {
-                    }
+                String[] parts = line.trim().split("\\s+", 2);
+                if (parts[0].isEmpty()) continue;
+                try {
+                    java.util.Set<String> ids = parts.length < 2 ? java.util.Set.of("*")
+                            : new java.util.HashSet<>(java.util.Arrays.asList(parts[1].split(",")));
+                    map.put(UUID.fromString(parts[0]), ids);
+                } catch (IllegalArgumentException ignored) {
                 }
             }
-            paidPlayers = set;
-            getLogger().info("paid list: " + set.size() + " players");
+            paidPlayers = map;
+            getLogger().info("paid list: " + map.size() + " players");
         } catch (java.io.IOException e) {
             getLogger().warning("paid list: " + e.getMessage());
         }
     }
 
-    private boolean hasPass(Player p) {
-        java.util.Set<UUID> set = paidPlayers;
-        return set == null || p.isOp() || set.contains(p.getUniqueId());
+    private boolean hasPass(Player p, Destination d) {
+        Map<UUID, java.util.Set<String>> map = paidPlayers;
+        if (map == null || p.isOp()) return true;
+        java.util.Set<String> ids = map.get(p.getUniqueId());
+        return ids != null && (ids.contains("*") || ids.contains(d.id()));
     }
 
     private void showPassInfo(Player p, Destination d) {
         String url = getConfig().getString("pass-url", "https://pass.sharytech.com/");
-        String link = url + (url.contains("?") ? "&" : "?") + "name=" + p.getName();
+        String link = url + (url.contains("?") ? "&" : "?") + "plan=" + d.id() + "&name=" + p.getName() + "#" + d.id();
         p.sendMessage(Component.text("━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
-        p.sendMessage(MM.deserialize(d.name()).append(Component.text(" に入るには参加券が必要です", NamedTextColor.YELLOW)));
-        p.sendMessage(Component.text("購入すると1分ほどで入れるようになります（Kanety SMP は無料のまま）", NamedTextColor.GRAY));
+        p.sendMessage(MM.deserialize(d.name()).append(Component.text(" に入るには月額の参加券が必要です", NamedTextColor.YELLOW)));
+        p.sendMessage(Component.text("このゲームだけのプランと、全ゲームのコンプリートプランがあります。申し込むと1分ほどで入れます（Kanety SMP は無料のまま）", NamedTextColor.GRAY));
         p.sendMessage(Component.text("▶ 参加券のページを開く", NamedTextColor.GREEN, TextDecoration.UNDERLINED)
                 .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(link))
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text(url))));
@@ -664,7 +670,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
             pushBack(p);
             return;
         }
-        if (d.paid() && !hasPass(p)) {
+        if (d.paid() && !hasPass(p, d)) {
             showPassInfo(p, d);
             pushBack(p);
             return;

@@ -24,21 +24,21 @@ if (!html.includes(navAnchor) || !html.includes(sectionAnchor)) {
 }
 
 const section = `<section id="pass"><div class="wrap">
-  <h2>参加券<small>ゲームのサーバーは参加券を買った人だけが入れます。Kanety SMP は今まで通り無料です。</small></h2>
+  <h2>参加券<small>ゲームのサーバーは月額の参加券を申し込んだ人が入れます。Kanety SMP は今まで通り無料です。</small></h2>
   <div class="grid g2">
     <div class="card">
       <h3>🎟 SharyTech Games 参加券</h3>
       <ol class="steps">
-        <li><a href="https://pass.sharytech.com/">pass.sharytech.com</a> を開き、Minecraft Java版のユーザー名を入れてカードで支払います。</li>
-        <li>1分ほどで、ハロウィン・ナイト、TikTok Defense、Clash Royale MC、アニメ技の埋め立てに入れるようになります。</li>
-        <li>ロビーまでは参加券がなくても入れます。参加券がない状態でゲートに乗ると、購入ページのリンクが出ます。</li>
+        <li><a href="https://pass.sharytech.com/">pass.sharytech.com</a> で、遊びたいゲームのプラン（各ゲーム月1,500円）か、全ゲームのコンプリートプラン（月8,000円）を選びます。</li>
+        <li>Minecraft Java版のユーザー名を入れてカードで支払うと、1分ほどでそのゲームに入れるようになります。毎月自動で更新され、解約はいつでもできます。</li>
+        <li>ロビーまでは参加券がなくても入れます。参加券がない状態でゲートに乗ると、申し込みページのリンクが出ます。</li>
       </ol>
-      <p style="margin-top:12px"><a class="btn" href="https://pass.sharytech.com/">参加券を買う</a></p>
+      <p style="margin-top:12px"><a class="btn" href="https://pass.sharytech.com/">プランを見る</a></p>
     </div>
     <div class="card">
       <h3>🌱 Kanety SMP は無料</h3>
       <p>サバイバルの Kanety SMP は参加券がなくても、今まで通り誰でも遊べます。入り方は <a href="https://smp.sharytech.com/">smp.sharytech.com</a> を見てください。</p>
-      <p class="note" style="margin-top:10px">買ったのに入れないときは、ユーザー名が合っているか <a href="https://pass.sharytech.com/">参加券のページ</a>で確かめてください。<a href="https://pass.sharytech.com/legal">特定商取引法に基づく表記</a></p>
+      <p class="note" style="margin-top:10px">申し込んだのに入れないときは、<a href="https://pass.sharytech.com/check">契約の確認</a>でユーザー名とプランを確かめてください。<a href="https://pass.sharytech.com/legal">特定商取引法に基づく表記</a></p>
     </div>
   </div>
 </div></section>

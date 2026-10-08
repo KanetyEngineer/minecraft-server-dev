@@ -20,6 +20,8 @@ SELLER_MANAGER = ""
 SELLER_ADDRESS = ""
 SELLER_PHONE = ""
 SELLER_EMAIL = ""
+# Stripe のカスタマーポータル（解約・カード変更）のログインリンク。Stripe の 設定 → Billing → カスタマーポータル で有効にして出てくる URL
+PORTAL_URL = ""
 
 # シークレット（wrangler secret put で入れる。ファイルには書かない）
 #   STRIPE_SECRET_KEY  Stripe のシークレットキー（まず sk_test_…、本番は sk_live_…）

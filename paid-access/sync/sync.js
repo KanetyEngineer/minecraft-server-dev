@@ -4,7 +4,8 @@
 //
 // - whitelist.json は「このスクリプトが足した人」だけを足し引きする。手で足した人や OP には触らない
 // - API が失敗したときは何もしない（全員を外してしまわないため）
-// - enforce が true の鯖だけ "whitelist on" を送る。false の間は名簿だけ用意して、まだ誰でも入れる
+// - enforce が true の鯖だけ "whitelist on" を送る。false の間は名簿だけ用意して、まだ誰でも入れる（ゲームごとに切り替えられる）
+// - 参加券はゲームごと。各鯖には、その鯖の id（servers[].id）を games に持つ人だけを入れる
 
 "use strict";
 const fs = require("fs");
@@ -53,7 +54,14 @@ async function fetchPlayersOnce(full) {
   if (!r.ok) throw new Error(`api ${r.status}`);
   const j = await r.json();
   if (!Array.isArray(j.players)) throw new Error("api: no players array");
-  return j.players.filter((p) => /^[0-9a-f-]{36}$/.test(p.uuid) && /^[A-Za-z0-9_]{1,16}$/.test(p.name));
+  return j.players
+    .filter((p) => /^[0-9a-f-]{36}$/.test(p.uuid) && /^[A-Za-z0-9_]{1,16}$/.test(p.name))
+    .map((p) => ({ uuid: p.uuid, name: p.name, games: Array.isArray(p.games) ? p.games.filter((g) => /^[a-z0-9-]+$/.test(g)) : null }));
+}
+
+/** games が無いのは前の版（全ゲーム共通の参加券）の Worker。 */
+function hasGame(p, id) {
+  return p.games === null || p.games.includes(id);
 }
 
 function writeJsonAtomic(file, data) {
@@ -70,7 +78,7 @@ function syncWhitelist(server, paid, state) {
     list = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {}
   const managed = new Set(state.managed[server.id] || []);
-  const want = new Map(paid.map((p) => [p.uuid, p.name]));
+  const want = new Map(paid.filter((p) => hasGame(p, server.id)).map((p) => [p.uuid, p.name]));
   const before = JSON.stringify(list);
 
   // 外す: 自分が足した人で、もう購入者でない人
@@ -181,14 +189,19 @@ async function tick(state) {
     }
   }
   if (cfg.lobbyPaidFile) {
-    const text = paid.map((p) => p.uuid).sort().join("\n") + "\n";
+    // 1行に「uuid ゲーム,ゲーム」。ロビーはゲートの行き先 id がその人の行にあるときだけ通す
+    const ids = cfg.servers.map((s) => s.id);
+    const text = paid
+      .map((p) => `${p.uuid} ${ids.filter((id) => hasGame(p, id)).join(",")}`)
+      .sort()
+      .join("\n") + "\n";
     let old = "";
     try {
       old = fs.readFileSync(cfg.lobbyPaidFile, "utf8");
     } catch {}
     if (old !== text) {
       fs.writeFileSync(cfg.lobbyPaidFile, text);
-      log(`ロビーの購入者リストを更新（${paid.length}人）`);
+      log(`ロビーの契約者リストを更新（${paid.length}人）`);
     }
   }
   writeJsonAtomic(statePath, state);
