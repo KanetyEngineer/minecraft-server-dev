@@ -256,7 +256,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
                     ambient.add(new Ambient(f.loc(0, 50, 24), Particle.END_ROD, 7));
                 }
                 case "attack-on-titan" -> {
-                    ambient.add(new Ambient(f.loc(0, 54, 30), Particle.CLOUD, 8));
+                    ambient.add(new Ambient(f.loc(0, 54, 34), Particle.CLOUD, 8));
                     ambient.add(new Ambient(f.loc(0, 41, 3), Particle.CAMPFIRE_COSY_SMOKE, 3));
                 }
                 default -> {
@@ -277,7 +277,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
                 .filter(e -> e.getScoreboardTags().contains(LABEL_TAG)).forEach(Entity::remove);
         for (int x = -CLEAR; x <= CLEAR; x++)
             for (int z = -CLEAR; z <= CLEAR; z++)
-                for (int y = Y - 30; y <= Y + 40; y++) {
+                for (int y = Y - 30; y <= Y + 48; y++) {
                     Block b = world.getBlockAt(x, y, z);
                     if (!b.getType().isAir()) b.setType(Material.AIR, false);
                 }
@@ -528,15 +528,26 @@ public final class GameLobby extends JavaPlugin implements Listener {
                     minZ = Math.min(minZ, z);
                     maxZ = Math.max(maxZ, z);
                 }
+            java.util.Set<Long> used = new java.util.HashSet<>();
             for (int x = (int) Math.floor(minX); x <= (int) Math.ceil(maxX); x++)
                 for (int z = (int) Math.floor(minZ); z <= (int) Math.ceil(maxZ); z++) {
                     int u = (int) Math.round(x * px + z * pz), w = (int) Math.round(x * dx + z * dz);
                     if (u < u0 || u > u1 || w < w0 || w > w1) continue;
                     for (int y = y0; y <= y1; y++) {
-                        var d = blocks.get(key(u, w, y));
-                        if (d != null) world.getBlockAt(x, Y + y, z).setBlockData(d, false);
+                        long k = key(u, w, y);
+                        var d = blocks.get(k);
+                        if (d == null) continue;
+                        world.getBlockAt(x, Y + y, z).setBlockData(d, false);
+                        used.add(k);
                     }
                 }
+            // at slanted angles a few local blocks are nobody's nearest; put those at their own spot so small details (eyes, teeth) survive
+            for (var e : blocks.entrySet()) {
+                if (used.contains(e.getKey())) continue;
+                long k = e.getKey();
+                int u = (int) (k >>> 24) - 1024, w = (int) ((k >>> 12) & 0xFFF) - 1024, y = (int) (k & 0xFFF) - 2048;
+                world.getBlockAt((int) Math.round(w * dx + u * px), Y + y, (int) Math.round(w * dz + u * pz)).setBlockData(e.getValue(), false);
+            }
         }
     }
 
@@ -1084,7 +1095,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
                 }
                 f.set(u, w, 24, Material.POLISHED_ANDESITE);
             }
-            f.set(u, wc + 3, 25, Material.IRON_BARS);
+            if (Math.abs(u) > 8) f.set(u, wc + 3, 25, Material.IRON_BARS);
             if (u % 8 == 4) {
                 f.set(u, wc + 1, 25, Material.POLISHED_BLACKSTONE);
                 f.set(u, wc, 25, Material.LANTERN);
@@ -1101,27 +1112,57 @@ public final class GameLobby extends JavaPlugin implements Listener {
         f.box(-3, 1, 41, 41, 1, 1, Material.DARK_OAK_PLANKS);
         f.box(2, 4, 39, 40, 1, 1, Material.DARK_OAK_PLANKS);
         // the Colossal Titan: a skinless head looking over the wall and two hands gripping it
-        double hw = 54, hy = 31;
+        double hw = 54, hy = 34;
         for (int u = -8; u <= 8; u++)
             for (int w = 46; w <= 62; w++)
-                for (int y = 20; y <= 42; y++) {
-                    double e = sq(u / 7.2) + sq((w - hw) / 6.5) + sq((y - hy) / 9.5);
+                for (int y = 22; y <= 45; y++) {
+                    // flat-fronted, tall head (superellipse sideways and front-to-back, round on top)
+                    double e = Math.pow(Math.abs(u) / 7.8, 4) + Math.pow(Math.abs(w - hw) / 6.5, 4) + sq((y - hy) / 10.2);
                     if (e > 1) continue;
                     f.set(u, w, y, (Math.abs(u) + (y / 3)) % 3 == 0 ? Material.PINK_TERRACOTTA : Material.RED_TERRACOTTA);
                 }
-        // face details on the surface towards the plaza
-        for (int u = -7; u <= 7; u++)
-            for (int y = 22; y <= 40; y++) {
-                int w = 46;
-                while (w < 62 && !(sq(u / 7.2) + sq((w - hw) / 6.5) + sq((y - hy) / 9.5) <= 1)) w++;
-                if (w >= 62) continue;
-                Material m = null;
-                if (y >= 33 && y <= 34 && Math.abs(u) >= 2 && Math.abs(u) <= 4) m = Material.WHITE_CONCRETE;
-                if (y == 34 && (u == 3 || u == -3)) m = Material.BLACK_CONCRETE;
-                if (y >= 35 && y <= 36 && Math.abs(u) >= 2 && Math.abs(u) <= 5) m = Material.BROWN_TERRACOTTA;
-                if (y >= 26 && y <= 28 && Math.abs(u) <= 5) m = (u & 1) == 0 ? Material.BONE_BLOCK : Material.WHITE_CONCRETE;
-                if (y == 30 && Math.abs(u) <= 1) m = Material.BROWN_TERRACOTTA;
-                if (m != null) f.set(u, w, y, m);
+        // the face, drawn on the front of the head (top row is y = 43, columns are u = -7 .. 7)
+        String[] face = {
+                "....RRRRRRR....",
+                "..RRPRRRRRPRR..",
+                ".RRPRRPRRPRRPR.",
+                "RRPRRPRRRPRRPRR",
+                "RPRRPRRRRRPRRPR",
+                "DDDDDDRRRDDDDDD",
+                "RDWWWDRPRDWWWDR",
+                "RDWKWDRRRDWKWDR",
+                "RRDDDRRPRRDDDRR",
+                "RPRRRRDPDRRRRPR",
+                "RRPRRRDDDRRRPRR",
+                "PRRPRRRRRRRPRRP",
+                "RPDDDDDDDDDDDPR",
+                "RDTTTTTTTTTTTDR",
+                "RDTKTKTKTKTKTDR",
+                "RDTTTTTTTTTTTDR",
+                "RPDDDDDDDDDDDPR",
+                ".RRPRRPRRPRRPR.",
+                "..RRRRPRRRRRR..",
+        };
+        for (int row = 0; row < face.length; row++)
+            for (int col = 0; col < 15; col++) {
+                Material m = switch (face[row].charAt(col)) {
+                    case 'R' -> Material.RED_TERRACOTTA;
+                    case 'P' -> Material.PINK_TERRACOTTA;
+                    case 'D' -> Material.BROWN_TERRACOTTA;
+                    case 'W', 'T' -> Material.WHITE_CONCRETE;
+                    case 'K' -> Material.BLACK_CONCRETE;
+                    default -> null;
+                };
+                if (m == null) continue;
+                int u = col - 7, y = 43 - row, w = 46;
+                while (w < 62 && !f.solid(u, w, y)) w++;
+                if (w >= 62) w = 48;
+                f.set(u, w, y, m);
+                // sink the dark parts (not the pupils) one block so the brow, nose and mouth read as hollows
+                if (m == Material.BROWN_TERRACOTTA || (m == Material.BLACK_CONCRETE && row > 10)) {
+                    f.set(u, w, y, Material.AIR);
+                    f.set(u, w + 1, y, m);
+                }
             }
         for (int s = -1; s <= 1; s += 2) {
             int wc = 44 + 144 / 40;
