@@ -21,7 +21,7 @@ PC の sync/sync.js ──┘ 30秒ごとに /api/players（uuid・名前・入�
 | `/success` | 申し込み完了。webhook より先に戻ってきても、ここで支払い済みなら登録する |
 | `/legal` | 特定商取引法に基づく表記（自動更新・解約の条件入り。`SELLER_*` が空の項目は「請求があれば開示」） |
 | `/check?name=` | ゲームごとの契約状況 |
-| `/webhook` | Stripe から。署名を確かめ、契約で登録、解約（期間終了）・支払い失敗（unpaid など）で削除、再開で復活。past_due（再試行中）は入れたまま |
+| `/webhook` | Stripe から。署名を確かめ、契約で登録、解約（期間終了）・支払い失敗（unpaid など）で削除、再開で復活。past_due（再試行中）は入れたまま。全額返金・チャージバックはその支払いの契約を Stripe 側でも今すぐ解約して削除 |
 | `/api/players` | 契約者一覧 `[{uuid,name,games}]`（`Authorization: Bearer ADMIN_TOKEN`） |
 | `/admin/setup` | Stripe に月額の商品・価格と webhook を作る。`{}` で既定の値段、`{"plans":{"complete":8000,"halloween":1500}}` で書いたプランだけ作り直す |
 | `/admin/grant` `/admin/revoke` | 手動で入れる・外す。`{"name":"…","plan":"halloween"}`（plan を省くと grant は complete、revoke は全部） |
@@ -38,7 +38,7 @@ PC の sync/sync.js ──┘ 30秒ごとに /api/players（uuid・名前・入�
 
 ゲームを足すときは `worker/src/index.js` の `GAMES` に足して（id はロビーの行き先と sync の `servers[].id` に揃える）デプロイし、`{"plans":{"<id>":1500}}` で setup を呼ぶ。コンプリートには自動で含まれる。
 
-本番に切り替えるときは 4 で `sk_live_…` を入れ直して 6・7 をもう一度（テストと本番で設定は別々に保存される）。返金するときは Stripe で返金したうえでサブスクリプションも「今すぐキャンセル」する（キャンセルで名簿から外れる）。
+本番に切り替えるときは 4 で `sk_live_…` を入れ直して 6・7 をもう一度（テストと本番で設定は別々に保存される）。全額返金すると、その支払いの契約は自動で今すぐ解約され名簿から外れる（一部返金はそのまま）。受け取るイベントを変えたあとは `{"plans":{}}` で setup を呼ぶと、価格を作らずに webhook のイベントだけ入れ替えられる。
 
 テスト: `npm test`（Stripe と Mojang は偽物）
 

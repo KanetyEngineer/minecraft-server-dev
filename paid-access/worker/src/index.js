@@ -29,7 +29,7 @@ const PLAN = Object.fromEntries(PLANS.map((p) => [p.id, p]));
 const DEFAULT_AMOUNT = { complete: 8000, game: 1500 };
 // この状態のあいだは入れる。past_due（支払いの再試行中）は猶予として入れたままにする
 const ACTIVE = new Set(["active", "trialing", "past_due"]);
-const EVENTS = ["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
+const EVENTS = ["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "charge.refunded", "charge.dispute.created"];
 
 const gamesOf = (plan) => (plan === COMPLETE.id ? GAMES.map((g) => g.id) : [plan]);
 
@@ -236,6 +236,9 @@ async function webhook(req, env) {
     // 解約（期間の終わり）・支払い失敗で止まったら外す。再開したら戻す
     if (ev.type !== "customer.subscription.deleted" && ACTIVE.has(o.status)) await recordSubscription(env, o);
     else await dropSubscription(env, o.id);
+  } else if (ev.type === "charge.refunded" || ev.type === "charge.dispute.created") {
+    // 全額返金・チャージバックは、その支払いの契約を今すぐ止めて外す（一部返金はそのまま）
+    if (ev.type === "charge.dispute.created" || o.amount_refunded >= o.amount) await cancelForCharge(env, ev.type === "charge.dispute.created" ? o.charge : o.id);
   }
   return json({ received: true });
 }
@@ -258,6 +261,30 @@ async function recordSubscription(env, sub) {
   }));
   if (prev?.sub !== sub.id) await env.PASS.put(`sub:${sub.id}`, `${plan}:${uuid}`);
   if (!prev) await reindex(env, uuid, name);
+}
+
+/** 返金・チャージバックされた支払いの契約を探して、Stripe 側でも今すぐ解約する。 */
+async function cancelForCharge(env, chargeId) {
+  const ch = typeof chargeId === "string" ? await stripe(env, "GET", `/charges/${chargeId}`) : chargeId;
+  if (!ch?.customer) return;
+  const subs = await stripe(env, "GET", `/subscriptions?customer=${ch.customer}&status=all&limit=100`);
+  for (const sub of subs.data || []) {
+    if (!sub.metadata?.mc_uuid || !sub.latest_invoice || !(await invoicePaidBy(env, sub.latest_invoice, ch))) continue;
+    if (!["canceled", "incomplete_expired"].includes(sub.status)) await stripe(env, "DELETE", `/subscriptions/${sub.id}`);
+    await dropSubscription(env, sub.id);
+  }
+}
+
+/** API の版によって請求書と支払いのつながり方が違うので、どれかが合えばその請求書の支払いとみなす。 */
+async function invoicePaidBy(env, invoiceId, ch) {
+  let inv;
+  try {
+    inv = await stripe(env, "GET", `/invoices/${invoiceId}?expand[]=payments`);
+  } catch {
+    inv = await stripe(env, "GET", `/invoices/${invoiceId}`);
+  }
+  if (inv.charge === ch.id || (ch.payment_intent && inv.payment_intent === ch.payment_intent)) return true;
+  return (inv.payments?.data || []).some((p) => p.payment?.charge === ch.id || (ch.payment_intent && p.payment?.payment_intent === ch.payment_intent));
 }
 
 async function dropSubscription(env, subId) {

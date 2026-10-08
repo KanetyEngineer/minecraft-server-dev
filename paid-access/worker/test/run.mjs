@@ -16,6 +16,8 @@ const UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
 const sessions = {};
 const prices = [];
 let webhookUpdates = 0;
+const subs = {};
+const canceled = [];
 let n = 0;
 globalThis.fetch = async (url, init = {}) => {
   url = String(url);
@@ -30,7 +32,7 @@ globalThis.fetch = async (url, init = {}) => {
     prices.push(Number(p.unit_amount));
     return Response.json({ id: `price_${p.unit_amount}_${++n}` });
   }
-  if (url.endsWith("/webhook_endpoints")) { assert.equal(p["enabled_events[3]"], "customer.subscription.deleted"); return Response.json({ id: "we_1", secret: "whsec_test" }); }
+  if (url.endsWith("/webhook_endpoints")) { assert.equal(p["enabled_events[3]"], "customer.subscription.deleted"); assert.equal(p["enabled_events[4]"], "charge.refunded"); return Response.json({ id: "we_1", secret: "whsec_test" }); }
   if (url.endsWith("/webhook_endpoints/we_1")) { webhookUpdates++; return Response.json({ id: "we_1" }); }
   if (url.endsWith("/checkout/sessions") && init.method === "POST") {
     assert.equal(p.mode, "subscription");
@@ -40,6 +42,15 @@ globalThis.fetch = async (url, init = {}) => {
     sessions[id] = s;
     return Response.json(s);
   }
+  if (url.includes("/charges/ch_")) return Response.json({ id: "ch_1", customer: "cus_1", payment_intent: "pi_1", amount: 1500, amount_refunded: 1500 });
+  if (url.includes("/subscriptions?customer=cus_1")) return Response.json({ data: Object.values(subs) });
+  const inv = url.match(/\/invoices\/(in_\w+)/);
+  if (inv) {
+    if (url.includes("expand")) return Response.json({ error: { message: "This property cannot be expanded (payments)." } }, { status: 400 });
+    return Response.json({ id: inv[1], payment_intent: inv[1] === "in_1" ? "pi_1" : "pi_other" });
+  }
+  const del = url.match(/\/subscriptions\/(sub_\w+)$/);
+  if (del && init.method === "DELETE") { subs[del[1]].status = "canceled"; canceled.push(del[1]); return Response.json(subs[del[1]]); }
   const m = url.match(/\/checkout\/sessions\/(cs_\w+)$/);
   if (m) return Response.json(sessions[m[1]]);
   throw new Error("unexpected fetch " + url);
@@ -124,6 +135,26 @@ await hook("customer.subscription.deleted", sub(s1, "canceled"));
 assert.deepEqual(await list(), []);
 // 知らない契約の終了は無視
 assert.equal((await hook("customer.subscription.deleted", { id: "sub_unknown", status: "canceled" })).status, 200);
+
+// 全額返金で、その支払いの契約だけ Stripe 側でも解約して外す
+const s3 = await buy("halloween");
+await hook("checkout.session.completed", paid(s3));
+const s4 = await buy("clash-royale");
+await hook("checkout.session.completed", paid(s4));
+subs[s3.subscription] = { id: s3.subscription, status: "active", metadata: s3.metadata, latest_invoice: "in_1" };
+subs[s4.subscription] = { id: s4.subscription, status: "active", metadata: s4.metadata, latest_invoice: "in_2" };
+assert.deepEqual((await list())[0].games, ["halloween", "clash-royale"]);
+// 一部返金はそのまま
+await hook("charge.refunded", { id: "ch_1", customer: "cus_1", payment_intent: "pi_1", amount: 1500, amount_refunded: 500 });
+assert.deepEqual(canceled, []);
+await hook("charge.refunded", { id: "ch_1", customer: "cus_1", payment_intent: "pi_1", amount: 1500, amount_refunded: 1500 });
+assert.deepEqual(canceled, [s3.subscription]);
+assert.deepEqual((await list())[0].games, ["clash-royale"]);
+// チャージバックも同じ（dispute は charge の id を持つ）
+subs[s4.subscription].latest_invoice = "in_1";
+await hook("charge.dispute.created", { id: "dp_1", charge: "ch_1" });
+assert.deepEqual(canceled, [s3.subscription, s4.subscription]);
+assert.deepEqual(await list(), []);
 
 // 手動の追加・削除
 assert.equal((await (await call("/admin/grant", { method: "POST", headers: admin, body: JSON.stringify({ name: "Notch", plan: "clash-royale" }) })).json()).plan, "clash-royale");
