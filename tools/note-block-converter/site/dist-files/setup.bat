@@ -19,14 +19,14 @@ if not defined PY (
   exit /b 1
 )
 if not exist venv\Scripts\python.exe %PY% -m venv venv
-venv\Scripts\python.exe -m pip install --disable-pip-version-check -q mido "setuptools<81" || goto fail
+venv\Scripts\python.exe -m pip install --disable-pip-version-check -q mido || goto fail
 echo.
 echo MIDI / .nbs files are ready to convert.
 echo.
 choice /c YN /m "Also install the audio (mp3/wav) converter Basic Pitch? It downloads about 300 MB"
 if errorlevel 2 goto done
 venv\Scripts\python.exe -m pip install --disable-pip-version-check -q --no-deps basic-pitch==0.4.0 || goto fail
-venv\Scripts\python.exe -m pip install --disable-pip-version-check -q onnxruntime librosa mir-eval pretty-midi "resampy<0.4.3" scikit-learn scipy typing-extensions "numpy<2" || goto fail
+venv\Scripts\python.exe -m pip install --disable-pip-version-check -q onnxruntime librosa mir-eval pretty-midi "resampy<0.4.3" scikit-learn scipy typing-extensions "numpy<2" "setuptools<81" || goto fail
 echo Audio files are ready to convert too.
 :done
 echo.
@@ -36,5 +36,7 @@ exit /b 0
 :fail
 echo.
 echo Setup failed. Check your internet connection and run this file again.
+echo If the error says "No such file or directory", the folder path is too long:
+echo move this folder somewhere short, such as C:oto2noteblock, and try again.
 pause
 exit /b 1
