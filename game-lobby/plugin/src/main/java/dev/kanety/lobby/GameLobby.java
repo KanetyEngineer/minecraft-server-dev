@@ -255,6 +255,10 @@ public final class GameLobby extends JavaPlugin implements Listener {
                     ambient.add(new Ambient(f.loc(0, 50, 24), Particle.ELECTRIC_SPARK, 6));
                     ambient.add(new Ambient(f.loc(0, 50, 24), Particle.END_ROD, 7));
                 }
+                case "attack-on-titan" -> {
+                    ambient.add(new Ambient(f.loc(0, 54, 30), Particle.CLOUD, 8));
+                    ambient.add(new Ambient(f.loc(0, 41, 3), Particle.CAMPFIRE_COSY_SMOKE, 3));
+                }
                 default -> {
                     ambient.add(new Ambient(f.loc(0, 52, 3), Particle.HAPPY_VILLAGER, 12));
                     ambient.add(new Ambient(f.loc(0, 58, 13), Particle.SPORE_BLOSSOM_AIR, 6));
@@ -628,6 +632,7 @@ public final class GameLobby extends JavaPlugin implements Listener {
             case "tiktok-defense" -> defense(f);
             case "clash-royale" -> clash(f);
             case "anime-umetate" -> anime(f);
+            case "attack-on-titan" -> titan(f);
             default -> village(f);
         }
     }
@@ -1060,6 +1065,112 @@ public final class GameLobby extends JavaPlugin implements Listener {
         f.set(cu + 2, cw + 1, 9, Material.BRICKS);
         f.set(cu + 2, cw + 1, 10, Material.BRICKS);
         f.set(cu + 2, cw + 1, 11, Material.CAMPFIRE);
+    }
+
+    // ---- Attack on Titan: Wall Maria with its broken gate, the Colossal Titan looking over it, and the town inside ----
+    private void titan(Frame f) {
+        int cw = ISLAND_W;
+        island(f, cw, 19, Material.GRASS_BLOCK, Material.DIRT);
+        scatter(f, cw, 18, 120, Material.COARSE_DIRT, Material.GRAVEL, Material.PACKED_MUD);
+        for (int w = 30; w <= 44; w++) for (int u = -2; u <= 2; u++) f.ground(u, w, Material.COBBLESTONE);
+        // the wall, bowed around the town
+        for (int u = -21; u <= 21; u++) {
+            int wc = 44 + u * u / 40;
+            for (int w = wc; w <= wc + 3; w++) {
+                for (int y = -2; y <= 24; y++) {
+                    if (y <= 0 && !f.solid(u, w, -1) && !f.solid(u, w, 0)) continue;
+                    Material m = y % 6 == 0 ? Material.STONE_BRICKS : RNG.nextDouble() < 0.12 ? Material.ANDESITE : Material.SMOOTH_STONE;
+                    f.set(u, w, y, m);
+                }
+                f.set(u, w, 24, Material.POLISHED_ANDESITE);
+            }
+            f.set(u, wc + 3, 25, Material.IRON_BARS);
+            if (u % 8 == 4) {
+                f.set(u, wc + 1, 25, Material.POLISHED_BLACKSTONE);
+                f.set(u, wc, 25, Material.LANTERN);
+            }
+        }
+        // the gate the Colossal Titan kicked in, with rubble and broken doors in front of it
+        f.box(-4, 4, 44, 48, 1, 10, Material.AIR);
+        f.box(-5, 5, 44, 44, 11, 11, Material.STONE_BRICKS);
+        for (int i = 0; i < 40; i++) {
+            int u = RNG.nextInt(13) - 6, w = 37 + RNG.nextInt(7);
+            int h = 1 + RNG.nextInt(2);
+            for (int y = 1; y <= h; y++) f.set(u, w, y, RNG.nextBoolean() ? Material.COBBLESTONE : Material.STONE_BRICKS);
+        }
+        f.box(-3, 1, 41, 41, 1, 1, Material.DARK_OAK_PLANKS);
+        f.box(2, 4, 39, 40, 1, 1, Material.DARK_OAK_PLANKS);
+        // the Colossal Titan: a skinless head looking over the wall and two hands gripping it
+        double hw = 54, hy = 31;
+        for (int u = -8; u <= 8; u++)
+            for (int w = 46; w <= 62; w++)
+                for (int y = 20; y <= 42; y++) {
+                    double e = sq(u / 7.2) + sq((w - hw) / 6.5) + sq((y - hy) / 9.5);
+                    if (e > 1) continue;
+                    f.set(u, w, y, (Math.abs(u) + (y / 3)) % 3 == 0 ? Material.PINK_TERRACOTTA : Material.RED_TERRACOTTA);
+                }
+        // face details on the surface towards the plaza
+        for (int u = -7; u <= 7; u++)
+            for (int y = 22; y <= 40; y++) {
+                int w = 46;
+                while (w < 62 && !(sq(u / 7.2) + sq((w - hw) / 6.5) + sq((y - hy) / 9.5) <= 1)) w++;
+                if (w >= 62) continue;
+                Material m = null;
+                if (y >= 33 && y <= 34 && Math.abs(u) >= 2 && Math.abs(u) <= 4) m = Material.WHITE_CONCRETE;
+                if (y == 34 && (u == 3 || u == -3)) m = Material.BLACK_CONCRETE;
+                if (y >= 35 && y <= 36 && Math.abs(u) >= 2 && Math.abs(u) <= 5) m = Material.BROWN_TERRACOTTA;
+                if (y >= 26 && y <= 28 && Math.abs(u) <= 5) m = (u & 1) == 0 ? Material.BONE_BLOCK : Material.WHITE_CONCRETE;
+                if (y == 30 && Math.abs(u) <= 1) m = Material.BROWN_TERRACOTTA;
+                if (m != null) f.set(u, w, y, m);
+            }
+        for (int s = -1; s <= 1; s += 2) {
+            int wc = 44 + 144 / 40;
+            for (int u = 9 * s; Math.abs(u) <= 14; u += s) {
+                f.box(u, u, wc, wc + 4, 25, 26, Material.RED_TERRACOTTA);
+                if (Math.abs(u) % 2 == 1) f.box(u, u, wc - 1, wc - 1, 20, 25, Material.PINK_TERRACOTTA);
+            }
+        }
+        // houses of Shiganshina inside the wall
+        house(f, -12, 36, Material.WHITE_TERRACOTTA);
+        house(f, 12, 36, Material.SMOOTH_SANDSTONE);
+        house(f, -7, 31, Material.BRICKS);
+        house(f, 7, 31, Material.WHITE_TERRACOTTA);
+        // the Survey Corps flag
+        f.box(-16, -16, 40, 40, 1, 15, Material.SPRUCE_FENCE);
+        for (int u = -15; u <= -9; u++)
+            for (int y = 9; y <= 15; y++) {
+                boolean border = u == -15 || u == -9 || y == 9 || y == 15;
+                boolean wing = Math.abs(u + 12) + Math.abs(y - 12) <= 2;
+                f.set(u, 40, y, border ? Material.GREEN_WOOL : wing ? (u < -12 ? Material.BLUE_WOOL : Material.WHITE_WOOL) : Material.GREEN_WOOL);
+            }
+        // supply crates beside the gate
+        for (int s = -1; s <= 1; s += 2) {
+            f.set(7 * s, GATE_DIST, 1, Material.BARREL);
+            f.set(7 * s, GATE_DIST, 2, Material.BARREL);
+            f.set(8 * s, GATE_DIST, 1, Material.SPRUCE_PLANKS);
+            f.set(7 * s, GATE_DIST, 3, Material.LANTERN);
+            f.set(9 * s, GATE_DIST, 1, f.facing(Material.GREEN_BANNER));
+        }
+    }
+
+    private void house(Frame f, int cu, int cw, Material wall) {
+        for (int u = -2; u <= 2; u++)
+            for (int w = -2; w <= 2; w++) {
+                boolean edge = Math.abs(u) == 2 || Math.abs(w) == 2;
+                for (int y = 1; y <= 5; y++) {
+                    if (!edge) continue;
+                    boolean corner = Math.abs(u) == 2 && Math.abs(w) == 2;
+                    f.set(cu + u, cw + w, y, corner ? Material.SPRUCE_LOG : wall);
+                }
+            }
+        f.set(cu, cw - 2, 1, Material.SPRUCE_PLANKS);
+        f.set(cu, cw - 2, 3, Material.GLASS);
+        f.set(cu - 1, cw - 2, 4, Material.GLASS);
+        f.set(cu + 1, cw - 2, 4, Material.GLASS);
+        f.set(cu, cw, 1, Material.GLOWSTONE);
+        for (int k = 0; k <= 3; k++)
+            for (int u = -3 + k; u <= 3 - k; u++)
+                for (int w = -3; w <= 3; w++) f.set(cu + u, cw + w, 6 + k, Material.ORANGE_TERRACOTTA);
     }
 
     private static double sq(double v) {
