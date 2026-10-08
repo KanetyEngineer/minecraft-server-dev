@@ -320,11 +320,30 @@ async function revoke(req, env) {
 
 async function mojang(name) {
   if (!NAME_RE.test(name)) return null;
-  const r = await fetch(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(name)}`);
-  if (r.status !== 200) return null;
-  const j = await r.json();
-  const h = j.id;
-  return { uuid: `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`, name: j.name };
+  const n = encodeURIComponent(name);
+  // Mojang は Cloudflare の IP からだと 403/429 を返すことがあるので、だめなら次の窓口を試す
+  const sources = [
+    [`https://api.mojang.com/users/profiles/minecraft/${n}`, (j) => j],
+    [`https://api.minecraftservices.com/minecraft/profile/lookup/name/${n}`, (j) => j],
+    [`https://playerdb.co/api/player/minecraft/${n}`, (j) => j.success && { id: j.data.player.raw_id, name: j.data.player.username }],
+  ];
+  for (const [url, pick] of sources) {
+    try {
+      const r = await fetch(url, { headers: { "user-agent": "sharytech-pass (+https://pass.sharytech.com)" } });
+      if (r.status === 204 || r.status === 404) return null; // その名前のアカウントは無い
+      if (r.status !== 200) {
+        console.warn(`lookup ${new URL(url).host}: ${r.status}`);
+        continue;
+      }
+      const p = pick(await r.json());
+      const h = p && String(p.id || "").replace(/-/g, "");
+      if (!/^[0-9a-f]{32}$/.test(h)) continue;
+      return { uuid: `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`, name: p.name };
+    } catch (e) {
+      console.warn(`lookup ${new URL(url).host}: ${e.message}`);
+    }
+  }
+  throw new Error("Minecraft のユーザー名を確かめられませんでした");
 }
 
 async function stripe(env, method, path, params) {
