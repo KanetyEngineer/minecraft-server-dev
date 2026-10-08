@@ -184,14 +184,14 @@ def load_midi(path: str, mode: str) -> list[Note]:
     return notes
 
 
-def suggest_speed(path: str):
-    """テンポが 1 つの MIDI なら、8 分音符がちょうど整数のレッドストーンティックになる速さを返す。"""
+def suggest_speed(path: str, per_sec: int = 10):
+    """テンポが 1 つの MIDI なら、8 分音符がちょうど整数ティック（per_sec 刻み）になる速さを返す。"""
     import mido
     tempos = {m.tempo for tr in mido.MidiFile(path).tracks for m in tr if m.type == "set_tempo"} or {500000}
     if len(tempos) != 1:
         return None
     bpm = 60_000_000 / tempos.pop()
-    eighth = 60 / bpm / 2 * 10  # 8 分音符の長さ（レッドストーンティック）
+    eighth = 60 / bpm / 2 * per_sec  # 8 分音符の長さ（ティック）
     n = max(1, round(eighth))
     return bpm, eighth / n
 
@@ -735,6 +735,159 @@ def place_rcon(b: Build, rcon_addr, password, origin, keep_loaded):
 
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# コマンド版（データパック）: playsound で鳴らし、ゲーム内の音とパーティクルの演出を付ける
+# ---------------------------------------------------------------------------
+# 楽器ごとに重ねて鳴らす音: (サウンド, 音量の倍率, 音程) 音程 None は音符の高さに合わせる
+SOUND_PRESETS = {
+    "note": {},
+    "game": {
+        "basedrum": [("minecraft:block.note_block.basedrum", 1.0, None), ("minecraft:entity.warden.heartbeat", 0.9, 1.0)],
+        "snare": [("minecraft:block.note_block.snare", 1.0, None), ("minecraft:entity.firework_rocket.blast", 0.45, 1.3)],
+        "hat": [("minecraft:block.note_block.hat", 1.0, None), ("minecraft:block.amethyst_block.hit", 0.5, 1.6)],
+        "bell": [("minecraft:block.note_block.bell", 1.0, None), ("minecraft:block.amethyst_block.chime", 0.35, 1.2)],
+        "chime": [("minecraft:block.note_block.chime", 1.0, None), ("minecraft:block.amethyst_block.chime", 0.35, 1.5)],
+        "bass": [("minecraft:block.note_block.bass", 1.0, None), ("minecraft:block.note_block.didgeridoo", 0.3, None)],
+        "harp": [("minecraft:block.note_block.harp", 1.0, None), ("minecraft:block.note_block.pling", 0.25, None)],
+    },
+}
+PACK_FORMATS = {"1.19.4": 12, "1.20.1": 15, "1.20.4": 26, "1.21.1": 48, "1.21.4": 61, "1.21.11": 94, "26.2": 99}
+
+
+def load_sound_map(spec: str) -> dict:
+    if spec in SOUND_PRESETS:
+        return SOUND_PRESETS[spec]
+    import json
+    with open(spec, encoding="utf-8") as f:
+        raw = json.load(f)
+    out = {}
+    for inst, layers in raw.items():
+        if isinstance(layers, str):
+            layers = [layers]
+        out[inst] = [(l, 1.0, None) if isinstance(l, str) else (l["sound"], l.get("volume", 1.0), l.get("pitch")) for l in layers]
+    return out
+
+
+def dp_namespace(name: str, given: str | None) -> str:
+    import re
+    import zlib
+    if given:
+        ns = given
+    else:
+        slug = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
+        if not slug or slug != re.sub(r"[^\x00-\x7f]", "", slug) or len(slug) < 3 or any(ord(c) > 127 for c in name):
+            slug = f"song_{zlib.crc32(name.encode('utf-8')) & 0xFFFFFF:06x}"
+        ns = slug
+    ns = re.sub(r"[^a-z0-9_]", "_", ns.lower())[:16]
+    return ns
+
+
+def write_datapack(path, notes: list[Note], name: str, args):
+    import json
+    import zipfile
+    ns = dp_namespace(name, args.dp_id)
+    sounds = load_sound_map(args.sounds)
+    eff = args.effects
+    t0 = min(n.time for n in notes)
+    ev: dict[int, dict] = {}
+    for n in notes:
+        if n.vel < args.min_velocity:
+            continue
+        t = int(round((n.time - t0) / args.dp_speed * 20))
+        k = (n.inst, n.note)
+        d = ev.setdefault(t, {})
+        d[k] = max(d.get(k, 0), n.vel)
+    if not ev:
+        sys.exit("音符が見つかりませんでした。")
+    end = max(ev) + 20
+    total_sec = end / 20
+    stage = args.stage
+    vol_mul = args.stage_volume if stage else 1.0
+    fdir = "function" if DATA_VERSIONS[args.mc] >= 3953 else "functions"
+    tdir = "function" if fdir == "function" else "functions"
+    files: dict[str, str] = {}
+    F = lambda fn, lines: files.__setitem__(f"data/{ns}/{fdir}/{fn}.mcfunction", "\n".join(lines) + "\n")
+    O = ns  # スコアボードの名前
+    who = f"@a[tag={ns}.l]"
+    fmt_t = lambda sec: f"{int(sec) // 60}:{int(sec) % 60:02d}"
+
+    ticks = set(ev)
+    if eff != "none":
+        ticks |= set(range(0, end, 20))  # 毎秒の経過表示
+    ticks = sorted(ticks)
+    for t in ticks:
+        lines = []
+        items = sorted(ev.get(t, {}).items(), key=lambda kv: -kv[1])[:32]
+        drums = {k[0] for k, _ in items if k[0] in DRUMS}
+        for (inst, note), vel in items:
+            v = (0.35 + 0.65 * vel / 127) * vol_mul
+            for snd, vm, fixed in sounds.get(inst, [(f"minecraft:block.note_block.{inst}", 1.0, None)]):
+                pitch = fixed if fixed is not None else 2 ** ((note - 12) / 12)
+                lines.append(f"playsound {snd} record {'@a' if stage else '@s'} ~ ~ ~ {v * vm:.2f} {pitch:.4f}")
+            if eff != "none" and inst not in DRUMS:
+                x = (note - 12) * 0.12
+                lines.append(f"particle minecraft:note ^{x:.2f} ^2.3 ^1.6 {note / 24:.3f} 0 0 1 0")
+            if eff == "full" and vel >= 110 and inst not in DRUMS:
+                lines.append("particle minecraft:end_rod ^ ^2 ^2 0.4 0.3 0.4 0.02 4")
+        if eff != "none":
+            if "basedrum" in drums:
+                lines.append("particle minecraft:crit ~ ~0.3 ~ 0.8 0.1 0.8 0.3 10")
+            if "snare" in drums:
+                lines.append("particle minecraft:firework ^ ^2.6 ^1.6 0.3 0.2 0.3 0.06 6")
+            if eff == "full" and len([1 for k, _ in items if k[0] not in DRUMS]) >= 4:
+                lines.append("particle minecraft:glow ^ ^2 ^2 1.2 0.6 1.2 0 12")
+            if t % 20 == 0:
+                lines.append(f'title {"@a" if stage else "@s"} actionbar {{"text":"♪ {fmt_t(t / 20)} / {fmt_t(total_sec)}","color":"aqua"}}')
+        if stage:
+            lines = [l.replace("^", "~") if l.startswith("particle") else l for l in lines]
+            F(f"e/{t}", lines)
+            F(f"x/{t}", [f"scoreboard players add #n {O} 1", f"execute positioned {stage[0]} {stage[1]} {stage[2]} run function {ns}:e/{t}"])
+        else:
+            F(f"e/{t}", lines)
+            F(f"x/{t}", [f"scoreboard players add #n {O} 1", f"execute as {who} at @s run function {ns}:e/{t}"])
+
+    # 二分木で今のティックの関数を呼ぶ（1 ティックあたり log2(N) 回の比較）
+    def tree(lo, hi, name_):
+        if hi - lo <= 4:
+            F(name_, [f"execute if score #t {O} matches {ticks[i]} run function {ns}:x/{ticks[i]}" for i in range(lo, hi)])
+            return
+        mid = (lo + hi) // 2
+        a, b = f"{name_}a", f"{name_}b"
+        F(name_, [f"execute if score #t {O} matches ..{ticks[mid - 1]} run function {ns}:{a}",
+                  f"execute if score #t {O} matches {ticks[mid]}.. run function {ns}:{b}"])
+        tree(lo, mid, a)
+        tree(mid, hi, b)
+    tree(0, len(ticks), "tree/r")
+
+    title = json.dumps({"text": name, "color": "gold"}, ensure_ascii=False)
+    sub = json.dumps({"text": f"{fmt_t(total_sec)} / oto2noteblock", "color": "gray"}, ensure_ascii=False)
+    F("load", [f"scoreboard objectives add {O} dummy"])
+    F("tick", [f"execute if score #on {O} matches 1 run function {ns}:step"])
+    F("step", [f"scoreboard players add #t {O} 1", f"function {ns}:tree/r",
+               f"execute if score #t {O} matches {end}.. run function {ns}:end"])
+    show = "@a" if stage else who
+    F("start", [f"scoreboard objectives add {O} dummy", f"scoreboard players set #t {O} -1", f"scoreboard players set #n {O} 0",
+                f"scoreboard players set #on {O} 1"] +
+      ([f"title {show} times 10 50 20", f"title {show} subtitle {sub}", f"title {show} title {title}"] if eff != "none" else []))
+    F("play", [f"tag @s add {ns}.l", f"function {ns}:start"])
+    F("play_all", [f"tag @a add {ns}.l", f"function {ns}:start"])
+    F("stop", [f"scoreboard players set #on {O} 0", f"tag @a remove {ns}.l"])
+    F("end", [f"function {ns}:stop"] if not args.loop else [f"scoreboard players set #t {O} -1"])
+    tags = {"load": [f"{ns}:load"], "tick": [f"{ns}:tick"]}
+    for k, v in tags.items():
+        files[f"data/minecraft/tags/{tdir}/{k}.json"] = json.dumps({"values": v})
+    pf = PACK_FORMATS.get(args.mc, 99)
+    files["pack.mcmeta"] = json.dumps({"pack": {
+        "description": f"{name} ({fmt_t(total_sec)}) /function {ns}:play",
+        "pack_format": pf, "supported_formats": [pf, 999], "min_format": pf, "max_format": 999}}, ensure_ascii=False)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for k, v in sorted(files.items()):
+            z.writestr(k, v)
+    nnotes = sum(len(v) for v in ev.values())
+    print(f"データパック: 音 {nnotes} 個 / {fmt_t(total_sec)} / 名前空間 {ns}（/function {ns}:play で再生、{ns}:stop で停止）")
+    return ns, ticks, end
+
 DATA_VERSIONS = {"26.2": 4903, "1.21.11": 4671, "1.21.4": 4189, "1.21.1": 3955, "1.20.4": 3700, "1.20.1": 3465, "1.19.4": 3337}
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".aiff", ".aif"}
 
@@ -755,10 +908,16 @@ def main(argv=None):
     ap.add_argument("--row-length", type=int, default=0, help="この長さで上に折り返す（0 = 一直線）。長い曲は 64 などがおすすめ")
     ap.add_argument("--instruments", default="auto", help="auto（MIDI の音色から）/ pitch（高さだけで bass・harp・bell）/ single:harp など")
     ap.add_argument("--min-velocity", type=int, default=0, help="この強さ未満の音を捨てる（0〜127）")
-    ap.add_argument("--formats", default="litematic,schem,nbs,mcfunction", help="出力する形式をカンマ区切りで")
+    ap.add_argument("--formats", default="litematic,schem,nbs,mcfunction,datapack", help="出力する形式をカンマ区切りで（datapack はコマンドで鳴らす版）")
     ap.add_argument("--onset", type=float, default=0.6, help="音声解析: 音の出だしの判定（大きいほど音が減る）")
     ap.add_argument("--frame", type=float, default=0.3, help="音声解析: 音の続きの判定")
     ap.add_argument("--min-note-ms", type=float, default=100, help="音声解析: これより短い音を捨てる（ミリ秒）")
+    ap.add_argument("--sounds", default="note", help="データパックの音: note（音ブロックの音だけ）/ game（ゲーム内の音を重ねる）/ 自分の対応表 .json")
+    ap.add_argument("--effects", default="basic", choices=["none", "basic", "full"], help="データパックの演出: none / basic（音符・太鼓のパーティクル、曲名、経過時間）/ full（さらに光の粒）")
+    ap.add_argument("--stage", type=int, nargs=3, metavar=("X", "Y", "Z"), help="データパックで、聞く人の位置ではなく決まった場所（ステージ）で鳴らす")
+    ap.add_argument("--stage-volume", type=float, default=4.0, help="ステージで鳴らすときの音量（1 で 16 ブロック届く。既定 4 = 64 ブロック）")
+    ap.add_argument("--loop", action="store_true", help="データパックで、最後まで行ったら最初から繰り返す")
+    ap.add_argument("--dp-id", help="データパックの名前空間（英小文字・数字・_、16 文字まで）。既定は曲名から作る")
     ap.add_argument("--rcon", help="鯖に直接設置: host:port")
     ap.add_argument("--rcon-password", default=os.environ.get("RCON_PASSWORD", ""))
     ap.add_argument("--origin", type=int, nargs=3, metavar=("X", "Y", "Z"), help="直接設置の基準座標（設計図の角）")
@@ -774,6 +933,10 @@ def main(argv=None):
         ext = ".mid"
     if ext in (".mid", ".midi"):
         notes = load_midi(src, args.instruments)
+        args.dp_speed = args.speed
+        fit20 = suggest_speed(src, 20)
+        if fit20 and args.fit_tempo:
+            args.dp_speed = fit20[1]
         fit = suggest_speed(src)
         if fit:
             bpm, sp = fit
@@ -788,6 +951,8 @@ def main(argv=None):
     else:
         sys.exit(f"対応していない形式です: {ext}")
 
+    if not hasattr(args, "dp_speed"):
+        args.dp_speed = args.speed
     slots, dropped = quantize(notes, args.speed, args.max_lanes, args.min_velocity)
     dv = DATA_VERSIONS.get(args.mc)
     if dv is None:
@@ -809,6 +974,8 @@ def main(argv=None):
         write_nbs(base_out + ".nbs", slots, name); outs.append(base_out + ".nbs")
     if "mcfunction" in fmts:
         write_mcfunction(base_out + "_place.mcfunction", b); outs.append(base_out + "_place.mcfunction")
+    if "datapack" in fmts:
+        write_datapack(base_out + "_datapack.zip", notes, name, args); outs.append(base_out + "_datapack.zip")
     for p in outs:
         print("書き出し:", p)
     if args.rcon:

@@ -78,6 +78,32 @@ python oto2noteblock.py 曲.nbs
 | `--min-velocity 40` | 弱い音を捨てる（音声から作って雑音が多い時に） |
 | `--onset 0.7` | 音声解析で音の出だしを厳しく判定（音が多すぎる時は上げる、少ない時は下げる） |
 
+### コマンド版（データパック）: ゲーム内の音と演出付きで鳴らす
+
+装置を作らずに、コマンド（`/playsound` と `/particle`）で曲を流すデータパック `曲_datapack.zip` も一緒にできます。音ブロックの装置より細かい 0.05 秒刻みで鳴り、音の強弱も出ます。
+
+使い方:
+1. `曲_datapack.zip` をワールドの `datapacks` フォルダに入れ、`/reload`
+2. `/function <名前空間>:play` で自分に、`/function <名前空間>:play_all` で全員に流す。`/function <名前空間>:stop` で止める
+   （名前空間は変換のときに表示されます。日本語の曲名は `song_xxxxxx` になります。`--dp-id rokucho` のように自分で決めることもできます）
+
+| オプション | 意味 |
+|---|---|
+| `--sounds game` | 音ブロックの音に、ゲーム内の音を重ねる（バスドラムにウォーデンの心音、スネアに花火の破裂音、ハイハットとベルにアメジストの音、ベースにディジュリドゥなど） |
+| `--sounds 対応表.json` | 楽器ごとに好きな音を割り当てる（例は下） |
+| `--effects full` | 演出を増やす（既定 `basic`: 音符の色付きパーティクル、太鼓に合わせた火花と花火、曲名の表示、経過時間。`full` は強い音に光の粒、和音に光る粒も。`none` で演出なし） |
+| `--stage X Y Z` | 聞く人について回らず、決まった場所（ステージ）から鳴らす。`--stage-volume 4` で 64 ブロック先まで届く |
+| `--loop` | 最後まで行ったら最初から繰り返す |
+
+対応表の例（`harp` などの楽器名ごとに、鳴らすゲーム内の音を並べる。`pitch` を書かなければ音符の高さに合わせる）:
+```json
+{
+  "basedrum": [{"sound": "minecraft:entity.generic.explode", "volume": 0.3, "pitch": 1.8}],
+  "harp": ["minecraft:block.note_block.harp", {"sound": "minecraft:block.amethyst_block.chime", "volume": 0.3}],
+  "bell": ["minecraft:block.note_block.bell"]
+}
+```
+
 ### 鯖へ直接置く（RCON）
 
 ```
