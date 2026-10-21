@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "solariacarpet",
+  "version": "${version}",
+  "name": "Solaria Carpet",
+  "description": "Carpet rules for the Solaria SMP: 1.21.1 potion duplication (potionDupe) and old-style light suppression (lightSuppression).",
+  "authors": ["kanety"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.kanety.solariacarpet.SolariaCarpet"]
+  },
+  "mixins": ["solariacarpet.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "carpet": "*"
+  },
+  "breaks": {
+    "potiondupe": "*"
+  }
+}

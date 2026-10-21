@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Solaria Overlay</title>
+<style>
+  :root { --size: 72px; --color: #ffffff; --accent: #7fe3ff; --stroke: #000000; }
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  body { font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; color: var(--color);
+         padding: 12px; display: flex; flex-direction: column; }
+  body.left { align-items: flex-start; text-align: left; }
+  body.center { align-items: center; text-align: center; }
+  body.right { align-items: flex-end; text-align: right; }
+  .box { display: inline-flex; flex-direction: column; gap: 4px; padding: 10px 18px; border-radius: 14px; }
+  .box.panel { background: rgba(10, 14, 24, .62); }
+  .title { font-size: calc(var(--size) * .36); font-weight: 700; color: var(--accent); letter-spacing: .04em; }
+  .row { display: flex; align-items: baseline; gap: .3em; position: relative; }
+  .num { font-size: var(--size); font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .unit { font-size: calc(var(--size) * .4); font-weight: 700; }
+  .stroke .num, .stroke .title, .stroke .unit, .stroke .rank {
+    text-shadow: -2px -2px 0 var(--stroke), 2px -2px 0 var(--stroke), -2px 2px 0 var(--stroke), 2px 2px 0 var(--stroke), 0 3px 6px rgba(0,0,0,.5); }
+  .plus { position: absolute; right: -0.2em; top: -0.9em; font-size: calc(var(--size) * .42); font-weight: 900; color: var(--accent);
+          opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; white-space: nowrap; }
+  .plus.show { opacity: 1; transform: translateY(0); }
+  .num.bump { animation: bump .35s ease-out; }
+  @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
+  .ranks { margin-top: 6px; display: grid; grid-template-columns: auto 1fr auto; column-gap: .7em; row-gap: 2px;
+           font-size: calc(var(--size) * .3); font-weight: 700; }
+  .rank .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .rank .n { color: var(--accent); }
+  .err { font-size: 14px; opacity: .6; }
+</style>
+</head>
+<body>
+<div class="box" id="box">
+  <div class="title" id="title"></div>
+  <div class="row"><span class="num" id="num">0</span><span class="unit" id="unit"></span><span class="plus" id="plus"></span></div>
+  <div class="ranks" id="ranks"></div>
+  <div class="err" id="err"></div>
+</div>
+<script>
+const P = new URLSearchParams(location.search);
+const c = P.get('c') || 'mined';
+const top = Math.max(0, Math.min(20, parseInt(P.get('top') || '0', 10) || 0));
+const player = P.get('player') || '';
+const interval = Math.max(300, parseInt(P.get('interval') || '1000', 10) || 1000);
+const root = document.documentElement.style;
+if (P.get('size')) root.setProperty('--size', parseInt(P.get('size'), 10) + 'px');
+for (const k of ['color', 'accent', 'stroke']) if (P.get(k)) root.setProperty('--' + k, '#' + P.get(k).replace('#', ''));
+document.body.className = (P.get('align') || 'left');
+if (P.get('panel') === '1') document.getElementById('box').classList.add('panel');
+if (P.get('stroke') !== '0') document.getElementById('box').classList.add('stroke');
+const unit = P.get('unit') || '';
+document.getElementById('unit').textContent = unit;
+
+const numEl = document.getElementById('num'), plusEl = document.getElementById('plus');
+let shown = null, target = 0, from = 0, start = 0, format = 'NUMBER', plusTimer = 0;
+const DUR = Math.min(900, interval * .9);
+
+function fmt(v) {
+  v = Math.round(v);
+  if (format === 'TICKS') return (v / 72000).toFixed(1) + '時間';
+  if (format === 'CENTIMETERS') return v >= 100000 ? (v / 100000).toLocaleString('ja-JP', {maximumFractionDigits: 1}) + 'km' : Math.floor(v / 100) + 'm';
+  return v.toLocaleString('ja-JP');
+}
+function frame(t) {
+  if (shown !== target) {
+    const k = Math.min(1, (t - start) / DUR);
+    const e = 1 - Math.pow(1 - k, 3);
+    shown = k >= 1 ? target : from + (target - from) * e;
+    numEl.textContent = fmt(shown);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+async function poll() {
+  try {
+    const q = new URLSearchParams({c, top: String(top)});
+    if (player) q.set('player', player);
+    const r = await fetch('/api?' + q, {cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    format = d.format;
+    const title = P.get('title');
+    const label = player ? (d.player ? d.player.name : player) + ' の' + d.label : 'サーバー全体の' + d.label;
+    document.getElementById('title').textContent = title === 'none' ? '' : (title || label);
+    const value = player ? (d.player ? d.player.value : 0) : d.total;
+    if (shown === null) { shown = value; target = value; numEl.textContent = fmt(value); }
+    else if (value !== target) {
+      const diff = value - target;
+      from = shown; target = value; start = performance.now();
+      if (diff > 0 && format === 'NUMBER' && P.get('plus') !== '0') {
+        plusEl.textContent = '+' + diff.toLocaleString('ja-JP');
+        plusEl.classList.add('show'); clearTimeout(plusTimer);
+        plusTimer = setTimeout(() => plusEl.classList.remove('show'), 1200);
+        numEl.classList.remove('bump'); void numEl.offsetWidth; numEl.classList.add('bump');
+      }
+    }
+    const ranks = document.getElementById('ranks');
+    ranks.innerHTML = '';
+    for (const x of d.top) {
+      for (const [cls, text] of [['n', x.rank + '.'], ['', x.name], ['v', x.text]]) {
+        const s = document.createElement('span'); s.className = 'rank ' + cls; s.textContent = text; ranks.appendChild(s);
+      }
+    }
+    document.getElementById('err').textContent = '';
+  } catch (e) {
+    document.getElementById('err').textContent = P.get('debug') ? String(e) : '';
+  }
+  setTimeout(poll, interval);
+}
+poll();
+</script>
+</body>
+</html>

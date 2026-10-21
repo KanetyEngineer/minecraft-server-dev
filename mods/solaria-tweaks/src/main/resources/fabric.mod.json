@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "solariatweaks",
+  "version": "${version}",
+  "name": "Solaria Tweaks",
+  "description": "Solaria SMP helpers in one mod: shared waypoints for Xaero's maps, per-player stat leaderboards, shared build plans for Syncmatica schematics and an observer misplacement guard.",
+  "authors": ["kanety"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.kanety.solaria.SolariaTweaks"],
+    "client": ["dev.kanety.solaria.client.SolariaTweaksClient"],
+    "modmenu": ["dev.kanety.solaria.client.ModMenuEntry"]
+  },
+  "mixins": [
+    "solariatweaks.mixins.json",
+    { "config": "solariatweaks.client.mixins.json", "environment": "client" }
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "malilib": ">=0.27.19-",
+    "syncmatica": "*",
+    "xaeroworldmap": "*",
+    "xaerominimap": "*"
+  },
+  "breaks": {
+    "solariatools": "*",
+    "malilib": "<0.27.19-"
+  }
+}
