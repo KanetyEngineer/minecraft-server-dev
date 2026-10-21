@@ -29,7 +29,18 @@ public class BuildScreen extends Screen {
 
     private static String lastProject = "";
     private static Tab lastTab = Tab.MATERIALS;
-    private static boolean onlyMine;
+    /** List filter: everything, my assignments, or (materials tab) what my assigned areas still need. */
+    private enum Filter {
+        ALL("すべて表示"), MINE("自分の担当だけ"), MY_AREAS("担当している区画");
+
+        final String label;
+
+        Filter(String label) {
+            this.label = label;
+        }
+    }
+
+    private static Filter filter = Filter.ALL;
 
     private final Screen parent;
     private String selected;
@@ -95,7 +106,7 @@ public class BuildScreen extends Screen {
             ClientConfig.get().setGuardMode(mode.next());
             rebuildWidgets();
         }).bounds(right - 170, 3, 170, 16)
-                .tooltip(Tooltip.create(Component.literal("オブザーバーが見ている場所にブロックを置こうとすると、設置を止めて警告します（EasyPlace も対象）。\n設計図と違うものだけ: Litematica の設計図と違うブロックを置くとき\nすべてのブロック: どのブロックを置くときも\n警告のあと、右クリックを一度離して3秒以内に押し直すと設置できます。")))
+                .tooltip(Tooltip.create(Component.literal("オブザーバーが見ている場所にブロックを置こうとすると、設置を止めて警告します（EasyPlace も対象）。\n設計図の範囲だけ: Litematica の設計図にあるオブザーバーの前に置くときと、設計図と違うブロックを置くとき\nすべてのブロック: どのブロックを置くときも\n警告のあと、右クリックを一度離して3秒以内に押し直すと設置できます。")))
                 .build());
 
         int cx = left + sideW + 8;
@@ -107,11 +118,18 @@ public class BuildScreen extends Screen {
         addRenderableWidget(tabButton("区画", Tab.AREAS, cx + tw + 2, tw));
         addRenderableWidget(tabButton("設定", Tab.SETTINGS, cx + (tw + 2) * 2, tw));
         if (tab == Tab.MATERIALS || tab == Tab.AREAS) {
-            addRenderableWidget(Button.builder(Component.literal(onlyMine ? "自分の担当だけ" : "すべて表示"), b -> {
-                onlyMine = !onlyMine;
+            Filter shown = filter();
+            addRenderableWidget(Button.builder(Component.literal(shown.label), b -> {
+                filter = switch (shown) {
+                    case ALL -> Filter.MINE;
+                    case MINE -> tab == Tab.MATERIALS ? Filter.MY_AREAS : Filter.ALL;
+                    case MY_AREAS -> Filter.ALL;
+                };
                 scroll = 0;
                 rebuildWidgets();
-            }).bounds(right - 84, top, 84, 18).build());
+            }).bounds(right - 96, top, 96, 18)
+                    .tooltip(Tooltip.create(Component.literal("すべて表示 → 自分の担当だけ → 担当している区画（材料タブのみ。自分が担当する区画でまだ置いていない材料）")))
+                    .build());
         }
         switch (tab) {
             case MATERIALS -> initMaterials(p, cx);
@@ -134,15 +152,38 @@ public class BuildScreen extends Screen {
         return Math.max(1, (bottom - listTop) / ROW);
     }
 
+    /** The areas tab has no "my areas" filter; it shows "my assignments" there. */
+    private Filter filter() {
+        return tab == Tab.AREAS && filter == Filter.MY_AREAS ? Filter.MINE : filter;
+    }
+
+    /** Item id -> blocks still to place in the areas assigned to me. */
+    private java.util.Map<String, Integer> myAreaNeeds(ClientBuildState.Project p) {
+        String me = me();
+        java.util.Map<String, Integer> out = new java.util.HashMap<>();
+        for (ClientBuildState.Area a : p.areas()) {
+            if (a.ignored() || a.assignee() == null || !a.assignee().uuid().equals(me)) continue;
+            a.left().forEach((k, v) -> out.merge(k, v, Integer::sum));
+        }
+        return out;
+    }
+
     private List<ClientBuildState.Material> materialRows(ClientBuildState.Project p) {
         String me = me();
+        Filter f = filter();
+        java.util.Map<String, Integer> needs = f == Filter.MY_AREAS ? myAreaNeeds(p) : java.util.Map.of();
         List<ClientBuildState.Material> rows = new ArrayList<>();
         for (ClientBuildState.Material m : p.materials()) {
-            if (onlyMine && (m.ignored() || m.assignee() == null || !m.assignee().uuid().equals(me))) continue;
+            if (f == Filter.MINE && (m.ignored() || m.assignee() == null || !m.assignee().uuid().equals(me))) continue;
+            if (f == Filter.MY_AREAS && (m.ignored() || needs.getOrDefault(m.item(), 0) <= 0)) continue;
             rows.add(m);
         }
-        rows.sort(Comparator.comparing(ClientBuildState.Material::ignored)
-                .thenComparing(Comparator.comparingInt(ClientBuildState.Material::remaining).reversed()));
+        if (f == Filter.MY_AREAS) {
+            rows.sort(Comparator.comparingInt((ClientBuildState.Material m) -> needs.getOrDefault(m.item(), 0)).reversed());
+        } else {
+            rows.sort(Comparator.comparing(ClientBuildState.Material::ignored)
+                    .thenComparing(Comparator.comparingInt(ClientBuildState.Material::remaining).reversed()));
+        }
         return rows;
     }
 
@@ -150,7 +191,7 @@ public class BuildScreen extends Screen {
         String me = me();
         List<ClientBuildState.Area> rows = new ArrayList<>();
         for (ClientBuildState.Area a : p.areas()) {
-            if (onlyMine && (a.ignored() || a.assignee() == null || !a.assignee().uuid().equals(me))) continue;
+            if (filter() != Filter.ALL && (a.ignored() || a.assignee() == null || !a.assignee().uuid().equals(me))) continue;
             rows.add(a);
         }
         rows.sort(Comparator.comparing(ClientBuildState.Area::ignored));
@@ -215,7 +256,7 @@ public class BuildScreen extends Screen {
                 b -> run("bp " + (member ? "leave " : "join ") + p.name())).bounds(cx, y, w, 18).build());
         addRenderableWidget(Button.builder(Component.literal("自動で割り当てる"), b -> run("bp autoassign " + p.name()))
                 .bounds(x2, y, w, 18)
-                .tooltip(Tooltip.create(Component.literal("残りの材料と未完成の区画を、参加者（いなければオンラインの全員）に均等に割り当てます。作成者と OP だけが使えます。")))
+                .tooltip(Tooltip.create(Component.literal("残りの材料と未完成の区画を、参加者（いなければオンラインの全員）に均等に割り当てます。作成者と OP だけが使えます。\nOP 以外は、まだ担当のいないものだけを割り当てます。")))
                 .build());
         y += 22;
         addRenderableWidget(Button.builder(Component.literal("見ている容器を倉庫に追加"), b -> lookedAt().ifPresent(pos ->
@@ -324,8 +365,14 @@ public class BuildScreen extends Screen {
     private void renderMaterials(GuiGraphics g, ClientBuildState.Project p, int cx) {
         List<ClientBuildState.Material> rows = materialRows(p);
         java.util.Map<String, ChestTrackerBridge.Found> remembered = ChestTrackerBridge.find(p);
+        java.util.Map<String, Integer> needs = filter() == Filter.MY_AREAS ? myAreaNeeds(p) : null;
         if (rows.isEmpty()) {
-            g.drawString(font, onlyMine ? "あなたが担当している材料はありません" : "材料はありません", cx, listTop + 4, 0xFFAAAAAA, true);
+            String empty = switch (filter()) {
+                case ALL -> "材料はありません";
+                case MINE -> "あなたが担当している材料はありません";
+                case MY_AREAS -> "あなたが担当している区画に、置き残しの材料はありません";
+            };
+            g.drawString(font, empty, cx, listTop + 4, 0xFFAAAAAA, true);
             return;
         }
         int n = visibleRows();
@@ -345,6 +392,7 @@ public class BuildScreen extends Screen {
             }
             g.drawString(font, font.plainSubstrByWidth(itemName(m.item()), nameW), cx + 20, y + 5, 0xFFFFFFFF, true);
             String rem = m.remaining() == 0 ? "完了" : "あと " + stacks(m.remaining());
+            if (needs != null) rem = "区画に " + stacks(needs.getOrDefault(m.item(), 0));
             ChestTrackerBridge.Found f = remembered.get(m.item());
             if (f != null && m.remaining() > 0) rem = "箱に" + f.count() + " " + rem;
             g.drawString(font, rem, barX - 4 - font.width(rem), y + 5, m.remaining() == 0 ? 0xFF7FFF7F : 0xFFFFFFFF, true);
@@ -359,7 +407,7 @@ public class BuildScreen extends Screen {
     private void renderAreas(GuiGraphics g, ClientBuildState.Project p, int cx) {
         List<ClientBuildState.Area> rows = areaRows(p);
         if (rows.isEmpty()) {
-            g.drawString(font, onlyMine ? "あなたが担当している区画はありません" : "区画はありません", cx, listTop + 4, 0xFFAAAAAA, true);
+            g.drawString(font, filter() != Filter.ALL ? "あなたが担当している区画はありません" : "区画はありません", cx, listTop + 4, 0xFFAAAAAA, true);
             return;
         }
         int n = visibleRows();

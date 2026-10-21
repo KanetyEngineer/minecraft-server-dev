@@ -15,11 +15,23 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.BeaconMenu;
+import net.minecraft.world.inventory.CartographyTableMenu;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.EnchantmentMenu;
+import net.minecraft.world.inventory.GrindstoneMenu;
+import net.minecraft.world.inventory.HopperMenu;
+import net.minecraft.world.inventory.ItemCombinerMenu;
+import net.minecraft.world.inventory.LecternMenu;
+import net.minecraft.world.inventory.LoomMenu;
+import net.minecraft.world.inventory.MerchantMenu;
+import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
@@ -44,35 +56,50 @@ public final class FilterFill {
 
     public static void onScreenInit(Minecraft client, Screen screen, int width, int height) {
         if (!(screen instanceof AbstractContainerScreen<?> cs) || screen instanceof InventoryScreen
-                || screen instanceof CreativeModeInventoryScreen) return;
+                || screen instanceof CreativeModeInventoryScreen || !supports(cs)) return;
         List<Slot> target = containerSlots(cs.getMenu());
-        if (target.isEmpty() || target.size() > 27) return;
-        int x = Math.min(width / 2 + 92, width - 122);
-        int y = height / 2 - 64;
+        if (target.isEmpty() || target.size() > 54) return;
+        int w = 76;
         List<Button> buttons = new ArrayList<>();
-        if (target.size() == 5) {
-            buttons.add(Button.builder(Component.literal("フィルターを詰める"), b -> fillFilter(client, cs))
+        if (cs.getMenu() instanceof HopperMenu) {
+            buttons.add(Button.builder(Component.literal("フィルター"), b -> fillFilter(client, cs))
                     .tooltip(Tooltip.create(Component.literal("仕分け機のフィルター用に、1枠目へ手に持っているアイテムを "
                             + ClientConfig.get().filterCount + " 個、残りの枠へ埋め物を " + ClientConfig.get().fillerCount
                             + " 個ずつ入れます。\n埋め物: " + fillerLabel() + "\n個数と埋め物は設定で変えられます。")))
-                    .bounds(x, y, 120, 18).build());
+                    .build());
         }
-        buttons.add(Button.builder(Component.literal("覚えた配置で詰める"), b -> fillTemplate(client, cs))
-                .tooltip(Tooltip.create(Component.literal("「この配置を覚える」で覚えた中身と同じになるように、手持ちから詰めます。")))
-                .bounds(x, y, 120, 18).build());
-        buttons.add(Button.builder(Component.literal("この配置を覚える"), b -> remember(client, cs))
+        buttons.add(Button.builder(Component.literal("覚えた配置"), b -> fillTemplate(client, cs))
+                .tooltip(Tooltip.create(Component.literal("「配置を覚える」で覚えた中身と同じになるように、手持ちから詰めます。")))
+                .build());
+        buttons.add(Button.builder(Component.literal("配置を覚える"), b -> remember(client, cs))
                 .tooltip(Tooltip.create(Component.literal("いま開いている容器の中身（アイテム・個数・名前）を覚えます。")))
-                .bounds(x, y, 120, 18).build());
+                .build());
         if (LitematicaBridge.available()) {
-            buttons.add(Button.builder(Component.literal("設計図どおりに詰める"), b -> fillSchematic(client, cs))
+            buttons.add(Button.builder(Component.literal("設計図どおり"), b -> fillSchematic(client, cs))
                     .tooltip(Tooltip.create(Component.literal("Litematica の設計図でこの容器に入っているアイテムを、手持ちから詰めます。")))
-                    .bounds(x, y, 120, 18).build());
+                    .build());
         }
+        // Right edge of the screen, clear of resource packs that draw extra panels beside the container
+        // (Redstone Tweaks); filterFillOffsetX/Y move it.
+        ClientConfig cfg = ClientConfig.get();
+        int h = buttons.size() * 20 - 2;
+        int x = Math.max(0, Math.min(width - w, width - w - 4 + cfg.filterFillOffsetX));
+        int y = Math.max(0, Math.min(height - h, height / 2 - h / 2 + cfg.filterFillOffsetY));
         for (int i = 0; i < buttons.size(); i++) {
             Button b = buttons.get(i);
-            b.setY(y + i * 20);
+            b.setRectangle(w, 18, x, y + i * 20);
             Screens.getButtons(screen).add(b);
         }
+    }
+
+    /** Screens that are not storage: crafting stations, the anvil, villagers, the ender chest. */
+    private static boolean supports(AbstractContainerScreen<?> cs) {
+        AbstractContainerMenu m = cs.getMenu();
+        if (m instanceof CraftingMenu || m instanceof StonecutterMenu || m instanceof CartographyTableMenu
+                || m instanceof ItemCombinerMenu || m instanceof GrindstoneMenu || m instanceof LoomMenu
+                || m instanceof EnchantmentMenu || m instanceof BeaconMenu || m instanceof MerchantMenu
+                || m instanceof LecternMenu) return false;
+        return !(cs.getTitle().getContents() instanceof TranslatableContents t && t.getKey().equals("container.enderchest"));
     }
 
     // ---------------------------------------------------------------- actions

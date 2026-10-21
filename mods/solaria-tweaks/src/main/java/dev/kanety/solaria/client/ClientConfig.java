@@ -26,13 +26,16 @@ public final class ClientConfig {
     /** Sorter filter fill: items of the held item in the first slot, filler items in each other slot. */
     public int filterCount = 18;
     public int fillerCount = 1;
+    /** Moves the fill buttons from their place at the right edge of the screen (GUI pixels). */
+    public int filterFillOffsetX = 0;
+    public int filterFillOffsetY = 0;
     /** Filler item id; empty = any renamed item. */
     public String fillerItem = "";
     /** Remembered container layout (ItemStack JSON per slot, null = empty). */
     public java.util.List<com.google.gson.JsonElement> fillTemplate;
 
     public enum GuardMode {
-        OFF("off", "OFF"), DIFF("diff", "設計図と違うものだけ"), ALL("all", "すべてのブロック");
+        OFF("off", "OFF"), DIFF("diff", "設計図の範囲だけ"), ALL("all", "すべてのブロック");
 
         public final String id;
         public final String label;

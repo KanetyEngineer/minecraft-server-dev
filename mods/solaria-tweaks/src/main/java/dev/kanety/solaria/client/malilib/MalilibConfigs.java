@@ -37,8 +37,10 @@ public final class MalilibConfigs implements IConfigHandler {
     public static final ConfigInteger FILTER_COUNT = new ConfigInteger("filterCount", 18, 1, 64).apply(GENERIC);
     public static final ConfigInteger FILLER_COUNT = new ConfigInteger("fillerCount", 1, 1, 64).apply(GENERIC);
     public static final ConfigString FILLER_ITEM = new ConfigString("fillerItem", "").apply(GENERIC);
+    public static final ConfigInteger FILL_OFFSET_X = new ConfigInteger("filterFillOffsetX", 0, -2000, 2000).apply(GENERIC);
+    public static final ConfigInteger FILL_OFFSET_Y = new ConfigInteger("filterFillOffsetY", 0, -2000, 2000).apply(GENERIC);
     public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES, SHOW_SHARED_ON_MAP,
-            FILTER_COUNT, FILLER_COUNT, FILLER_ITEM);
+            FILTER_COUNT, FILLER_COUNT, FILLER_ITEM, FILL_OFFSET_X, FILL_OFFSET_Y);
 
     public static final ConfigHotkey OPEN_CONFIG = new ConfigHotkey("openConfigGui", "LEFT_CONTROL,B").apply(HOTKEYS);
     public static final ConfigHotkey OPEN_BUILD_PLANS = new ConfigHotkey("openBuildPlans", "B").apply(HOTKEYS);
@@ -79,6 +81,16 @@ public final class MalilibConfigs implements IConfigHandler {
             ClientConfig.get().fillerCount = c.getIntegerValue();
             ClientConfig.save();
         });
+        FILL_OFFSET_X.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().filterFillOffsetX = c.getIntegerValue();
+            ClientConfig.save();
+        });
+        FILL_OFFSET_Y.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().filterFillOffsetY = c.getIntegerValue();
+            ClientConfig.save();
+        });
         FILLER_ITEM.setValueChangeCallback(c -> {
             if (pulling) return;
             ClientConfig.get().fillerItem = c.getStringValue().strip();
@@ -100,6 +112,8 @@ public final class MalilibConfigs implements IConfigHandler {
             FILTER_COUNT.setIntegerValue(cfg.filterCount);
             FILLER_COUNT.setIntegerValue(cfg.fillerCount);
             FILLER_ITEM.setValueFromString(cfg.fillerItem == null ? "" : cfg.fillerItem);
+            FILL_OFFSET_X.setIntegerValue(cfg.filterFillOffsetX);
+            FILL_OFFSET_Y.setIntegerValue(cfg.filterFillOffsetY);
         } finally {
             pulling = false;
         }

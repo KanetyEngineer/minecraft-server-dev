@@ -7,23 +7,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.kanety.solaria.SolariaTweaks;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.numbers.FixedFormat;
-import net.minecraft.network.chat.numbers.NumberFormat;
-import net.minecraft.network.protocol.game.ClientboundResetScorePacket;
-import net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket;
-import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket;
-import net.minecraft.network.protocol.game.ClientboundSetScorePacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stat;
-import net.minecraft.world.scores.DisplaySlot;
-import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
@@ -35,26 +23,19 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Per-player sidebar leaderboards built from vanilla statistics. Every player picks what their own sidebar shows
- * (/lb show, /lb hide); the scores are sent only to that player, so nothing changes for the others. A statistic change
- * is pushed at the end of the same server tick. Bots (Carpet fake players and players marked with /lb bot add) are
- * left out.
+ * Rankings built from vanilla statistics, for /lb top, /lb server and the OBS overlay. Bots (Carpet fake players and
+ * players marked with /lb bot add) are left out. The sidebar display was removed in 1.6.0.
  */
 public final class Leaderboard {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final int MAX_LINES = 15;
     private static final String OFF = "off";
-    /** Score holder names for the total lines; "#" never appears in player names. */
-    private static final String TOTAL_HOLDER = "#total";
     private static Leaderboard instance;
 
     /** Saved to world/solariatweaks/leaderboard.json. */
@@ -92,22 +73,11 @@ public final class Leaderboard {
         }
     }
 
-    /** What one online viewer currently has on their sidebar. */
-    private static final class View {
-        String objective;
-        Criterion criterion;
-        final Map<String, Integer> sent = new HashMap<>();
-        final Map<String, String> sentLabel = new HashMap<>();
-        boolean full = true;
-    }
-
     private final MinecraftServer server;
     private final Path file;
     private Saved saved = new Saved();
     private final Map<UUID, PlayerStats> stats = new HashMap<>();
-    private final Map<UUID, View> views = new HashMap<>();
     private final Set<String> dirtyTypes = new HashSet<>();
-    private final Scoreboard dummyBoard = new Scoreboard();
     private int counter;
     private boolean serverDirty = true;
 
@@ -200,13 +170,9 @@ public final class Leaderboard {
             readStatFile(player.getUUID(), server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(player.getStringUUID() + ".json"));
             markAllDirty();
         }
-        View view = new View();
-        views.put(player.getUUID(), view);
-        view.criterion = chosen(player.getUUID());
     }
 
     public void onLeave(ServerPlayer player) {
-        views.remove(player.getUUID());
     }
 
     private void loadStatFiles() {
@@ -261,37 +227,6 @@ public final class Leaderboard {
 
     // ---------------------------------------------------------------- choices
 
-    public Criterion chosen(UUID uuid) {
-        String key = saved.choices.getOrDefault(uuid.toString(), saved.defaultCriterion);
-        if (key == null || key.equals(OFF)) return null;
-        return Criterion.parse(key);
-    }
-
-    public void choose(ServerPlayer player, Criterion criterion) {
-        saved.choices.put(player.getStringUUID(), criterion == null ? OFF : criterion.key());
-        save();
-        View view = views.get(player.getUUID());
-        if (view != null) {
-            view.criterion = criterion;
-            view.full = true;
-        }
-    }
-
-    public String defaultKey() {
-        return saved.defaultCriterion == null ? OFF : saved.defaultCriterion;
-    }
-
-    public void setDefault(Criterion criterion) {
-        saved.defaultCriterion = criterion == null ? OFF : criterion.key();
-        save();
-        for (Map.Entry<UUID, View> e : views.entrySet()) {
-            if (!saved.choices.containsKey(e.getKey().toString())) {
-                e.getValue().criterion = criterion;
-                e.getValue().full = true;
-            }
-        }
-    }
-
     public record Rank(String name, long value) {}
 
     public List<Rank> ranking(Criterion c) {
@@ -338,7 +273,6 @@ public final class Leaderboard {
     // ---------------------------------------------------------------- sidebar
 
     private void markAllDirty() {
-        for (View v : views.values()) v.full = true;
         serverDirty = true;
     }
 
@@ -348,95 +282,7 @@ public final class Leaderboard {
         // The server-wide view changes almost every tick (play time), so it is refreshed once a second.
         boolean serverTick = serverDirty && counter % 20 == 0;
         if (serverTick) serverDirty = false;
-        for (Map.Entry<UUID, View> e : views.entrySet()) {
-            View view = e.getValue();
-            boolean dirty = view.full || view.criterion != null
-                    && (view.criterion.isServer() ? serverTick : dirtyTypes.contains(view.criterion.type()));
-            if (!dirty) continue;
-            ServerPlayer player = server.getPlayerList().getPlayer(e.getKey());
-            if (player != null) update(player, view);
-        }
         dirtyTypes.clear();
-    }
-
-    private void update(ServerPlayer player, View view) {
-        Criterion c = view.criterion;
-        String wanted = c == null ? null : "solaria_" + Integer.toHexString(c.key().hashCode());
-        if (view.full || !Objects.equals(wanted, view.objective)) {
-            if (view.objective != null) {
-                player.connection.send(new ClientboundSetObjectivePacket(objective(view.objective, null), ClientboundSetObjectivePacket.METHOD_REMOVE));
-            }
-            view.sent.clear();
-            view.sentLabel.clear();
-            view.objective = wanted;
-            if (wanted == null) {
-                // Give the server's own sidebar (if any) back.
-                Objective vanilla = server.getScoreboard().getDisplayObjective(DisplaySlot.SIDEBAR);
-                player.connection.send(new ClientboundSetDisplayObjectivePacket(DisplaySlot.SIDEBAR, vanilla));
-                view.full = false;
-                return;
-            }
-            Objective obj = objective(wanted, c);
-            player.connection.send(new ClientboundSetObjectivePacket(obj, ClientboundSetObjectivePacket.METHOD_ADD));
-            player.connection.send(new ClientboundSetDisplayObjectivePacket(DisplaySlot.SIDEBAR, obj));
-            view.full = false;
-        }
-        if (c == null) return;
-
-        String me = player.getName().getString();
-        Map<String, Integer> now = new LinkedHashMap<>();
-        Map<String, String> labels = new HashMap<>();
-        if (c.isServer()) {
-            // One line per item, kept in list order by descending scores; the value is shown as text.
-            int n = Criterion.SERVER_ITEMS.size() + 1;
-            now.put(TOTAL_HOLDER + "players", n);
-            labels.put(TOTAL_HOLDER + "players", "参加したプレイヤー|" + playerCount() + "人");
-            for (int i = 0; i < Criterion.SERVER_ITEMS.size(); i++) {
-                Criterion item = Criterion.PRESETS.get(Criterion.SERVER_ITEMS.get(i));
-                String holder = TOTAL_HOLDER + item.key();
-                now.put(holder, n - 1 - i);
-                labels.put(holder, item.label() + "|" + item.formatValue(total(item)));
-            }
-        } else {
-            List<Rank> ranks = ranking(c);
-            long sum = 0;
-            for (Rank r : ranks) sum += r.value();
-            if (!ranks.isEmpty()) {
-                now.put(TOTAL_HOLDER, (int) Math.min(Integer.MAX_VALUE, sum));
-                labels.put(TOTAL_HOLDER, "サーバー合計|" + c.formatValue(sum));
-            }
-            for (int i = 0; i < ranks.size() && i < MAX_LINES - 1; i++) {
-                Rank r = ranks.get(i);
-                now.put(r.name(), (int) Math.min(Integer.MAX_VALUE, r.value()));
-                labels.put(r.name(), (i + 1) + ". " + r.name() + "|" + c.formatValue(r.value()));
-            }
-        }
-        for (String old : new ArrayList<>(view.sent.keySet())) {
-            if (!now.containsKey(old)) {
-                player.connection.send(new ClientboundResetScorePacket(old, view.objective));
-                view.sent.remove(old);
-                view.sentLabel.remove(old);
-            }
-        }
-        for (Map.Entry<String, Integer> e : now.entrySet()) {
-            String name = e.getKey();
-            String label = labels.get(name);
-            if (e.getValue().equals(view.sent.get(name)) && label.equals(view.sentLabel.get(name))) continue;
-            int bar = label.indexOf('|');
-            boolean total = name.startsWith(TOTAL_HOLDER);
-            Component display = Component.literal(label.substring(0, bar))
-                    .withStyle(total ? ChatFormatting.AQUA : name.equals(me) ? ChatFormatting.YELLOW : ChatFormatting.WHITE);
-            Optional<NumberFormat> format = c.format() == Criterion.Format.NUMBER && !total ? Optional.empty()
-                    : Optional.of(new FixedFormat(Component.literal(label.substring(bar + 1)).withStyle(ChatFormatting.RED)));
-            player.connection.send(new ClientboundSetScorePacket(name, view.objective, e.getValue(), Optional.of(display), format));
-            view.sent.put(name, e.getValue());
-            view.sentLabel.put(name, label);
-        }
-    }
-
-    private Objective objective(String name, Criterion c) {
-        Component title = Component.literal(c == null ? "" : "★ " + c.label()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
-        return new Objective(dummyBoard, name, ObjectiveCriteria.DUMMY, title, ObjectiveCriteria.RenderType.INTEGER, false, null);
     }
 
     // ---------------------------------------------------------------- persistence

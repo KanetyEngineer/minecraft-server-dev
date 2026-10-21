@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.ChatFormatting;
@@ -34,6 +35,8 @@ public final class BuildCommand {
     private static final SimpleCommandExceptionType EXISTS = new SimpleCommandExceptionType(Component.literal("同じ名前の建築計画がすでにあります"));
     private static final SimpleCommandExceptionType NOT_ALLOWED = new SimpleCommandExceptionType(Component.literal("この操作は作成者か OP だけができます"));
     private static final SimpleCommandExceptionType NO_ITEM = new SimpleCommandExceptionType(Component.literal("そのアイテムはこの設計図の材料に含まれていません"));
+    private static final DynamicCommandExceptionType TAKEN = new DynamicCommandExceptionType(
+            name -> Component.literal(name + " さんが担当しています。ほかの人の担当を変えられるのは OP だけです"));
     private static final SimpleCommandExceptionType NO_AREA = new SimpleCommandExceptionType(Component.literal("その区画は見つかりません"));
     private static final SimpleCommandExceptionType NOT_CONTAINER = new SimpleCommandExceptionType(Component.literal("そこは容器（チェスト・樽・シュルカーボックスなど）ではありません"));
 
@@ -173,6 +176,15 @@ public final class BuildCommand {
 
     private static boolean isOp(CommandSourceStack s) {
         return s.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(2)));
+    }
+
+    /** Someone else's assignment may only be replaced or removed by an OP. */
+    private static void requireFreeOrOp(CommandSourceStack s, BuildProject.Person current, ServerPlayer target) throws CommandSyntaxException {
+        if (current == null || isOp(s)) return;
+        if (target != null && current.uuid.equals(target.getStringUUID())) return;
+        ServerPlayer pl = s.getPlayer();
+        if (target == null && pl != null && current.uuid.equals(pl.getStringUUID())) return;
+        throw TAKEN.create(current.name);
     }
 
     private static void requireOwner(CommandSourceStack s, BuildProject p) throws CommandSyntaxException {
@@ -337,6 +349,7 @@ public final class BuildCommand {
         if (ownerOnly) requireOwner(c.getSource(), p);
         Item item = findItem(p, StringArgumentType.getString(c, "item"));
         String id = BuildProject.itemId(item);
+        requireFreeOrOp(c.getSource(), p.data.materialAssign.get(id), target);
         if (target == null) {
             p.data.materialAssign.remove(id);
         } else {
@@ -354,6 +367,7 @@ public final class BuildCommand {
         if (ownerOnly) requireOwner(c.getSource(), p);
         String area = StringArgumentType.getString(c, "area");
         if (!p.areaIds.contains(area)) throw NO_AREA.create();
+        requireFreeOrOp(c.getSource(), p.data.areaAssign.get(area), target);
         if (target == null) {
             p.data.areaAssign.remove(area);
         } else {
@@ -397,12 +411,14 @@ public final class BuildCommand {
         if (people.isEmpty()) return 0;
         // materials: biggest remaining amount goes to whoever has the least so far
         long[] load = new long[people.size()];
-        p.data.materialAssign.clear();
+        // Only an OP may take over assignments people already have; the owner only fills the free ones.
+        boolean op = isOp(c.getSource());
+        if (op) p.data.materialAssign.clear();
         List<Map.Entry<Item, Integer>> rows = new ArrayList<>(p.required.entrySet());
         rows.sort(Comparator.comparingInt((Map.Entry<Item, Integer> e) -> remaining(p, e.getKey(), e.getValue())).reversed());
         for (Map.Entry<Item, Integer> e : rows) {
             int rem = remaining(p, e.getKey(), e.getValue());
-            if (rem <= 0 || p.isIgnored(e.getKey())) continue;
+            if (rem <= 0 || p.isIgnored(e.getKey()) || p.data.materialAssign.containsKey(BuildProject.itemId(e.getKey()))) continue;
             int best = 0;
             for (int i = 1; i < load.length; i++) if (load[i] < load[best]) best = i;
             load[best] += rem;
@@ -410,10 +426,10 @@ public final class BuildCommand {
         }
         // areas: unfinished areas, balanced by blocks left
         long[] areaLoad = new long[people.size()];
-        p.data.areaAssign.clear();
+        if (op) p.data.areaAssign.clear();
         for (int a = 0; a < p.areaIds.size(); a++) {
             int left = p.areaTotal[a] - p.areaDone[a];
-            if (left <= 0 || p.isAreaIgnored(p.areaIds.get(a))) continue;
+            if (left <= 0 || p.isAreaIgnored(p.areaIds.get(a)) || p.data.areaAssign.containsKey(p.areaIds.get(a))) continue;
             int best = 0;
             for (int i = 1; i < areaLoad.length; i++) if (areaLoad[i] < areaLoad[best]) best = i;
             areaLoad[best] += left;

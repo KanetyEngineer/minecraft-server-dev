@@ -50,7 +50,7 @@ public record Criterion(String key, String label, String type, String value, For
         preset("pvp", "プレイヤーを倒した数", "minecraft:custom", "minecraft:player_kills", Format.NUMBER);
     }
 
-    /** "/lb show server": the server-wide totals of these items, one line each. */
+    /** "/lb server" and the overlay: the server-wide totals of these items, one line each. */
     public static final Criterion SERVER = new Criterion("server", "サーバー全体の記録", "server", null, Format.NUMBER);
     public static final java.util.List<String> SERVER_ITEMS = java.util.List.of(
             "mined", "used", "crafted", "kills", "deaths", "playtime", "travel", "fly", "fish", "trades", "bred", "enchant");

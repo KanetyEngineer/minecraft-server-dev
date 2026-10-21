@@ -6,7 +6,7 @@
   "solariatweaks.hotkeys.category.hotkeys": "ホットキー",
   "solariatweaks.config.generic.name.observerGuardMode": "observerGuardMode",
   "solariatweaks.config.generic.prettyName.observerGuardMode": "オブザーバー警告",
-  "solariatweaks.config.generic.comment.observerGuardMode": "オブザーバーの検知面の前にブロックを置こうとしたときに止める範囲。\n設計図と違うものだけ: Litematica の設計図と違うブロックのとき\nすべてのブロック: どのブロックでも（EasyPlace で置く場合も止まります）\nOFF: 止めない",
+  "solariatweaks.config.generic.comment.observerGuardMode": "オブザーバーの検知面の前にブロックを置こうとしたときに止める範囲。\n設計図の範囲だけ: 設計図にあるオブザーバーの前に置くときと、設計図と違うブロックのとき\nすべてのブロック: どのブロックでも（EasyPlace で置く場合も止まります）\nOFF: 止めない",
   "solariatweaks.config.generic.name.hudEnabled": "hudEnabled",
   "solariatweaks.config.generic.prettyName.hudEnabled": "建築計画の HUD",
   "solariatweaks.config.generic.comment.hudEnabled": "画面右側に自分の担当と進捗を表示します",
@@ -24,7 +24,7 @@
   "solariatweaks.config.hotkeys.comment.openSharedWaypoints": "サーバー共有の地点の一覧を開きます",
   "solariatweaks.config.hotkeys.name.cycleObserverGuard": "cycleObserverGuard",
   "solariatweaks.config.hotkeys.prettyName.cycleObserverGuard": "オブザーバー警告の切り替え",
-  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "OFF → 設計図と違うものだけ → すべてのブロック の順に切り替えます",
+  "solariatweaks.config.hotkeys.comment.cycleObserverGuard": "OFF → 設計図の範囲だけ → すべてのブロック の順に切り替えます",
   "solariatweaks.config.generic.name.filterCount": "filterCount",
   "solariatweaks.config.generic.prettyName.filterCount": "フィルター: 1枠目の個数",
   "solariatweaks.config.generic.comment.filterCount": "「フィルターを詰める」で1枠目に入れる、手に持ったアイテムの数（普通の仕分け機は18）",
@@ -40,5 +40,11 @@
   "solariatweaks.config.hotkeys.comment.toggleBuildHud": "建築計画の HUD を表示・非表示に切り替えます",
   "solariatweaks.config.generic.name.showSharedOnMap": "showSharedOnMap",
   "solariatweaks.config.generic.prettyName.showSharedOnMap": "共有地点をすべて地図に出す",
-  "solariatweaks.config.generic.comment.showSharedOnMap": "ON: サーバー共有の地点がすぐ Xaero の地図に出ます\nOFF: 共有地点の一覧から好きなものを選んで、自分の地点として登録します"
+  "solariatweaks.config.generic.comment.showSharedOnMap": "ON: サーバー共有の地点がすぐ Xaero の地図に出ます\nOFF: 共有地点の一覧から好きなものを選んで、自分の地点として登録します",
+  "solariatweaks.config.generic.name.filterFillOffsetX": "filterFillOffsetX",
+  "solariatweaks.config.generic.prettyName.filterFillOffsetX": "フィルター詰めボタンの横位置",
+  "solariatweaks.config.generic.comment.filterFillOffsetX": "画面右端からのずらし量（マイナスで左へ）",
+  "solariatweaks.config.generic.name.filterFillOffsetY": "filterFillOffsetY",
+  "solariatweaks.config.generic.prettyName.filterFillOffsetY": "フィルター詰めボタンの縦位置",
+  "solariatweaks.config.generic.comment.filterFillOffsetY": "画面の縦中央からのずらし量（マイナスで上へ）"
 }

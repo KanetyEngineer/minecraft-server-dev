@@ -6,7 +6,7 @@
   "solariatweaks.hotkeys.category.hotkeys": "Hotkeys",
   "solariatweaks.config.generic.name.observerGuardMode": "observerGuardMode",
   "solariatweaks.config.generic.prettyName.observerGuardMode": "Observer guard",
-  "solariatweaks.config.generic.comment.observerGuardMode": "Which placements in front of an observer's face are stopped.\ndiff: only blocks unlike the Litematica schematic\nall: every block (Easy Place included)\noff: never",
+  "solariatweaks.config.generic.comment.observerGuardMode": "Which placements in front of an observer's face are stopped.\ndiff: in front of observers that are part of the Litematica schematic, and blocks unlike the schematic\nall: every block (Easy Place included)\noff: never",
   "solariatweaks.config.generic.name.hudEnabled": "hudEnabled",
   "solariatweaks.config.generic.prettyName.hudEnabled": "Build plan HUD",
   "solariatweaks.config.generic.comment.hudEnabled": "Show your assignments and progress on the right side of the screen",
@@ -40,5 +40,11 @@
   "solariatweaks.config.hotkeys.comment.toggleBuildHud": "Show or hide the build plan HUD",
   "solariatweaks.config.generic.name.showSharedOnMap": "showSharedOnMap",
   "solariatweaks.config.generic.prettyName.showSharedOnMap": "Show all shared waypoints on the map",
-  "solariatweaks.config.generic.comment.showSharedOnMap": "On: every server waypoint appears on Xaero's map right away.\nOff: pick the ones you want from the shared waypoint list and register them as your own waypoints"
+  "solariatweaks.config.generic.comment.showSharedOnMap": "On: every server waypoint appears on Xaero's map right away.\nOff: pick the ones you want from the shared waypoint list and register them as your own waypoints",
+  "solariatweaks.config.generic.name.filterFillOffsetX": "filterFillOffsetX",
+  "solariatweaks.config.generic.prettyName.filterFillOffsetX": "Fill buttons X offset",
+  "solariatweaks.config.generic.comment.filterFillOffsetX": "Shift from the right edge of the screen (negative = left)",
+  "solariatweaks.config.generic.name.filterFillOffsetY": "filterFillOffsetY",
+  "solariatweaks.config.generic.prettyName.filterFillOffsetY": "Fill buttons Y offset",
+  "solariatweaks.config.generic.comment.filterFillOffsetY": "Shift from the vertical center of the screen (negative = up)"
 }

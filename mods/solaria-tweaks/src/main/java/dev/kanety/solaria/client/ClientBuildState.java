@@ -24,7 +24,8 @@ public final class ClientBuildState {
         }
     }
 
-    public record Area(String id, int total, int done, int x1, int z1, int x2, int z2, Person assignee, boolean ignored) {
+    public record Area(String id, int total, int done, int x1, int z1, int x2, int z2, Person assignee, boolean ignored,
+                       java.util.Map<String, Integer> left) {
         public double progress() {
             return total == 0 ? 0 : (double) done / total;
         }
@@ -90,7 +91,7 @@ public final class ClientBuildState {
                 JsonObject ao = a.getAsJsonObject();
                 areas.add(new Area(str(ao, "id"), ao.get("total").getAsInt(), ao.get("done").getAsInt(),
                         ao.get("x1").getAsInt(), ao.get("z1").getAsInt(), ao.get("x2").getAsInt(), ao.get("z2").getAsInt(),
-                        person(ao.get("assignee")), bool(ao, "ignored")));
+                        person(ao.get("assignee")), bool(ao, "ignored"), counts(ao.get("left"))));
             }
             pr.add(new Project(str(o, "name"), str(o, "placement"), str(o, "placementName"), str(o, "dim"),
                     str(o, "status"), str(o, "owner"), str(o, "ownerUuid"), str(o, "areaMode"), o.get("gridSize").getAsInt(),
@@ -105,6 +106,13 @@ public final class ClientBuildState {
     private static String str(JsonObject o, String key) {
         JsonElement e = o.get(key);
         return e == null || e.isJsonNull() ? "" : e.getAsString();
+    }
+
+    private static java.util.Map<String, Integer> counts(JsonElement e) {
+        if (e == null || !e.isJsonObject()) return java.util.Map.of();
+        java.util.Map<String, Integer> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, JsonElement> x : e.getAsJsonObject().entrySet()) out.put(x.getKey(), x.getValue().getAsInt());
+        return out;
     }
 
     private static boolean bool(JsonObject o, String key) {

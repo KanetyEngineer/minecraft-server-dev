@@ -21,7 +21,7 @@ public final class BuildProject {
         public String placementId;
         public String ownerUuid;
         public String ownerName;
-        public String areaMode = "grid";
+        public String areaMode = "subregions";
         public int gridSize = 16;
         public List<Person> members = new ArrayList<>();
         public Map<String, Person> materialAssign = new LinkedHashMap<>();
@@ -283,6 +283,7 @@ public final class BuildProject {
             mats.add(m);
         }
         o.add("materials", mats);
+        Map<Item, Integer>[] areaLeft = remainingByAssignedArea();
         JsonArray areas = new JsonArray();
         for (int i = 0; i < areaIds.size(); i++) {
             JsonObject a = new JsonObject();
@@ -297,10 +298,38 @@ public final class BuildProject {
             Person p = data.areaAssign.get(id);
             if (p != null) a.add("assignee", person(p));
             if (isAreaIgnored(id)) a.addProperty("ignored", true);
+            if (areaLeft[i] != null && !areaLeft[i].isEmpty()) {
+                JsonObject left = new JsonObject();
+                for (Map.Entry<Item, Integer> e : areaLeft[i].entrySet()) left.addProperty(itemId(e.getKey()), e.getValue());
+                a.add("left", left);
+            }
             areas.add(a);
         }
         o.add("areas", areas);
         return o;
+    }
+
+    /** Materials still to place in each assigned area (null for unassigned or ignored areas). */
+    @SuppressWarnings("unchecked")
+    private Map<Item, Integer>[] remainingByAssignedArea() {
+        Map<Item, Integer>[] out = new Map[areaIds.size()];
+        if (schematic == null || data.areaAssign.isEmpty()) return out;
+        boolean any = false;
+        for (int a = 0; a < areaIds.size(); a++) {
+            String id = areaIds.get(a);
+            if (data.areaAssign.containsKey(id) && !isAreaIgnored(id)) {
+                out[a] = new HashMap<>();
+                any = true;
+            }
+        }
+        if (!any) return out;
+        for (int i = 0; i < entryArea.length; i++) {
+            Map<Item, Integer> m = out[entryArea[i]];
+            if (m == null || matched.get(i)) continue;
+            int st = schematic.states[i];
+            if (paletteItem[st] != null && !isIgnored(paletteItem[st])) m.merge(paletteItem[st], paletteCount[st], Integer::sum);
+        }
+        return out;
     }
 
     private static JsonObject person(Person p) {

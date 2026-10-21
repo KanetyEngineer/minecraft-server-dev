@@ -19,8 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
- * Stops placing a block where an observer is looking (a block there fires the observer). Mode "diff" only stops
- * blocks that differ from the Litematica schematic, mode "all" stops every block. Called from
+ * Stops placing a block where an observer is looking (a block there fires the observer). Mode "diff" (inside the
+ * schematic) stops blocks in front of an observer that belongs to the Litematica schematic, and blocks that differ
+ * from the schematic; mode "all" stops every block. Called from
  * MultiPlayerGameModeMixin, so placements made by other mods (Litematica's Easy Place, Tweakeroo) are checked too.
  * The placement goes through only when the use key was released after the warning and pressed again within
  * 3 seconds, so holding the key (or Easy Place repeating) never slips past.
@@ -53,10 +54,14 @@ public final class ObserverGuard {
         } catch (RuntimeException e) {
             return false;
         }
-        if (!watchedByObserver(level, target)) return false;
+        BlockPos observer = watchingObserver(level, target);
+        if (observer == null) return false;
         BlockState expected = LitematicaBridge.expectedState(target);
-        if (mode == ClientConfig.GuardMode.DIFF && (expected == null || expected.getBlock() == blockItem.getBlock())) {
-            return false;
+        if (mode == ClientConfig.GuardMode.DIFF) {
+            BlockState plannedObserver = LitematicaBridge.expectedState(observer);
+            boolean schematicObserver = plannedObserver != null && plannedObserver.is(Blocks.OBSERVER);
+            boolean differs = expected != null && expected.getBlock() != blockItem.getBlock();
+            if (!schematicObserver && !differs) return false;
         }
 
         long now = System.currentTimeMillis();
@@ -86,12 +91,13 @@ public final class ObserverGuard {
         return true;
     }
 
-    /** True when an observer next to pos has its face (detection side) pointed at pos. */
-    static boolean watchedByObserver(Level level, BlockPos pos) {
+    /** The observer next to pos whose face (detection side) points at pos, or null. */
+    static BlockPos watchingObserver(Level level, BlockPos pos) {
         for (Direction d : Direction.values()) {
-            BlockState s = level.getBlockState(pos.relative(d));
-            if (s.is(Blocks.OBSERVER) && s.getValue(ObserverBlock.FACING) == d.getOpposite()) return true;
+            BlockPos o = pos.relative(d);
+            BlockState s = level.getBlockState(o);
+            if (s.is(Blocks.OBSERVER) && s.getValue(ObserverBlock.FACING) == d.getOpposite()) return o;
         }
-        return false;
+        return null;
     }
 }
