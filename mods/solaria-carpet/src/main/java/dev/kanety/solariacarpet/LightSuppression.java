@@ -4,8 +4,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
 /**
- * lightSuppression rule: the light thread may only run a limited number of task batches (1000 tasks each) per
- * 50 ms, as the old light engine effectively could. A light suppressor that floods the queue with more updates than
+ * lightSuppression rule: the light thread works like the pre-1.20 one (a propagation pass every 5 tasks) and may
+ * only handle lightSuppressionTasksPerTick tasks per 50 ms (see ThreadedLevelLightEngineMixin). A light suppressor that floods the queue with more updates than
  * that builds a backlog again, so other light updates wait behind it, and whatever is still queued when the server
  * stops is never applied (the server does not wait for the light queue on shutdown).
  *
@@ -45,10 +45,5 @@ public final class LightSuppression {
 
     public static boolean serverWaiting() {
         return waiting > 0;
-    }
-
-    public static int batchesPerWindow() {
-        int base = Math.max(1, (SolariaCarpetSettings.lightSuppressionTasksPerTick + 999) / 1000);
-        return waiting > 0 ? base * 10 : base;
     }
 }

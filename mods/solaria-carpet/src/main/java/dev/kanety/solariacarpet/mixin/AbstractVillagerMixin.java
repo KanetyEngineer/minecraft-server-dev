@@ -12,10 +12,11 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * voidTrading: since 1.20.5 the trade screen closes as soon as the villager is unloaded or changes dimension
- * (stillValid checks isAlive() and the reach, and teleport() calls stopTrading()). With the rule on, a villager that
- * left through a portal or was unloaded keeps its trade screen open, so trades go to the copy that is no longer in
- * the world: they are never saved, do not lock, and special prices are not reset.
+ * voidTrading: since 1.20.5 the trade screen closes as soon as the villager is unloaded or changes dimension, or the
+ * player moves out of reach (stillValid checks isAlive() and a 4 block reach, and teleport() calls stopTrading()).
+ * With the rule on, stillValid is back to the old "is this the trading player" check, so the screen stays open while
+ * the player is carried away (minecart, water, portal) until the villager's chunk unloads, and trades then go to the
+ * copy that is no longer in the world: they are never saved, do not lock, and special prices are not reset.
  */
 @Mixin(AbstractVillager.class)
 public abstract class AbstractVillagerMixin {
@@ -24,8 +25,8 @@ public abstract class AbstractVillagerMixin {
         if (!SolariaCarpetSettings.voidTrading) return;
         AbstractVillager self = (AbstractVillager) (Object) this;
         Entity.RemovalReason reason = self.getRemovalReason();
-        if (reason == null || reason == Entity.RemovalReason.KILLED || reason == Entity.RemovalReason.DISCARDED) return;
-        if (self.getTradingPlayer() == player) cir.setReturnValue(true);
+        if (reason == Entity.RemovalReason.KILLED || reason == Entity.RemovalReason.DISCARDED) return;
+        cir.setReturnValue(self.getTradingPlayer() == player);
     }
 
     @Redirect(method = "teleport", at = @At(value = "INVOKE",
