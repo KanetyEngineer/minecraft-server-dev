@@ -41,7 +41,7 @@ Solaria SMP（Minecraft 1.21.11 / Fabric）向けの補助 MOD。クライアン
 項目: `mined` 採掘数 / `used` 使用回数 / `crafted` クラフト数 / `kills` モブ討伐 / `deaths` 死亡 / `playtime` プレイ時間 / `walk` 歩いた距離 / `fly` エリトラ / `fish` 釣り / `trades` 取引 / `jumps` / `damage` / `travel` 移動距離（歩き・走り・泳ぎ・乗り物などすべて）/ `bred` 繁殖 / `enchant` エンチャント / `chests` チェストを開けた回数 / `pvp` プレイヤーを倒した数。ほかに `mined:` `used:` `crafted:` `broken:` `picked_up:` `dropped:` `killed:` `killed_by:` `custom:` の後に ID か `all`。
 
 ### 3. Syncmatica 設計図の建築計画
-Syncmatica で共有された設計図（placement）ごとに「建築計画」を作り、みんなで分担する。
+Syncmatica で共有された設計図（placement）ごとに「建築計画」を作り、みんなで分担する。この機能だけの単体 MOD「Shared Build Plan」（[`mods/shared-build-plan`](../shared-build-plan/)）もあり、一緒に入れるとそちらに任せる。
 
 - **材料**: 設計図から必要数を計算。アイテムごとに担当者を決める（自分で「担当」／作成者が自動割り当て）
 - **リアルタイム在庫**: 計画に登録した倉庫（チェスト・樽・シュルカーボックス等。箱の中のシュルカーの中身も数える）と、参加者の手持ちを 2 秒ごとに集計。設置済みのブロックも差し引く

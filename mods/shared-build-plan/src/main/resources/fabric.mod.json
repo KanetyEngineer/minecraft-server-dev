@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "sharedbuildplan",
+  "version": "${version}",
+  "name": "Shared Build Plan",
+  "description": "Shared build plans for Syncmatica schematics: split the Litematica material list and the build areas among players, with live storage counts and build progress.",
+  "authors": ["kanety"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.kanety.buildplan.SharedBuildPlan"],
+    "client": ["dev.kanety.buildplan.client.SharedBuildPlanClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "recommends": {
+    "syncmatica": "*"
+  },
+  "suggests": {
+    "litematica": "*",
+    "chesttracker": "*"
+  }
+}

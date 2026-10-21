@@ -28,6 +28,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class SolariaTweaksClient implements ClientModInitializer {
     public static boolean openBuildPlans(Minecraft client) {
+        if (!SolariaTweaks.buildPlans()) return false;
         if (client.screen != null || client.player == null) return false;
         client.setScreen(new BuildScreen(null));
         return true;
@@ -46,6 +47,7 @@ public class SolariaTweaksClient implements ClientModInitializer {
     }
 
     public static void toggleBuildHud(Minecraft client) {
+        if (!SolariaTweaks.buildPlans()) return;
         ClientConfig cfg = ClientConfig.get();
         cfg.hudEnabled = !cfg.hudEnabled;
         ClientConfig.save();
@@ -80,13 +82,16 @@ public class SolariaTweaksClient implements ClientModInitializer {
             ObserverGuard.tick(client);
             MinimapBridge.tick();
         });
-        ClientPlayNetworking.registerGlobalReceiver(BuildSyncPayload.TYPE, (payload, context) -> {
-            try {
-                ClientBuildState.apply(payload.json());
-            } catch (Exception e) {
-                SolariaTweaks.LOGGER.warn("Bad build sync payload", e);
-            }
-        });
+        if (SolariaTweaks.buildPlans()) {
+            ClientPlayNetworking.registerGlobalReceiver(BuildSyncPayload.TYPE, (payload, context) -> {
+                try {
+                    ClientBuildState.apply(payload.json());
+                } catch (Exception e) {
+                    SolariaTweaks.LOGGER.warn("Bad build sync payload", e);
+                }
+            });
+            HudElementRegistry.addLast(SolariaTweaks.id("build_hud"), BuildHud::render);
+        }
         ClientPlayNetworking.registerGlobalReceiver(WaypointSyncPayload.TYPE, (payload, context) -> {
             try {
                 ClientWaypoints.apply(payload.json());
@@ -152,7 +157,6 @@ public class SolariaTweaksClient implements ClientModInitializer {
                                     c.getSource().sendFeedback(Component.literal("オブザーバー警告: " + m.label));
                                     return 1;
                                 }))));
-        HudElementRegistry.addLast(SolariaTweaks.id("build_hud"), BuildHud::render);
         ScreenEvents.AFTER_INIT.register(XaeroMapIntegration::onScreenInit);
         ScreenEvents.AFTER_INIT.register(FilterFill::onScreenInit);
     }
