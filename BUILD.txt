@@ -1,1 +1,1 @@
-Built from 140cbf88ee06d83e4f7aabcad7c14e125c5745fd on claude/solaria-tools
+Built from 1454795bfed1ffb956b3f4dd31e52660668cdb03 on claude/solaria-tools
