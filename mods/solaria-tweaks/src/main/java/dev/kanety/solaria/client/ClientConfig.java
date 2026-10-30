@@ -29,6 +29,12 @@ public final class ClientConfig {
     /** Moves the fill buttons from their place at the right edge of the screen (GUI pixels). */
     public int filterFillOffsetX = 0;
     public int filterFillOffsetY = 0;
+    /** Eat automatically when the food level is at or below autoEatThreshold (of 20). */
+    public boolean autoEat = true;
+    public int autoEatThreshold = 17;
+    /** When a shulker box is opened, top up firework / food stacks in the inventory from identical items in the box. */
+    public boolean refillFireworks = true;
+    public boolean refillFood = true;
     /** Filler item id; empty = any renamed item. */
     public String fillerItem = "";
     /** Remembered container layout (ItemStack JSON per slot, null = empty). */

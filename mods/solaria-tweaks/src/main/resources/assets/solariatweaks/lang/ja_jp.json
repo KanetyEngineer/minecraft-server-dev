@@ -46,5 +46,17 @@
   "solariatweaks.config.generic.comment.filterFillOffsetX": "画面右端からのずらし量（マイナスで左へ）",
   "solariatweaks.config.generic.name.filterFillOffsetY": "filterFillOffsetY",
   "solariatweaks.config.generic.prettyName.filterFillOffsetY": "フィルター詰めボタンの縦位置",
-  "solariatweaks.config.generic.comment.filterFillOffsetY": "画面の縦中央からのずらし量（マイナスで上へ）"
+  "solariatweaks.config.generic.comment.filterFillOffsetY": "画面の縦中央からのずらし量（マイナスで上へ）",
+  "solariatweaks.config.generic.name.autoEat": "autoEat",
+  "solariatweaks.config.generic.prettyName.autoEat": "自動で食べる",
+  "solariatweaks.config.generic.comment.autoEat": "満腹度がしきい値以下になったら、ホットバーかインベントリの食料を自動で食べます（腐った肉・金のリンゴなどは食べません）",
+  "solariatweaks.config.generic.name.autoEatThreshold": "autoEatThreshold",
+  "solariatweaks.config.generic.prettyName.autoEatThreshold": "自動で食べる満腹度",
+  "solariatweaks.config.generic.comment.autoEatThreshold": "満腹度（最大 20）がこの値以下になったら食べます",
+  "solariatweaks.config.generic.name.refillFireworks": "refillFireworks",
+  "solariatweaks.config.generic.prettyName.refillFireworks": "シュルカーから花火を補充",
+  "solariatweaks.config.generic.comment.refillFireworks": "シュルカーボックスを開くと、インベントリの花火と同じ花火を箱から取り出して 64 個にします",
+  "solariatweaks.config.generic.name.refillFood": "refillFood",
+  "solariatweaks.config.generic.prettyName.refillFood": "シュルカーから食料を補充",
+  "solariatweaks.config.generic.comment.refillFood": "シュルカーボックスを開くと、インベントリの食料と同じ食料を箱から取り出して 1 スタックにします"
 }

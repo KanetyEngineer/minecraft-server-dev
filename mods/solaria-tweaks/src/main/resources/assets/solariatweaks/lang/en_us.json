@@ -46,5 +46,17 @@
   "solariatweaks.config.generic.comment.filterFillOffsetX": "Shift from the right edge of the screen (negative = left)",
   "solariatweaks.config.generic.name.filterFillOffsetY": "filterFillOffsetY",
   "solariatweaks.config.generic.prettyName.filterFillOffsetY": "Fill buttons Y offset",
-  "solariatweaks.config.generic.comment.filterFillOffsetY": "Shift from the vertical center of the screen (negative = up)"
+  "solariatweaks.config.generic.comment.filterFillOffsetY": "Shift from the vertical center of the screen (negative = up)",
+  "solariatweaks.config.generic.name.autoEat": "autoEat",
+  "solariatweaks.config.generic.prettyName.autoEat": "Auto eat",
+  "solariatweaks.config.generic.comment.autoEat": "Eats food from the hotbar or inventory when the food level drops to the threshold (skips rotten flesh, golden apples and the like)",
+  "solariatweaks.config.generic.name.autoEatThreshold": "autoEatThreshold",
+  "solariatweaks.config.generic.prettyName.autoEatThreshold": "Auto eat threshold",
+  "solariatweaks.config.generic.comment.autoEatThreshold": "Eats when the food level (max 20) is at or below this value",
+  "solariatweaks.config.generic.name.refillFireworks": "refillFireworks",
+  "solariatweaks.config.generic.prettyName.refillFireworks": "Refill fireworks from shulker boxes",
+  "solariatweaks.config.generic.comment.refillFireworks": "Opening a shulker box tops up firework stacks in your inventory to 64 from identical fireworks in the box",
+  "solariatweaks.config.generic.name.refillFood": "refillFood",
+  "solariatweaks.config.generic.prettyName.refillFood": "Refill food from shulker boxes",
+  "solariatweaks.config.generic.comment.refillFood": "Opening a shulker box tops up food stacks in your inventory to a full stack from identical food in the box"
 }

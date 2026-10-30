@@ -39,8 +39,12 @@ public final class MalilibConfigs implements IConfigHandler {
     public static final ConfigString FILLER_ITEM = new ConfigString("fillerItem", "").apply(GENERIC);
     public static final ConfigInteger FILL_OFFSET_X = new ConfigInteger("filterFillOffsetX", 0, -2000, 2000).apply(GENERIC);
     public static final ConfigInteger FILL_OFFSET_Y = new ConfigInteger("filterFillOffsetY", 0, -2000, 2000).apply(GENERIC);
+    public static final ConfigBoolean AUTO_EAT = new ConfigBoolean("autoEat", true).apply(GENERIC);
+    public static final ConfigInteger AUTO_EAT_THRESHOLD = new ConfigInteger("autoEatThreshold", 17, 0, 19).apply(GENERIC);
+    public static final ConfigBoolean REFILL_FIREWORKS = new ConfigBoolean("refillFireworks", true).apply(GENERIC);
+    public static final ConfigBoolean REFILL_FOOD = new ConfigBoolean("refillFood", true).apply(GENERIC);
     public static final List<IConfigBase> OPTIONS = ImmutableList.of(OBSERVER_GUARD, HUD_ENABLED, HUD_MAX_LINES, SHOW_SHARED_ON_MAP,
-            FILTER_COUNT, FILLER_COUNT, FILLER_ITEM, FILL_OFFSET_X, FILL_OFFSET_Y);
+            FILTER_COUNT, FILLER_COUNT, FILLER_ITEM, FILL_OFFSET_X, FILL_OFFSET_Y, AUTO_EAT, AUTO_EAT_THRESHOLD, REFILL_FIREWORKS, REFILL_FOOD);
 
     public static final ConfigHotkey OPEN_CONFIG = new ConfigHotkey("openConfigGui", "LEFT_CONTROL,B").apply(HOTKEYS);
     public static final ConfigHotkey OPEN_BUILD_PLANS = new ConfigHotkey("openBuildPlans", "B").apply(HOTKEYS);
@@ -96,6 +100,26 @@ public final class MalilibConfigs implements IConfigHandler {
             ClientConfig.get().fillerItem = c.getStringValue().strip();
             ClientConfig.save();
         });
+        AUTO_EAT.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().autoEat = c.getBooleanValue();
+            ClientConfig.save();
+        });
+        AUTO_EAT_THRESHOLD.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().autoEatThreshold = c.getIntegerValue();
+            ClientConfig.save();
+        });
+        REFILL_FIREWORKS.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().refillFireworks = c.getBooleanValue();
+            ClientConfig.save();
+        });
+        REFILL_FOOD.setValueChangeCallback(c -> {
+            if (pulling) return;
+            ClientConfig.get().refillFood = c.getBooleanValue();
+            ClientConfig.save();
+        });
         ClientConfig.onChange = MalilibConfigs::pull;
     }
 
@@ -114,6 +138,10 @@ public final class MalilibConfigs implements IConfigHandler {
             FILLER_ITEM.setValueFromString(cfg.fillerItem == null ? "" : cfg.fillerItem);
             FILL_OFFSET_X.setIntegerValue(cfg.filterFillOffsetX);
             FILL_OFFSET_Y.setIntegerValue(cfg.filterFillOffsetY);
+            AUTO_EAT.setBooleanValue(cfg.autoEat);
+            AUTO_EAT_THRESHOLD.setIntegerValue(cfg.autoEatThreshold);
+            REFILL_FIREWORKS.setBooleanValue(cfg.refillFireworks);
+            REFILL_FOOD.setBooleanValue(cfg.refillFood);
         } finally {
             pulling = false;
         }

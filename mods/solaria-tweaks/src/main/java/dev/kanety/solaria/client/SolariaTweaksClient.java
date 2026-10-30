@@ -80,6 +80,7 @@ public class SolariaTweaksClient implements ClientModInitializer {
                 while (toggleBuildHud.consumeClick()) toggleBuildHud(client);
             }
             ObserverGuard.tick(client);
+            AutoSupply.tick(client);
             MinimapBridge.tick();
         });
         if (SolariaTweaks.buildPlans()) {
