@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solaria OBS オーバーレイ</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; background: #12151d; color: #e8ecf3; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 20px; color: #9aa4b5; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #b9c2d0; }
+  input, select { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid #2c3446; background: #1b202b; color: #e8ecf3; }
+  input[type=color] { padding: 2px; height: 36px; }
+  .check { flex-direction: row; align-items: center; gap: 8px; }
+  .url { margin-top: 18px; display: flex; gap: 8px; }
+  .url input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 0; background: #4f8cff; color: #fff; cursor: pointer; }
+  .preview { margin-top: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #2c3446;
+             background: repeating-conic-gradient(#2a3040 0 25%, #222735 0 50%) 0 0 / 24px 24px; }
+  /* same color-scheme as the overlay page, otherwise the browser paints the iframe white */
+  iframe { width: 100%; height: 360px; border: 0; display: block; color-scheme: normal; }
+  ol { color: #b9c2d0; font-size: 14px; line-height: 1.7; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Solaria OBS オーバーレイ</h1>
+  <p class="lead">サーバーの統計（標準はサーバー全体の採掘数）を配信画面に出します。下で見た目を選び、できた URL を OBS のブラウザソースに貼ってください。</p>
+  <div class="grid">
+    <label>項目<select id="c"></select></label>
+    <label>プレイヤー（空ならサーバー合計）<input id="player" placeholder="例: kanetyyy"></label>
+    <label>見出し（空なら自動、none で非表示）<input id="title"></label>
+    <label>単位（数字の後ろ）<input id="unit" placeholder="例: ブロック"></label>
+    <label>順位を表示（人数）<input id="top" type="number" min="0" max="20" value="0"></label>
+    <label>文字の大きさ（px）<input id="size" type="number" min="16" max="300" value="72"></label>
+    <label>文字の色<input id="color" type="color" value="#ffffff"></label>
+    <label>アクセント色<input id="accent" type="color" value="#7fe3ff"></label>
+    <label>寄せ<select id="align"><option value="left">左</option><option value="center">中央</option><option value="right">右</option></select></label>
+    <label>更新間隔（ミリ秒）<input id="interval" type="number" min="300" step="100" value="1000"></label>
+    <label class="check"><input id="panel" type="checkbox"> 半透明の背景を付ける</label>
+    <label class="check"><input id="stroke" type="checkbox" checked> 文字のふち取り</label>
+    <label class="check"><input id="plus" type="checkbox" checked> 増えた数を「+N」で出す</label>
+  </div>
+  <div class="url"><input id="url" readonly><button id="copy">コピー</button></div>
+  <div class="preview"><iframe id="frame" title="プレビュー"></iframe></div>
+  <ol>
+    <li>OBS で「ソースを追加 → ブラウザ」を選ぶ</li>
+    <li>上の URL を貼り、幅と高さを 800×400 くらいにする（背景は最初から透明）</li>
+    <li>数字は約1秒ごとに更新され、増えるとカウントアップします。ボットの記録は数えません</li>
+  </ol>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+fetch('/api/criteria').then(r => r.json()).then(list => {
+  for (const x of list) { const o = document.createElement('option'); o.value = x.key; o.textContent = x.label; $('c').appendChild(o); }
+  $('c').value = 'mined'; update();
+});
+function update() {
+  const q = new URLSearchParams();
+  q.set('c', $('c').value || 'mined');
+  for (const k of ['player', 'title', 'unit']) if ($(k).value.trim()) q.set(k, $(k).value.trim());
+  if (+$('top').value > 0) q.set('top', $('top').value);
+  if (+$('size').value !== 72) q.set('size', $('size').value);
+  if ($('color').value !== '#ffffff') q.set('color', $('color').value.slice(1));
+  if ($('accent').value !== '#7fe3ff') q.set('accent', $('accent').value.slice(1));
+  if ($('align').value !== 'left') q.set('align', $('align').value);
+  if (+$('interval').value !== 1000) q.set('interval', $('interval').value);
+  if ($('panel').checked) q.set('panel', '1');
+  if (!$('stroke').checked) q.set('stroke', '0');
+  if (!$('plus').checked) q.set('plus', '0');
+  const url = location.origin + '/overlay?' + q;
+  $('url').value = url;
+  clearTimeout(update.t); update.t = setTimeout(() => $('frame').src = url, 250);
+}
+document.querySelectorAll('input, select').forEach(e => e.addEventListener('input', update));
+$('copy').onclick = () => { $('url').select(); navigator.clipboard?.writeText($('url').value); $('copy').textContent = 'コピーしました'; setTimeout(() => $('copy').textContent = 'コピー', 1500); };
+update();
+</script>
+</body>
+</html>
